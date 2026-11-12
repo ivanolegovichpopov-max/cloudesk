@@ -654,13 +654,14 @@
     b.addEventListener("click", () => { if (raw != null && raw !== "—") copyText(String(raw)); });
     return b;
   }
-  function tlInput(fid, key, ph, label, cls) {
+  // поле ввода инструмента: без подписи сверху — подсказка внутри поля, единица (%, дней) — справа внутри
+  function tlInput(fid, key, ph, label, cls, suffix) {
     const st = toolsOf(fid);
     const wrap = document.createElement("label"); wrap.className = "tl-in" + (cls ? " " + cls : "");
-    if (label) { const s = document.createElement("span"); s.textContent = label; wrap.append(s); }
-    const i = document.createElement("input"); i.type = "text"; i.inputMode = key === "text" ? "text" : "decimal"; i.autocomplete = "off";
-    i.placeholder = ph; i.value = st[key]; i.dataset.keep = fid + ":" + key; i.maxLength = 40;
+    const i = document.createElement("input"); i.type = "text"; i.inputMode = "decimal"; i.autocomplete = "off";
+    i.placeholder = ph; i.value = st[key]; i.dataset.keep = fid + ":" + key; i.maxLength = 40; i.setAttribute("aria-label", label);
     wrap.append(i);
+    if (suffix) { const u = document.createElement("span"); u.className = "tl-suf"; u.textContent = suffix; wrap.append(u); wrap.classList.add("has-suf"); }
     return [wrap, i];
   }
 
@@ -748,8 +749,8 @@
   function renderPct(f, box) {
     const st = toolsOf(f.id);
     const row = document.createElement("div"); row.className = "tl-row2";
-    const [w1, i1] = tlInput(f.id, "sum", "1 000", "Сумма");
-    const [w2, i2] = tlInput(f.id, "pct", "20", "%", "short");
+    const [w1, i1] = tlInput(f.id, "sum", "Сумма", "Сумма");
+    const [w2, i2] = tlInput(f.id, "pct", "20", "Процент", "short", "%");
     row.append(w1, w2);
     const list = document.createElement("div"); list.className = "tl-list";
     const calc = () => {
@@ -758,7 +759,7 @@
       list.textContent = "";
       const ok = Number.isFinite(s) && Number.isFinite(p) && st.sum !== "" && st.pct !== "";
       const v = (x) => (ok ? fmtNum(x) : "—"), r = (x) => (ok ? Math.round(x * 100) / 100 : null);
-      const pp = ok ? fmtNum(p) + "%" : "n%";
+      const pp = Number.isFinite(p) && st.pct !== "" ? fmtNum(p) + "%" : "n%";
       list.append(
         resRow(pp + " от суммы", v((s * p) / 100), r((s * p) / 100)),
         resRow("Скидка " + pp, v(s - (s * p) / 100), r(s - (s * p) / 100)),
@@ -818,11 +819,10 @@
       const c = document.createElement("span"); c.className = "tl-fx-code"; c.textContent = code;
       const i = document.createElement("input"); i.type = "text"; i.inputMode = "decimal"; i.autocomplete = "off"; i.maxLength = 20;
       i.dataset.keep = f.id + ":fx-" + code; i.placeholder = "0"; i.setAttribute("aria-label", "Сумма в " + code);
-      const s = document.createElement("span"); s.className = "tl-fx-sym"; s.textContent = sym;
       i.addEventListener("focus", () => { if (st.fxBase !== code) { st.fxBase = code; st.fxAmt = i.value.replace(/\s/g, ""); saveTools(f.id); } i.select(); });
       i.addEventListener("input", () => { st.fxBase = code; st.fxAmt = i.value; saveTools(f.id); fill(); });
       inputs[code] = i;
-      row.append(c, i, s);
+      row.append(c, i);
       list.append(row);
     });
     box.append(list, note);
@@ -845,21 +845,20 @@
     const st = toolsOf(f.id);
     const today = new Date(), tk = pad(today.getDate()) + "." + pad(today.getMonth() + 1) + "." + today.getFullYear();
     const row = document.createElement("div"); row.className = "tl-row2";
-    const [w1, i1] = tlInput(f.id, "d1", tk, "С");
-    const [w2, i2] = tlInput(f.id, "d2", "дд.мм.гггг", "По");
+    const [w1, i1] = tlInput(f.id, "d1", "Сегодня", "С даты (пусто — сегодня)");
+    const [w2, i2] = tlInput(f.id, "d2", "По дату", "По дату, например " + tk);
     [i1, i2].forEach((i) => (i.inputMode = "numeric"));
-    row.append(w1, w2);
-    const list1 = document.createElement("div"); list1.className = "tl-list";
-    const row2 = document.createElement("div"); row2.className = "tl-row2";
-    const [w3, i3] = tlInput(f.id, "dn", "10", "+ дней", "short");
+    // всё в одну строку: с какой даты, по какую и «через сколько дней»
+    const [w3, i3] = tlInput(f.id, "dn", "10", "Через сколько дней", "short", "дн.");
     i3.inputMode = "numeric";
-    row2.append(w3);
-    const list2 = document.createElement("div"); list2.className = "tl-list";
+    row.append(w1, w2, w3);
+    const list1 = document.createElement("div"); list1.className = "tl-list";
+    const list2 = list1;
     const fmtD = new Intl.DateTimeFormat("ru-RU", { weekday: "short", day: "numeric", month: "long", year: "numeric" });
     const calc = () => {
       st.d1 = i1.value; st.d2 = i2.value; st.dn = i3.value; saveTools(f.id);
       const a = parseDay(st.d1 || "сегодня"), b = parseDay(st.d2), n = parseInt(st.dn, 10);
-      list1.textContent = ""; list2.textContent = "";
+      list1.textContent = "";
       const ok = a && b;
       const days = ok ? Math.round((b - a) / 86400000) : null;
       list1.append(
@@ -876,7 +875,7 @@
       } else list2.append(resRow("Через N дней", "—", null));
     };
     [i1, i2, i3].forEach((i) => i.addEventListener("input", calc));
-    box.append(row, list1, row2, list2);
+    box.append(row, list1);
     calc();
   }
 
