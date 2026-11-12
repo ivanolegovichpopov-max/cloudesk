@@ -226,7 +226,8 @@ body[data-wall="custom"] .wall  { background-color: #111; }
 .sheet-backdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, .5); }
 /* Все окна одного размера: содержимое прокручивается внутри, окно не растягивается */
 .sheet {
-  position: relative; width: min(640px, 100%); height: min(600px, 100%);
+  /* размер от экрана: ~50% ширины и ~75% высоты, с разумными границами; на малом экране — не больше самого экрана */
+  position: relative; width: min(clamp(560px, 50vw, 900px), 100%); height: min(clamp(480px, 75vh, 800px), 100%);
   display: flex; flex-direction: column; gap: 12px; overflow: auto;
   background: var(--sheet); border: 1px solid var(--line); border-radius: var(--r-lg);
   padding: 14px;
