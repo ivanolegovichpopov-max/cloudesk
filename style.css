@@ -883,9 +883,12 @@ input.bad { border-color: var(--danger) !important; }
 .fld .note-pin { position: static; flex: none; opacity: .6; display: grid; }
 .note-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 2px; font-size: 13px; line-height: 1.4; overflow: hidden;
   -webkit-mask-image: linear-gradient(#000 calc(100% - 12px), transparent); mask-image: linear-gradient(#000 calc(100% - 12px), transparent); }
-.note-line { flex: none; min-width: 0; opacity: .8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.note-line.cl { display: flex; align-items: center; gap: 6px; opacity: .9; }
-.note-line.cl span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* содержимое карточки идёт подряд, как написано: текст переносится на следующие строки, пункты — по порядку;
+   что не поместилось по высоте — мягко тает внизу */
+.note-line { flex: none; min-width: 0; opacity: .8; white-space: pre-wrap; overflow-wrap: anywhere; }
+.note-line.cl { display: flex; align-items: flex-start; gap: 6px; opacity: .9; }
+.note-line.cl .cl-box { margin-top: .2em; }
+.note-line.cl span { min-width: 0; }
 .note-line.cl.done span { text-decoration: line-through; opacity: .6; }
 .cl-box {
   flex: none; display: grid; place-items: center; width: 14px; height: 14px; padding: 0;

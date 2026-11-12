@@ -565,7 +565,7 @@
     const body = document.createElement("div"); body.className = "note-body";
     const lines = (n.body || "").split("\n");
     let shown = 0;
-    for (let i = 0; i < lines.length && shown < 12; i++) { // лишнее скроет высота карточки
+    for (let i = 0; i < lines.length && shown < 30; i++) { // всё по порядку; лишнее скроет высота карточки
       if (!lines[i].trim()) continue;
       const pl = parseLine(lines[i]);
       const row = document.createElement("div"); row.className = "note-line";
