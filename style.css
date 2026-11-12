@@ -533,6 +533,8 @@ html, body { overflow-x: hidden; }
 /* «Готово» — галочка вверху справа каждого окна: сохраняет и закрывает */
 .tool.done { width: 36px; height: 36px; background: var(--accent); color: var(--accent-ink); opacity: 1; }
 .tool.done:hover { background: var(--accent); filter: brightness(1.06); }
+/* «Отменить» — крестик слева от галочки: закрывает без сохранения */
+.tool.cancel { width: 36px; height: 36px; }
 
 /* ---------- Всё системное — в стиле стола ---------- */
 html { -webkit-tap-highlight-color: transparent; }
@@ -842,3 +844,6 @@ input.bad { border-color: var(--danger) !important; }
 .sec-color.none { background: var(--accent); }
 .sec-color[aria-checked="true"] { box-shadow: 0 0 0 2px var(--sheet), 0 0 0 4px var(--ink); }
 @media (max-width: 560px) { .it-when { grid-template-columns: 1fr 1fr; } .it-when .tool { grid-column: span 2; justify-self: end; } }
+/* напоминание, отмеченное к удалению: бледнее, зачёркнуто, вместо ✕ — «Вернуть»; удаляется по «Готово» */
+.t-row.removed { opacity: .5; }
+.t-row.removed .t-title, .t-row.removed .t-val { text-decoration: line-through; }

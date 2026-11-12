@@ -680,6 +680,7 @@
     } finally { fldClosing = false; }
   }
   $("secsheet").querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", closeField));
+  $("secsheet").querySelector("[data-cancel]").addEventListener("click", () => { closeMenus(null); animHide($("secsheet"), 170); lockSheets(false); });
   $("sec-delete").addEventListener("click", () => {
     const n = state.items.filter((it) => it.section_id === fd.id).length;
     $("sec-confirm-text").textContent = n ? "Удалить поле и " + n + " " + plural(n, "запись", "записи", "записей") + "?" : "Удалить поле?";
@@ -837,6 +838,7 @@
   $("it-title").addEventListener("input", () => $("it-title").classList.remove("bad"));
   $("it-title").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); closeItem(); } });
   $("itemsheet").querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", closeItem));
+  $("itemsheet").querySelector("[data-cancel]").addEventListener("click", () => { closeMenus(null); animHide($("itemsheet"), 170); lockSheets(false); });
   $("it-delete").addEventListener("click", () => { $("it-actions").hidden = true; $("it-confirm").hidden = false; replay($("it-confirm")); });
   $("it-confirm-no").addEventListener("click", () => { $("it-confirm").hidden = true; $("it-actions").hidden = false; replay($("it-actions")); });
   $("it-confirm-yes").addEventListener("click", async () => {
@@ -862,6 +864,7 @@
     ed.id = n ? n.id : null;
     ed.sec = n ? n.section_id : secId || (state.sections.find((f) => f.app === "notes") || {}).id || null;
     ed.pinned = !!(n && n.pinned);
+    ed.snap = n ? { body: n.body, color: n.color, pinned: !!n.pinned } : null; // для «Отменить»
     $("ed-pin").setAttribute("aria-pressed", String(ed.pinned));
     ed.dirty = false;
     $("ed-body").value = n ? n.body : "";
@@ -953,6 +956,27 @@
   $("ed-confirm-no").addEventListener("click", () => { $("ed-confirm").hidden = true; $("ed-actions").hidden = false; replay($("ed-actions")); });
   $("ed-confirm-yes").addEventListener("click", () => deleteNote(false));
   $("editor").querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", closeEditor));
+  // «Отменить»: заметка возвращается к виду до открытия; новая — не создаётся
+  async function cancelEditor() {
+    if (edClosing) return;
+    edClosing = true;
+    try {
+      clearTimeout(ed.timer); ed.dirty = false;
+      if (ed.saving) await ed.saving;
+      if (ed.id && !ed.snap) { if (!(await removeItem(ed.id))) return; ed.id = null; }
+      else if (ed.id && ed.snap) {
+        const it = state.items.find((x) => x.id === ed.id);
+        if (it && (it.body !== ed.snap.body || it.color !== ed.snap.color || !!it.pinned !== ed.snap.pinned)) {
+          const r = await sb.from("items").update(ed.snap).eq("id", ed.id).select(ITEM_COLS).single();
+          if (r.error) { $("ed-status").textContent = "Не получилось отменить — проверьте интернет"; return; }
+          Object.assign(it, r.data); itemsChanged();
+        }
+      }
+      animHide($("editor"), 170);
+      lockSheets(false);
+    } finally { edClosing = false; }
+  }
+  $("editor").querySelector("[data-cancel]").addEventListener("click", cancelEditor);
 
   /* ---------- Заставка ---------- */
   function setWall(preset, url) {
@@ -1019,7 +1043,7 @@
     if (old) setWall(cur, null);
     trackWall(async () => {
       await saveSettings({ wallpaper_weekly: on, wallpaper_preset: cur, wallpaper_path: null, wallpaper_week_from: weekIndex() });
-      if (old) await sb.storage.from("wallpapers").remove([old]);
+      if (old) wallTrash.add(old);
     }, "Настройка не сохранилась. Попробуйте ещё раз.");
   });
   // наступила новая неделя, пока стол открыт
@@ -1050,7 +1074,7 @@
         setWall(p.id, null);
         trackWall(async () => {
           await saveSettings({ wallpaper_preset: p.id, wallpaper_path: null, wallpaper_week_from: weekIndex() });
-          if (old) await sb.storage.from("wallpapers").remove([old]);
+          if (old) wallTrash.add(old);
         }, "Заставка не сохранилась. Попробуйте ещё раз.");
       });
       box.append(b);
@@ -1112,7 +1136,8 @@
       const old = state.settings && state.settings.wallpaper_path;
       await saveSettings({ wallpaper_path: path, wallpaper_weekly: false });
       renderWeekly();
-      if (old && old !== path) await sb.storage.from("wallpapers").remove([old]);
+      wallNew.add(path);
+      if (old && old !== path) wallTrash.add(old);
       if (state.wallUrl) URL.revokeObjectURL(state.wallUrl);
       state.wallUrl = URL.createObjectURL(blob);
       setWall(null, state.wallUrl);
@@ -1181,8 +1206,12 @@
   }
   document.querySelectorAll("#timesheet [data-tab]").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
 
+  const remDel = new Set(); // напоминания, отмеченные к удалению (удаляются по «Готово»)
+  let citiesSnap = null, citiesDirty = false;
   function openTime(tab) {
     closeMenus(null);
+    remDel.clear();
+    citiesSnap = cities().slice(); citiesDirty = false;
     animShow($("timesheet"));
     lockSheets(true);
     setTab(tab || (timer.end || timer.left ? "timer" : sw.start || sw.acc ? "sw" : timeTab));
@@ -1206,12 +1235,32 @@
         const ok = await addReminder();
         if (!ok) return;
       }
+      if (citiesDirty) {
+        $("time-status").textContent = "Сохраняю…";
+        try { await saveSettings({ cities: cities() }); citiesDirty = false; }
+        catch (e) { console.error(e); setTab("cities"); $("time-status").textContent = "Города не сохранились — проверьте интернет"; return; }
+      }
+      for (const id of [...remDel]) {
+        if (!(await removeItem(id))) { setTab("rem"); $("time-status").textContent = "Не удалось удалить — проверьте интернет"; return; }
+        remDel.delete(id);
+      }
       $("time-status").textContent = "";
       animHide($("timesheet"), 170);
       lockSheets(false);
     } finally { timeClosing = false; }
   }
   $("timesheet").querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", closeTime));
+  // «Отменить»: введённое напоминание не добавляется, удаления и изменения городов не применяются
+  $("timesheet").querySelector("[data-cancel]").addEventListener("click", () => {
+    closeMenus(null);
+    resetRemForm();
+    remDel.clear();
+    if (citiesDirty && citiesSnap) { state.settings = Object.assign({}, state.settings || {}, { cities: citiesSnap }); citiesDirty = false; }
+    renderReminders(); renderCities();
+    $("time-status").textContent = "";
+    animHide($("timesheet"), 170);
+    lockSheets(false);
+  });
 
   const plural = (n, a, b, c) => { const m = n % 100, k = n % 10; return m > 10 && m < 20 ? c : k === 1 ? a : k >= 2 && k <= 4 ? b : c; };
   /* Календарь */
@@ -1387,10 +1436,11 @@
         sub.append(bad);
       }
       return tRow({
-        cls: done(r) ? "past" : "", title: r.text, sub, val: fmtHM.format(d),
-        tool: delBtn("Удалить", () => trackTime(async () => {
-          if (!(await removeItem(r.id))) throw new Error("delete");
-        })),
+        title: r.text, sub, val: fmtHM.format(d),
+        tool: remDel.has(r.id)
+          ? Object.assign(delBtn("Вернуть", () => { remDel.delete(r.id); renderReminders(); }), { innerHTML: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M9 14 4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3"/></svg>' })
+          : delBtn("Удалить", () => { remDel.add(r.id); renderReminders(); }),
+        cls: (done(r) ? "past" : "") + (remDel.has(r.id) ? " removed" : ""),
       });
     };
     next.forEach((r) => ul.append(row(r)));
@@ -1553,14 +1603,11 @@
       const g = $("city-list").querySelector('.city-item[data-tz="' + li.dataset.tz + '"] .grip'); if (g) g.focus();
     },
   });
+  // города сохраняются по «Готово» (до этого их можно отменить)
   function saveCities(list) {
-    const prev = cities();
     state.settings = Object.assign({}, state.settings || {}, { cities: list });
+    citiesDirty = true;
     renderCities();
-    trackTime(async () => {
-      try { await saveSettings({ cities: list }); }
-      catch (e) { state.settings.cities = prev; renderCities(); toast("Город не сохранился. Попробуйте ещё раз."); throw e; }
-    });
   }
 
   /* ---------- Быстрые ссылки (с группами) ---------- */
@@ -1886,7 +1933,15 @@
   }
 
   /* ---------- Окно «Настройки»: вкладки «Оформление» и «Быстрые ссылки» ---------- */
-  let setTabNow = "look", setClosing = false;
+  let setTabNow = "look", setClosing = false, setSnap = null;
+  // старые фото заставки удаляются только по «Готово»; загруженные и отменённые — по «Отменить»
+  const wallTrash = new Set(), wallNew = new Set();
+  const SNAP_KEYS = ["theme", "wallpaper_preset", "wallpaper_path", "wallpaper_weekly", "wallpaper_week_from", "weather_on", "weather_city", "weather_lat", "weather_lon"];
+  function purgeWalls(paths) {
+    const keep = state.settings && state.settings.wallpaper_path;
+    const list = [...paths].filter((x) => x && x !== keep);
+    if (list.length) sb.storage.from("wallpapers").remove(list).then((r) => { if (r && r.error) console.error(r.error); });
+  }
   function setSetTab(t) {
     setTabNow = t;
     document.querySelectorAll("#setsheet [data-tab]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === t)));
@@ -1898,6 +1953,9 @@
     closeMenus(null);
     $("set-status").textContent = "";
     prepareLinks();
+    setSnap = {}; SNAP_KEYS.forEach((k) => (setSnap[k] = state.settings ? state.settings[k] : undefined));
+    setSnap.theme = setSnap.theme || store.get("cloudesk-theme") || "auto";
+    wallTrash.clear(); wallNew.clear();
     renderWeekly();
     renderWeatherSettings();
     setSetTab(tab || setTabNow);
@@ -1916,11 +1974,36 @@
         if (!(await saveLinks())) { setSetTab("links"); return; }
       }
       $("set-status").textContent = "";
+      purgeWalls(wallTrash); wallTrash.clear(); wallNew.clear();
       animHide($("setsheet"), 170);
       lockSheets(false);
     } finally { setClosing = false; }
   }
   $("setsheet").querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", closeSettings));
+  async function cancelSettings() {
+    if (setClosing) return;
+    setClosing = true;
+    try {
+      closeMenus(null);
+      if (wallJob) { $("set-status").textContent = "Отменяю…"; await wallJob; }
+      const cur = state.settings || {};
+      const patch = {};
+      SNAP_KEYS.forEach((k) => { if (setSnap && (cur[k] ?? null) !== (setSnap[k] ?? null)) patch[k] = setSnap[k] ?? null; });
+      if (Object.keys(patch).length) {
+        try { await saveSettings(patch); }
+        catch (e) { console.error(e); $("set-status").textContent = "Не получилось отменить — проверьте интернет"; return; }
+        if ("theme" in patch) { colorFade(); applyTheme(setSnap.theme); }
+        if ("wallpaper_preset" in patch || "wallpaper_path" in patch || "wallpaper_weekly" in patch || "wallpaper_week_from" in patch) await applyWallFromSettings();
+        if (Object.keys(patch).some((k) => k.startsWith("weather"))) loadWeather(true);
+      }
+      purgeWalls(wallNew); wallTrash.clear(); wallNew.clear();
+      prepareLinks(); // черновик ссылок отбрасывается
+      $("set-status").textContent = "";
+      animHide($("setsheet"), 170);
+      lockSheets(false);
+    } finally { setClosing = false; }
+  }
+  $("setsheet").querySelector("[data-cancel]").addEventListener("click", cancelSettings);
   $("btn-settings").addEventListener("click", () => openSettings("look"));
   $("links-edit-btn").addEventListener("click", () => openSettings("links"));
 
