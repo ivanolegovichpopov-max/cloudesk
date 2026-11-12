@@ -42,26 +42,36 @@
       <div id="clock-time" class="clock-time">--:--</div>
       <div id="clock-date" class="clock-date"></div>
     </div>
-    <div class="top-actions">
-      <button id="btn-wall" class="btn-glass" type="button" title="Сменить заставку">
-        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M4 5h16v14H4zM4 16l5-5 4 4 3-3 4 4M15 9.5h.01"/></svg>
-        <span class="hide-sm">Заставка</span>
-      </button>
-      <button id="btn-user" class="user-chip" type="button" aria-haspopup="menu" aria-expanded="false">
-        <span id="user-ava" class="ava"></span>
-        <span id="user-name" class="hide-sm"></span>
-      </button>
-      <div id="user-menu" class="menu" role="menu" hidden>
-        <div id="menu-who" class="menu-who"></div>
-        <div class="menu-label">Тема</div>
-        <div class="segmented" role="radiogroup" aria-label="Тема оформления">
-          <button type="button" role="radio" data-theme-set="auto">Авто</button>
-          <button type="button" role="radio" data-theme-set="light">Светлая</button>
-          <button type="button" role="radio" data-theme-set="dark">Тёмная</button>
-        </div>
-        <button id="btn-logout" class="menu-item" type="button" role="menuitem">Выйти</button>
+    <!-- Меню: ряд одинаковых кнопок «значок + подпись». Новые разделы добавляются сюда же -->
+    <nav class="top-actions" aria-label="Меню">
+      <div class="top-item">
+        <button id="btn-wall" class="top-btn" type="button">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M4 5h16v14H4zM4 16l5-5 4 4 3-3 4 4M15 9.5h.01"/></svg>
+          <span class="top-label">Заставка</span>
+        </button>
       </div>
-    </div>
+      <div class="top-item">
+        <button id="btn-theme" class="top-btn" type="button" aria-haspopup="menu" aria-expanded="false" data-menu="theme-menu">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 3a9 9 0 1 0 0 18zM12 3a9 9 0 0 1 0 18"/></svg>
+          <span class="top-label">Тема</span>
+        </button>
+        <div id="theme-menu" class="menu" role="menu" hidden>
+          <button type="button" class="menu-item" role="menuitemradio" data-theme-set="auto"><span>Авто <span class="menu-note">как на устройстве</span></span><svg class="check" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>
+          <button type="button" class="menu-item" role="menuitemradio" data-theme-set="light"><span>Светлая</span><svg class="check" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>
+          <button type="button" class="menu-item" role="menuitemradio" data-theme-set="dark"><span>Тёмная</span><svg class="check" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>
+        </div>
+      </div>
+      <div class="top-item">
+        <button id="btn-user" class="top-btn" type="button" aria-haspopup="menu" aria-expanded="false" data-menu="user-menu">
+          <span id="user-ava" class="ava"></span>
+          <span id="user-name" class="top-label">Профиль</span>
+        </button>
+        <div id="user-menu" class="menu" role="menu" hidden>
+          <div id="menu-who" class="menu-who"></div>
+          <button id="btn-logout" class="menu-item" type="button" role="menuitem"><span>Выйти</span></button>
+        </div>
+      </div>
+    </nav>
   </header>
 
   <section class="board" aria-labelledby="notes-h">

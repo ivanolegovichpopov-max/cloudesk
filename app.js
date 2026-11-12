@@ -42,6 +42,7 @@
     b.addEventListener("click", async (e) => {
       e.stopPropagation();
       applyTheme(b.dataset.themeSet);
+      closeMenus(null);
       try { await saveSettings({ theme: b.dataset.themeSet }); }
       catch (err) { console.error(err); toast("Тема не сохранилась. Попробуйте ещё раз."); }
     }));
@@ -199,21 +200,28 @@
     who.append(b, document.createTextNode(p.username ? "@" + p.username : "Telegram"));
   }
 
-  $("btn-user").addEventListener("click", (e) => {
-    e.stopPropagation();
-    const m = $("user-menu");
-    m.hidden = !m.hidden;
-    $("btn-user").setAttribute("aria-expanded", String(!m.hidden));
-  });
+  // Выпадающие меню верхней панели: открыто не больше одного, клик вне меню закрывает его
+  function closeMenus(except) {
+    document.querySelectorAll("[data-menu]").forEach((btn) => {
+      if (btn === except) return;
+      $(btn.dataset.menu).hidden = true;
+      btn.setAttribute("aria-expanded", "false");
+    });
+  }
+  document.querySelectorAll("[data-menu]").forEach((btn) =>
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const m = $(btn.dataset.menu);
+      closeMenus(btn);
+      m.hidden = !m.hidden;
+      btn.setAttribute("aria-expanded", String(!m.hidden));
+    }));
   document.addEventListener("click", (e) => {
-    const m = $("user-menu");
-    if (!m.hidden && !m.contains(e.target)) {
-      m.hidden = true;
-      $("btn-user").setAttribute("aria-expanded", "false");
-    }
+    if (!e.target.closest || !e.target.closest(".menu")) closeMenus(null);
   });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenus(null); });
   $("btn-logout").addEventListener("click", async () => {
-    $("user-menu").hidden = true;
+    closeMenus(null);
     await sb.auth.signOut();
     state.notes = [];
     $("notes").textContent = "";
@@ -491,6 +499,7 @@
   }
 
   $("btn-wall").addEventListener("click", () => {
+    closeMenus(null);
     $("wallsheet").hidden = false;
     lockSheets(true);
   });
