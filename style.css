@@ -95,13 +95,14 @@ button { cursor: pointer; }
   content: ""; position: absolute; inset: 0;
   background: linear-gradient(180deg, rgba(0,0,0,.28) 0%, rgba(0,0,0,0) 30%, rgba(0,0,0,.2) 100%);
 }
-body[data-wall="dusk"] .wall    { background-image: linear-gradient(160deg, #2b2240 0%, #6b3a5a 45%, #e08a5b 100%); }
-body[data-wall="lake"] .wall    { background-image: linear-gradient(170deg, #0e2a3b 0%, #1d5d78 50%, #8cc5c9 100%); }
-body[data-wall="peaks"] .wall   { background-image: linear-gradient(180deg, #8fa6c4 0%, #c9b8c7 40%, #6c5b7b 70%, #2f2a3d 100%); }
-body[data-wall="night"] .wall   { background-image: radial-gradient(120% 80% at 70% 10%, #2a3355 0%, #11131c 60%, #07080c 100%); }
-body[data-wall="moss"] .wall    { background-image: linear-gradient(150deg, #1f2b1f 0%, #3f5a35 50%, #a7b77a 100%); }
-body[data-wall="graphite"] .wall{ background-image: linear-gradient(160deg, #2a2c31 0%, #44474f 55%, #6b6e76 100%); }
-body[data-wall="apricot"] .wall { background-image: linear-gradient(165deg, #f6d3a8 0%, #eb9b6a 50%, #a8534a 100%); }
+/* Заставки — векторные пейзажи (walls/*.svg, по 1–11 КБ); градиент под ними — запасной, пока картинка грузится */
+body[data-wall="dusk"] .wall    { background-image: url("walls/dusk.svg"), linear-gradient(160deg, #2b2240 0%, #6b3a5a 45%, #e08a5b 100%); }
+body[data-wall="lake"] .wall    { background-image: url("walls/lake.svg"), linear-gradient(170deg, #0e2a3b 0%, #1d5d78 50%, #8cc5c9 100%); }
+body[data-wall="peaks"] .wall   { background-image: url("walls/peaks.svg"), linear-gradient(180deg, #8fa6c4 0%, #c9b8c7 40%, #6c5b7b 70%, #2f2a3d 100%); }
+body[data-wall="night"] .wall   { background-image: url("walls/night.svg"), radial-gradient(120% 80% at 70% 10%, #2a3355 0%, #11131c 60%, #07080c 100%); }
+body[data-wall="moss"] .wall    { background-image: url("walls/moss.svg"), linear-gradient(150deg, #1f2b1f 0%, #3f5a35 50%, #a7b77a 100%); }
+body[data-wall="graphite"] .wall{ background-image: url("walls/graphite.svg"), linear-gradient(160deg, #2a2c31 0%, #44474f 55%, #6b6e76 100%); }
+body[data-wall="apricot"] .wall { background-image: url("walls/apricot.svg"), linear-gradient(165deg, #f6d3a8 0%, #eb9b6a 50%, #a8534a 100%); }
 body[data-wall="custom"] .wall  { background-color: #111; }
 
 /* ---------- Вход ---------- */
