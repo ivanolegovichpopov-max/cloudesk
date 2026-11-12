@@ -38,10 +38,11 @@
 <!-- Рабочий стол -->
 <div id="desk" class="desk" hidden>
   <header class="top">
-    <div class="clock">
-      <div id="clock-time" class="clock-time">--:--</div>
-      <div id="clock-date" class="clock-date"></div>
-    </div>
+    <button id="btn-clock" class="clock" type="button" title="Календарь, таймер, секундомер, напоминания, города">
+      <span id="clock-time" class="clock-time">--:--</span>
+      <span id="clock-date" class="clock-date"></span>
+      <span id="clock-run" class="clock-run" hidden></span>
+    </button>
     <!-- Меню: одна кнопка, внутри группы с заголовками. Новые разделы добавляются отдельной группой -->
     <nav class="top-actions" aria-label="Меню">
       <div class="top-item">
@@ -162,6 +163,92 @@
     <input id="wall-file" type="file" accept="image/jpeg,image/png,image/webp" class="sr">
     <div class="sheet-foot">
       <p class="hint">Цвет кнопок подстраивается под заставку. Своё фото видно только вам. <span id="wall-status" role="status"></span></p>
+      <div class="foot-actions"><button type="button" class="btn-primary" data-close>Готово</button></div>
+    </div>
+  </div>
+</div>
+
+<!-- Время: календарь, таймер, секундомер, напоминания, города -->
+<div id="timesheet" class="sheet-wrap" hidden>
+  <div class="sheet-backdrop" data-close></div>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="time-h">
+    <div class="sheet-bar">
+      <h3 id="time-h">Время</h3>
+      <div class="sheet-tools">
+        <span id="time-status" class="ed-status" role="status"></span>
+        <button type="button" class="tool" data-close title="Закрыть">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+      </div>
+    </div>
+    <div class="tabs" role="tablist" aria-label="Разделы">
+      <button type="button" role="tab" data-tab="cal">Календарь</button>
+      <button type="button" role="tab" data-tab="timer">Таймер</button>
+      <button type="button" role="tab" data-tab="sw">Секундомер</button>
+      <button type="button" role="tab" data-tab="rem">Напоминания</button>
+      <button type="button" role="tab" data-tab="cities">Города</button>
+    </div>
+
+    <section class="tab-panel cal" data-panel="cal" role="tabpanel">
+      <div class="cal-head">
+        <button type="button" class="tool" id="cal-prev" title="Предыдущий месяц"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M15 6l-6 6 6 6"/></svg></button>
+        <div id="cal-title" class="cal-title"></div>
+        <button type="button" class="tool" id="cal-next" title="Следующий месяц"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 6l6 6-6 6"/></svg></button>
+        <button type="button" class="btn-ghost" id="cal-today">Сегодня</button>
+      </div>
+      <div class="cal-grid" id="cal-grid"></div>
+    </section>
+
+    <section class="tab-panel center" data-panel="timer" role="tabpanel" hidden>
+      <div id="timer-display" class="big-time">05:00</div>
+      <div class="chips" id="timer-presets"></div>
+      <div class="timer-custom">
+        <label for="timer-min">Своё время, мин</label>
+        <input id="timer-min" type="number" min="1" max="600" step="1" inputmode="numeric" placeholder="например, 45">
+      </div>
+      <div class="ctrl-row">
+        <button type="button" class="btn-ghost" id="timer-reset">Сброс</button>
+        <button type="button" class="btn-primary" id="timer-go">Старт</button>
+      </div>
+    </section>
+
+    <section class="tab-panel center" data-panel="sw" role="tabpanel" hidden>
+      <div id="sw-display" class="big-time">00:00,0</div>
+      <div class="ctrl-row">
+        <button type="button" class="btn-ghost" id="sw-reset">Сброс</button>
+        <button type="button" class="btn-ghost" id="sw-lap" disabled>Круг</button>
+        <button type="button" class="btn-primary" id="sw-go">Старт</button>
+      </div>
+      <ol id="sw-laps" class="laps"></ol>
+    </section>
+
+    <section class="tab-panel" data-panel="rem" role="tabpanel" hidden>
+      <form id="rem-form" class="rem-form" novalidate>
+        <label class="sr" for="rem-text">Текст напоминания</label>
+        <input id="rem-text" type="text" maxlength="500" placeholder="О чём напомнить?" autocomplete="off">
+        <div class="rem-when">
+          <label class="sr" for="rem-date">Дата</label>
+          <input id="rem-date" type="date">
+          <label class="sr" for="rem-time">Время</label>
+          <input id="rem-time" type="time">
+          <button type="submit" class="btn-primary">Добавить</button>
+        </div>
+      </form>
+      <ul id="rem-list" class="rem-list"></ul>
+      <p id="rem-empty" class="empty" hidden>Напоминаний пока нет. Бот пришлёт сообщение в Telegram в назначенное время.</p>
+    </section>
+
+    <section class="tab-panel" data-panel="cities" role="tabpanel" hidden>
+      <ul id="city-list" class="city-list"></ul>
+      <div class="city-add">
+        <label class="sr" for="city-pick">Добавить город</label>
+        <select id="city-pick"></select>
+        <button type="button" class="btn-primary" id="city-add">Добавить</button>
+      </div>
+    </section>
+
+    <div class="sheet-foot">
+      <p id="time-hint" class="hint"></p>
       <div class="foot-actions"><button type="button" class="btn-primary" data-close>Готово</button></div>
     </div>
   </div>
