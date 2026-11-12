@@ -476,8 +476,9 @@
     set: "M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4",
   };
   const svgIco = (d, s = 16, w = 1.8) => '<svg viewBox="0 0 24 24" width="' + s + '" height="' + s + '" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="' + w + '" stroke-linecap="round" stroke-linejoin="round" d="' + d + '"/></svg>';
-  const noteTitle = (it) => ((it.body || "").split("\n")[0] || "").trim() || "Без заголовка";
-  const noteSub = (it) => (it.body || "").split("\n").slice(1).join(" ").replace(/\s+/g, " ").trim();
+  // у заметки отдельные заголовок (title) и текст (body)
+  const noteTitle = (it) => (it.title || "").trim() || "Без заголовка";
+  const noteSub = (it) => (it.body || "").replace(/\s+/g, " ").trim();
 
   // Приложения: name — название, spans — допустимые ширины, render — содержимое поля, add — действие «+»
   // Приложения: name — название, spans — допустимые ширины, render — содержимое поля, add — действие «+»,
@@ -513,7 +514,7 @@
   }
   function checklistStat(body) {
     let all = 0, done = 0;
-    (body || "").split("\n").slice(1).forEach((l) => { const p = parseLine(l); if (p.check) { all++; if (p.done) done++; } });
+    (body || "").split("\n").forEach((l) => { const p = parseLine(l); if (p.check) { all++; if (p.done) done++; } });
     return { all, done };
   }
   function toggleLine(n, lineIdx) {
@@ -542,7 +543,7 @@
     const body = document.createElement("div"); body.className = "note-body";
     const lines = (n.body || "").split("\n");
     let shown = 0;
-    for (let i = 1; i < lines.length && shown < 3; i++) {
+    for (let i = 0; i < lines.length && shown < 3; i++) {
       if (!lines[i].trim()) continue;
       const pl = parseLine(lines[i]);
       const row = document.createElement("div"); row.className = "note-line";
@@ -1018,9 +1019,10 @@
     ed.id = n ? n.id : null;
     ed.sec = n ? n.section_id : secId || (state.sections.find((f) => f.app === "notes") || {}).id || null;
     ed.pinned = !!(n && n.pinned);
-    ed.snap = n ? { body: n.body, color: n.color, pinned: !!n.pinned } : null; // для «Отменить»
+    ed.snap = n ? { title: n.title || "", body: n.body, color: n.color, pinned: !!n.pinned } : null; // для «Отменить»
     $("ed-pin").setAttribute("aria-pressed", String(ed.pinned));
     ed.dirty = false;
+    $("ed-head").value = n ? n.title || "" : "";
     $("ed-body").value = n ? n.body : "";
     $("ed-delete").hidden = !n;
     $("ed-confirm").hidden = true;
@@ -1030,7 +1032,7 @@
     setEdColor(n ? n.color || "paper" : "paper");
     animShow($("editor"));
     lockSheets(true);
-    setTimeout(() => $("ed-body").focus(), 30);
+    setTimeout(() => (n ? $("ed-body") : $("ed-head")).focus(), 30);
   }
 
   function queueSave(delay = 700) {
@@ -1044,11 +1046,11 @@
     clearTimeout(ed.timer);
     if (!ed.dirty) return;
     if (ed.saving) await ed.saving;
-    const body = $("ed-body").value;
-    if (!ed.id && !body.trim()) { ed.dirty = false; $("ed-status").textContent = ""; return; }
+    const body = $("ed-body").value, title = $("ed-head").value.trim().slice(0, 500);
+    if (!ed.id && !body.trim() && !title) { ed.dirty = false; $("ed-status").textContent = ""; return; }
     ed.dirty = false;
     ed.saving = (async () => {
-      const row = { body, color: ed.color, pinned: ed.pinned };
+      const row = { title, body, color: ed.color, pinned: ed.pinned };
       let res;
       if (ed.id) res = await sb.from("items").update(row).eq("id", ed.id).select(ITEM_COLS).single();
       else res = await sb.from("items").insert(Object.assign({ type: "note", section_id: ed.sec, position: nextPos(ed.sec) }, row)).select(ITEM_COLS).single();
@@ -1083,7 +1085,7 @@
         return;
       }
       // пустая заметка не нужна
-      if (ed.id && !$("ed-body").value.trim() && !(await deleteNote(true))) return;
+      if (ed.id && !$("ed-body").value.trim() && !$("ed-head").value.trim() && !(await deleteNote(true))) return;
       animHide($("editor"), 170);
       lockSheets(false);
     } finally {
@@ -1101,6 +1103,9 @@
   }
 
   $("ed-body").addEventListener("input", () => queueSave());
+  $("ed-head").addEventListener("input", () => queueSave());
+  // Enter в заголовке — к тексту
+  $("ed-head").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); const t = $("ed-body"); t.focus(); t.selectionStart = t.selectionEnd = 0; } });
   // «Список»: строки с курсором или выделенные становятся пунктами с галочками (и обратно)
   $("ed-list").addEventListener("click", () => {
     const ta = $("ed-body"), v = ta.value;
@@ -1133,7 +1138,7 @@
       if (ed.id && !ed.snap) { if (!(await removeItem(ed.id))) return; ed.id = null; }
       else if (ed.id && ed.snap) {
         const it = state.items.find((x) => x.id === ed.id);
-        if (it && (it.body !== ed.snap.body || it.color !== ed.snap.color || !!it.pinned !== ed.snap.pinned)) {
+        if (it && ((it.title || "") !== ed.snap.title || it.body !== ed.snap.body || it.color !== ed.snap.color || !!it.pinned !== ed.snap.pinned)) {
           const r = await sb.from("items").update(ed.snap).eq("id", ed.id).select(ITEM_COLS).single();
           if (r.error) { $("ed-status").textContent = "Не получилось отменить — проверьте интернет"; return; }
           Object.assign(it, r.data); itemsChanged();
@@ -2290,7 +2295,7 @@
     const groups = [];
     // заметки; во второй строке — поле и фрагмент текста
     const fieldName = () => "";
-    const notes = state.items.filter((it) => it.type === "note" && norm(it.body).includes(q)).slice(0, 6).map((it) => {
+    const notes = state.items.filter((it) => it.type === "note" && norm((it.title || "") + " " + it.body).includes(q)).slice(0, 6).map((it) => {
       const title = noteTitle(it);
       const extra = norm(title).includes(q) ? snippet(noteSub(it), "") : snippet(noteSub(it), q);
       return resultEl("note", title, [fieldName(it), extra].filter(Boolean).join(" · "), q, () => openEditor(it.id));

@@ -281,6 +281,13 @@ a.menu-who:hover { background: var(--hover); }
 }
 .ed-body:focus { outline: none; }
 .ed-body::placeholder { color: inherit; opacity: .45; }
+/* заголовок заметки — отдельное поле над текстом, крупнее, с тонкой линией снизу */
+.ed-head {
+  flex: none; width: 100%; height: auto !important; padding: 2px 2px 10px !important; border: 0 !important; border-bottom: 1px solid var(--line) !important; border-radius: 0 !important;
+  background: transparent !important; color: inherit !important; font-size: 18px !important; font-weight: 600;
+}
+.ed-head:focus { outline: none; border-bottom-color: var(--accent) !important; }
+.ed-head::placeholder { color: inherit; opacity: .45; }
 .sheet-foot { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-top: 12px; border-top: 1px solid var(--line); }
 .foot-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; }
 .ed-status { font-size: 12px; opacity: .6; }

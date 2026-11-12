@@ -125,8 +125,8 @@
         <button type="button" class="tool done" data-close data-tip="Готово" aria-label="Готово"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>
       </div>
     </div>
-    <label class="sr" for="ed-body">Текст заметки</label>
-    <textarea id="ed-body" class="ed-body" maxlength="20000" placeholder="Заметка"></textarea>
+    <input id="ed-head" class="ed-head" type="text" maxlength="500" autocomplete="off" placeholder="Заголовок" aria-label="Заголовок заметки">
+    <textarea id="ed-body" class="ed-body" maxlength="20000" placeholder="Текст" aria-label="Текст заметки"></textarea>
     <div class="sheet-foot">
       <div class="colors" role="radiogroup" aria-label="Цвет заметки">
         <button type="button" class="dot" data-color="paper" aria-label="Бумага"></button>
