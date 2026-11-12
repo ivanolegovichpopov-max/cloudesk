@@ -471,7 +471,7 @@
      Сетка из 3 колонок. Поле занимает 1, 2 или 3 колонки и фиксированную высоту; в поле — одно приложение.
      У каждого приложения свои допустимые ширины. Новое приложение = новая запись в APPS, стол под него не меняется.
      Записи приложений (заметки, напоминания и будущие) хранятся в общей таблице items с привязкой к полю. */
-  const ITEM_COLS = "id,section_id,type,position,title,body,data,color,pinned,done,done_at,remind_at,sent_at,failed_at,error,created_at,updated_at";
+  const ITEM_COLS = "id,section_id,type,position,title,body,data,color,pinned,done,done_at,remind_at,sent_at,failed_at,error,created_at,updated_at,edited_at";
   const SEC_COLS = "id,title,app,span,settings,position";
   state.items = []; state.sections = [];
   const IC = {
@@ -497,7 +497,7 @@
       render: (f, body) => {
         const manual = !!(f.settings && f.settings.manual);
         const list = state.items.filter((it) => it.type === "note" && it.section_id === f.id)
-          .sort((a, b) => (!!b.pinned - !!a.pinned) || (manual ? a.position - b.position : 0) || (new Date(b.updated_at) - new Date(a.updated_at)));
+          .sort((a, b) => (!!b.pinned - !!a.pinned) || (manual ? a.position - b.position : 0) || (new Date(b.edited_at || b.created_at) - new Date(a.edited_at || a.created_at)));
         if (!list.length) { const e = document.createElement("div"); e.className = "fld-empty"; e.textContent = "Заметок нет"; body.append(e); return; }
         const grid = document.createElement("div"); grid.className = "notes"; grid.dataset.field = f.id;
         const hasPinned = list.some((n) => !!n.pinned), hasOther = list.some((n) => !n.pinned);
@@ -583,7 +583,7 @@
     el.append(body);
     // низ: дата и прогресс списка — всегда на одной линии у всех карточек
     const foot = document.createElement("div"); foot.className = "note-foot";
-    const meta = document.createElement("span"); meta.className = "note-meta"; meta.textContent = fmtShort.format(new Date(n.updated_at)); foot.append(meta);
+    const meta = document.createElement("span"); meta.className = "note-meta"; meta.textContent = fmtShort.format(new Date(n.edited_at || n.created_at)); foot.append(meta);
     const st = checklistStat(n.body);
     const nf = ((n.data && n.data.files) || []).length;
     if (nf) { const cl = document.createElement("span"); cl.className = "note-files"; cl.dataset.tip = "Файлов: " + nf; cl.innerHTML = svgIco("M21 11.5l-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6l7.9-7.9", 12); cl.append(String(nf)); foot.append(cl); }
@@ -1189,9 +1189,95 @@
 
   // кнопки оформления не уводят фокус из текста
   document.querySelectorAll("#editor .ed-fmt").forEach((b) => b.addEventListener("mousedown", (e) => e.preventDefault()));
-  function fmt(cmd) { if (document.activeElement !== rich) rich.focus(); document.execCommand("styleWithCSS", false, false); document.execCommand(cmd); onRich(); }
-  $("ed-bold").addEventListener("click", () => fmt("bold"));
-  $("ed-italic").addEventListener("click", () => fmt("italic"));
+  /* Жирный и курсив — своя логика (без встроенных команд браузера): работает построчно,
+     пункты списка и галочки не задевает, повторное нажатие снимает оформление */
+  const inMark = (node, tag) => { while (node && node !== rich) { if (node.nodeType === 1 && node.tagName === tag) return node; node = node.parentNode; } return null; };
+  function splitAt(el, node, offset) {
+    const r = document.createRange(); r.setStart(node, offset); r.setEnd(el, el.childNodes.length);
+    const tail = r.extractContents();
+    const el2 = el.cloneNode(false); el2.append(tail); el.after(el2);
+    return el2;
+  }
+  function textNodesIn(range) {
+    const out = [], w = document.createTreeWalker(rich, NodeFilter.SHOW_TEXT);
+    let n;
+    while ((n = w.nextNode())) {
+      if (!range.intersectsNode(n) || n.parentNode.closest(".cbx")) continue;
+      let s = 0, e = n.nodeValue.length;
+      if (n === range.startContainer) s = range.startOffset;
+      if (n === range.endContainer) e = range.endOffset;
+      if (n.nodeValue.slice(s, e).replace(/\u200b/g, "").length) out.push(n);
+    }
+    return out;
+  }
+  function tidy() {
+    rich.querySelectorAll("b, i").forEach((e) => {
+      if (!e.textContent.replace(/\u200b/g, "") && !(window.getSelection().anchorNode && e.contains(window.getSelection().anchorNode))) e.remove();
+    });
+    rich.querySelectorAll("b, i").forEach((e) => {
+      e.querySelectorAll(e.tagName).forEach((inner) => inner.replaceWith(...inner.childNodes));
+      const nx = e.nextSibling;
+      if (nx && nx.nodeType === 1 && nx.tagName === e.tagName) { e.append(...nx.childNodes); nx.remove(); }
+    });
+    rich.normalize();
+  }
+  function placeCaret(node, offset) { const r = document.createRange(); r.setStart(node, offset); r.collapse(true); const s = window.getSelection(); s.removeAllRanges(); s.addRange(r); }
+  function toggleMark(tag) {
+    if (document.activeElement !== rich) rich.focus();
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return;
+    const r = sel.getRangeAt(0);
+    if (!rich.contains(r.commonAncestorContainer)) return;
+    if (r.collapsed) {
+      // без выделения: дальше печатается жирным/курсивом — или наоборот, выходим из него
+      const m = inMark(r.startContainer, tag);
+      if (m) { splitAt(m, r.startContainer, r.startOffset); const z = document.createTextNode("\u200b"); m.after(z); placeCaret(z, 1); }
+      else { const el = document.createElement(tag); const z = document.createTextNode("\u200b"); el.append(z); r.insertNode(el); placeCaret(z, 1); }
+      updFmt(); return;
+    }
+    const nodes = textNodesIn(r);
+    const all = nodes.length > 0 && nodes.every((n) => inMark(n, tag));
+    const lines = [...rich.children].filter((l) => r.intersectsNode(l));
+    let first = null, last = null;
+    lines.forEach((line) => {
+      const lr = document.createRange(); lr.selectNodeContents(line);
+      const cb = line.querySelector(":scope > .cbx"); if (cb) lr.setStartAfter(cb);
+      if (r.compareBoundaryPoints(Range.START_TO_START, lr) > 0) lr.setStart(r.startContainer, r.startOffset);
+      if (r.compareBoundaryPoints(Range.END_TO_END, lr) < 0) lr.setEnd(r.endContainer, r.endOffset);
+      if (lr.collapsed) return;
+      const frag = lr.extractContents();
+      frag.querySelectorAll(tag).forEach((e) => e.replaceWith(...e.childNodes));
+      const host = inMark(lr.startContainer, tag);
+      if (host) { splitAt(host, lr.startContainer, lr.startOffset); lr.setStartAfter(host); lr.collapse(true); }
+      let node = frag;
+      if (!all) { const el = document.createElement(tag); el.append(frag); node = el; }
+      const a = node.nodeType === 11 ? node.firstChild : node, b = node.nodeType === 11 ? node.lastChild : node;
+      lr.insertNode(node);
+      if (a) { first = first || a; last = b; }
+    });
+    tidy();
+    if (first && first.isConnected && last && last.isConnected) {
+      const nr = document.createRange(); nr.setStartBefore(first); nr.setEndAfter(last);
+      sel.removeAllRanges(); sel.addRange(nr);
+    }
+    onRich(); updFmt();
+  }
+  // значки «Ж» и «К» подсвечены, когда курсор в жирном / курсиве
+  function updFmt() {
+    const s = window.getSelection();
+    const n = s.rangeCount && rich.contains(s.anchorNode) ? s.anchorNode : null;
+    $("ed-bold").setAttribute("aria-pressed", String(!!(n && inMark(n, "B"))));
+    $("ed-italic").setAttribute("aria-pressed", String(!!(n && inMark(n, "I"))));
+  }
+  document.addEventListener("selectionchange", () => { if (!$("editor").hidden) updFmt(); });
+  $("ed-bold").addEventListener("click", () => toggleMark("B"));
+  $("ed-italic").addEventListener("click", () => toggleMark("I"));
+  rich.addEventListener("keydown", (e) => {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+    const k = e.key.toLowerCase();
+    if (k === "b" || k === "и") { e.preventDefault(); toggleMark("B"); }
+    else if (k === "i" || k === "ш") { e.preventDefault(); toggleMark("I"); }
+  });
   // «Список»: строки с курсором или выделенные становятся пунктами (и обратно)
   $("ed-list").addEventListener("click", () => {
     if (document.activeElement !== rich) { rich.focus(); const r = document.createRange(); r.selectNodeContents(rich.lastChild || rich); r.collapse(false); const s = window.getSelection(); s.removeAllRanges(); s.addRange(r); }
@@ -1269,7 +1355,7 @@
     ed.pinned = !!(n && n.pinned);
     ed.files = ((n && n.data && n.data.files) || []).map((f) => Object.assign({}, f));
     ed.filesNew = []; ed.filesRemoved = [];
-    ed.snap = n ? { title: n.title || "", body: n.body, color: n.color, pinned: !!n.pinned, data: Object.assign({}, n.data || {}) } : null; // для «Отменить»
+    ed.snap = n ? { title: n.title || "", body: n.body, color: n.color, pinned: !!n.pinned, data: Object.assign({}, n.data || {}), edited_at: n.edited_at || n.created_at } : null; // для «Отменить»
     $("ed-pin").setAttribute("aria-pressed", String(ed.pinned));
     ed.dirty = false;
     $("ed-head").value = n ? n.title || "" : "";
@@ -1280,7 +1366,7 @@
     $("ed-confirm").hidden = true;
     $("ed-actions").hidden = false;
     $("ed-title").textContent = n ? "Заметка" : "Новая заметка";
-    $("ed-status").textContent = n ? "Изменено " + fmtShort.format(new Date(n.updated_at)) : "";
+    $("ed-status").textContent = n ? "Изменено " + fmtShort.format(new Date(n.edited_at || n.created_at)) : "";
     setEdColor(n ? n.color || "paper" : "paper");
     animShow($("editor"));
     lockSheets(true);
@@ -1309,7 +1395,7 @@
       const cur = ed.id ? state.items.find((x) => x.id === ed.id) : null;
       const data = Object.assign({}, (cur && cur.data) || {}, { files: ed.files });
       if (!ed.files.length) delete data.files;
-      const row = { title, body, color: ed.color, pinned: ed.pinned, data };
+      const row = { title, body, color: ed.color, pinned: ed.pinned, data, edited_at: new Date().toISOString() };
       let res;
       if (ed.id) res = await sb.from("items").update(row).eq("id", ed.id).select(ITEM_COLS).single();
       else res = await sb.from("items").insert(Object.assign({ type: "note", section_id: ed.sec, position: nextPos(ed.sec) }, row)).select(ITEM_COLS).single();
