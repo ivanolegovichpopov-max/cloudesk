@@ -734,7 +734,9 @@ html:has(.dragging) .fade-scroll { -webkit-mask-image: none; mask-image: none; }
 .top-left .clock { min-width: 0; }
 @media (min-width: 561px) {
   .top { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
-  .top-actions { justify-self: end; }
+  .top-left { grid-column: 1; }
+  .next-rem { grid-column: 2; }
+  .top-actions { grid-column: 3; justify-self: end; }
 }
 @media (max-width: 900px) { .top.searching .next-rem { display: none; } }
 
