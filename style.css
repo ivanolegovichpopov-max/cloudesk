@@ -456,6 +456,69 @@ button:disabled { cursor: default; opacity: .45; }
   .sheet { width: 100%; height: 86%; border-radius: var(--r-lg) var(--r-lg) 0 0; padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
 }
 
+/* ---------- Анимации: только прозрачность и сдвиг (самый лёгкий способ), 120–200 мс ---------- */
+:root { --ease: cubic-bezier(.2, .7, .3, 1); }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fade-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes rise-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes drop-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@keyframes up-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes sheet-in { from { opacity: 0; transform: translateY(10px) scale(.985); } to { opacity: 1; transform: none; } }
+@keyframes sheet-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(8px) scale(.985); } }
+@keyframes slide-up { from { transform: translateY(100%); } to { transform: none; } }
+@keyframes slide-down { from { transform: none; } to { transform: translateY(100%); } }
+@keyframes toast-up { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+@keyframes toast-down { from { opacity: 1; transform: translate(-50%, 0); } to { opacity: 0; transform: translate(-50%, 8px); } }
+
+/* экраны входа и стола */
+.login:not([hidden]) .login-card { animation: rise-in .22s var(--ease); }
+.desk:not([hidden]) { animation: fade-in .2s ease-out; }
+
+/* окна: фон затемняется, окно всплывает; при закрытии — обратно */
+.sheet-wrap:not([hidden]) .sheet-backdrop { animation: fade-in .18s ease-out; }
+.sheet-wrap:not([hidden]) .sheet { animation: sheet-in .2s var(--ease); }
+.sheet-wrap.is-leaving .sheet-backdrop { animation: fade-out .17s ease-in forwards; }
+.sheet-wrap.is-leaving .sheet { animation: sheet-out .17s ease-in forwards; }
+
+/* меню и выпадающие выборы */
+.menu:not([hidden]), .pop:not([hidden]) { animation: drop-in .14s var(--ease); }
+.pop-up:not([hidden]) { animation: up-in .14s var(--ease); }
+.menu.is-leaving, .pop.is-leaving { animation: fade-out .12s ease-in forwards; }
+
+/* содержимое: вкладки, месяц календаря, новые заметки, подтверждение, метка таймера */
+.fade-in { animation: fade-in .18s ease-out; }
+.note.fade-in { animation: rise-in .2s var(--ease); }
+.clock-run:not([hidden]) { animation: fade-in .18s ease-out; }
+.clock-run.is-leaving { animation: fade-out .15s ease-in forwards; }
+
+/* уведомление снизу */
+.toast-in { animation: toast-up .2s var(--ease); }
+.toast.is-leaving { animation: toast-down .18s ease-in forwards; }
+
+/* смена заставки: старая картинка тает поверх новой */
+.wall-old { z-index: 0; opacity: 1; transition: opacity .4s ease; pointer-events: none; }
+.wall-old.go { opacity: 0; }
+
+/* смена темы и акцента: цвета перетекают */
+.color-fade, .color-fade *, .color-fade *::before, .color-fade *::after {
+  transition: background-color .3s ease, color .3s ease, border-color .3s ease, fill .3s ease !important;
+}
+
+/* отклик элементов: цвет и рамка при наведении, лёгкое нажатие */
+button, .pick-btn, .top-btn, .menu-item, .preset, .upload-tile, .note, .cal-day, .dp-day, .tp-item, .tabs button, .segmented button, .chips button, .tool, .clock, input, textarea {
+  transition: background-color .12s ease, border-color .12s ease, color .12s ease, opacity .12s ease, transform .08s ease;
+}
+button:active:not(:disabled), .upload-tile:active { transform: scale(.97); }
+.note:active, .preset:active, .cal-day:active { transform: scale(.985); }
+.note-sheet { transition: background-color .2s ease, color .2s ease; }
+@media (hover: hover) { [data-tip]:hover::after { animation: fade-in .12s ease-out .25s both; } }
+
+@media (max-width: 560px) {
+  .sheet-wrap:not([hidden]) .sheet { animation: slide-up .22s var(--ease); }
+  .sheet-wrap.is-leaving .sheet { animation: slide-down .18s ease-in forwards; }
+}
+
+/* система просит меньше движения — отключаем всё */
 @media (prefers-reduced-motion: reduce) {
-  * { transition: none !important; }
+  *, *::before, *::after { animation: none !important; transition: none !important; }
 }

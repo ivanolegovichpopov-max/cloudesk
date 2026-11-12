@@ -41,6 +41,7 @@
   document.querySelectorAll("[data-theme-set]").forEach((b) =>
     b.addEventListener("click", async (e) => {
       e.stopPropagation();
+      colorFade();
       applyTheme(b.dataset.themeSet);
       try { await saveSettings({ theme: b.dataset.themeSet }); }
       catch (err) { console.error(err); toast("Тема не сохранилась. Попробуйте ещё раз."); }
@@ -103,13 +104,44 @@
   }
 
   /* ---------- Мелочи ---------- */
+  /* ---------- Анимации: только прозрачность и сдвиг, коротко ---------- */
+  const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // Плавно скрыть: проигрываем уход (класс is-leaving), затем прячем
+  function animHide(el, ms = 150) {
+    if (!el || el.hidden) return;
+    if (reduceMotion) { el.hidden = true; return; }
+    el.classList.add("is-leaving");
+    clearTimeout(el._leaveT);
+    el._leaveT = setTimeout(() => { el.hidden = true; el.classList.remove("is-leaving"); }, ms);
+  }
+  function animShow(el) {
+    if (!el) return;
+    clearTimeout(el._leaveT);
+    el.classList.remove("is-leaving");
+    el.hidden = false;
+  }
+  // Перезапустить анимацию появления (например, при смене месяца)
+  function replay(el, cls = "fade-in") {
+    if (reduceMotion || !el) return;
+    el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls);
+  }
+  // Плавная смена цветов (тема, акцент) на четверть секунды
+  function colorFade() {
+    if (reduceMotion) return;
+    const r = document.documentElement;
+    r.classList.add("color-fade");
+    clearTimeout(r._cf);
+    r._cf = setTimeout(() => r.classList.remove("color-fade"), 320);
+  }
+
   let toastTimer;
   function toast(text) {
     const t = $("toast");
     t.textContent = text;
-    t.hidden = false;
+    animShow(t);
+    replay(t, "toast-in");
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => (t.hidden = true), 4000);
+    toastTimer = setTimeout(() => animHide(t, 180), 4000);
   }
 
   const fmtTime = new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit" });
@@ -200,7 +232,7 @@
   function closeMenus(except) {
     document.querySelectorAll("[data-menu]").forEach((btn) => {
       if (btn === except) return;
-      $(btn.dataset.menu).hidden = true;
+      animHide($(btn.dataset.menu), 120);
       btn.setAttribute("aria-expanded", "false");
     });
   }
@@ -209,8 +241,9 @@
       e.stopPropagation();
       const m = $(btn.dataset.menu);
       closeMenus(btn);
-      m.hidden = !m.hidden;
-      btn.setAttribute("aria-expanded", String(!m.hidden));
+      const open = m.hidden || m.classList.contains("is-leaving");
+      if (open) animShow(m); else animHide(m, 120);
+      btn.setAttribute("aria-expanded", String(open));
     }));
   document.addEventListener("click", (e) => {
     // путь события запоминается в момент клика — работает, даже если кнопку внутри списка уже перерисовали
@@ -267,6 +300,8 @@
     state.notes.sort((a, b) => (b.pinned - a.pinned) || (new Date(b.updated_at) - new Date(a.updated_at)));
   }
 
+  const seenNotes = new Set();
+  let notesFirstPaint = true;
   function renderNotes() {
     sortNotes();
     const box = $("notes");
@@ -278,6 +313,7 @@
       el.className = "note";
       el.dataset.color = n.color;
       el.dataset.id = n.id;
+      if (!seenNotes.has(n.id)) { seenNotes.add(n.id); if (!notesFirstPaint) el.classList.add("fade-in"); }
       const lines = n.body.split("\n");
       const title = (lines[0] || "").trim() || "Без заголовка";
       const rest = lines.slice(1).join("\n").trim();
@@ -306,6 +342,7 @@
       frag.append(el);
     }
     box.append(frag);
+    notesFirstPaint = false;
     $("notes-empty").hidden = state.notes.length > 0;
     $("notes-count").textContent = state.notes.length ? String(state.notes.length) : "";
   }
@@ -336,7 +373,7 @@
     $("ed-title").textContent = n ? "Заметка" : "Новая заметка";
     $("ed-status").textContent = n ? "Сохранено" : "";
     setEdColor(n ? n.color : "paper");
-    $("editor").hidden = false;
+    animShow($("editor"));
     lockSheets(true);
     setTimeout(() => $("ed-body").focus(), 30);
   }
@@ -395,7 +432,7 @@
       }
       // пустая заметка не нужна
       if (ed.id && !$("ed-body").value.trim() && !(await deleteNote(true))) return;
-      $("editor").hidden = true;
+      animHide($("editor"), 170);
       lockSheets(false);
     } finally {
       edClosing = false;
@@ -409,7 +446,7 @@
     state.notes = state.notes.filter((x) => x.id !== ed.id);
     ed.id = null;
     renderNotes();
-    if (!silent) { $("editor").hidden = true; lockSheets(false); toast("Заметка удалена"); }
+    if (!silent) { animHide($("editor"), 170); lockSheets(false); toast("Заметка удалена"); }
     return true;
   }
 
@@ -420,14 +457,25 @@
     $("ed-pin").setAttribute("aria-pressed", String(ed.pinned));
     queueSave(0);
   });
-  $("ed-delete").addEventListener("click", () => { $("ed-confirm").hidden = false; $("ed-actions").hidden = true; });
-  $("ed-confirm-no").addEventListener("click", () => { $("ed-confirm").hidden = true; $("ed-actions").hidden = false; });
+  $("ed-delete").addEventListener("click", () => { $("ed-actions").hidden = true; $("ed-confirm").hidden = false; replay($("ed-confirm")); });
+  $("ed-confirm-no").addEventListener("click", () => { $("ed-confirm").hidden = true; $("ed-actions").hidden = false; replay($("ed-actions")); });
   $("ed-confirm-yes").addEventListener("click", () => deleteNote(false));
   $("editor").querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", closeEditor));
 
   /* ---------- Заставка ---------- */
   function setWall(preset, url) {
     const wall = $("wall");
+    if (!reduceMotion && document.body.dataset.wallReady) {
+      const old = wall.cloneNode(false);
+      old.removeAttribute("id");
+      old.style.backgroundImage = getComputedStyle(wall).backgroundImage;
+      old.classList.add("wall-old");
+      wall.after(old);
+      requestAnimationFrame(() => requestAnimationFrame(() => old.classList.add("go")));
+      setTimeout(() => old.remove(), 450);
+      colorFade();
+    }
+    document.body.dataset.wallReady = "1";
     if (url) {
       document.body.dataset.wall = "custom";
       wall.style.backgroundImage = 'url("' + url + '")';
@@ -503,7 +551,7 @@
 
   $("btn-wall").addEventListener("click", () => {
     closeMenus(null);
-    $("wallsheet").hidden = false;
+    animShow($("wallsheet"));
     lockSheets(true);
   });
   // Сохранение заставки отслеживается: окно не закроется, пока оно не завершится
@@ -524,7 +572,7 @@
       if (wallJob) { $("wall-status").textContent = "Сохраняю…"; await wallJob; }
       if (wallFailed) { $("wall-status").textContent = "Не сохранилось — выберите заставку ещё раз."; return; }
       $("wall-status").textContent = "";
-      $("wallsheet").hidden = true;
+      animHide($("wallsheet"), 170);
       lockSheets(false);
     } finally {
       wallClosing = false;
@@ -593,7 +641,7 @@
   function setTab(t) {
     timeTab = t;
     document.querySelectorAll("#timesheet [data-tab]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === t)));
-    document.querySelectorAll("#timesheet [data-panel]").forEach((p) => (p.hidden = p.dataset.panel !== t));
+    document.querySelectorAll("#timesheet [data-panel]").forEach((p) => { p.hidden = p.dataset.panel !== t; if (!p.hidden) replay(p); });
     $("time-hint").textContent = HINTS[t];
     $("time-status").textContent = "";
     if (t === "cal") renderCal();
@@ -606,7 +654,7 @@
 
   function openTime(tab) {
     closeMenus(null);
-    $("timesheet").hidden = false;
+    animShow($("timesheet"));
     lockSheets(true);
     setTab(tab || (timer.end || timer.left ? "timer" : sw.start || sw.acc ? "sw" : timeTab));
   }
@@ -630,7 +678,7 @@
         if (!ok) return;
       }
       $("time-status").textContent = "";
-      $("timesheet").hidden = true;
+      animHide($("timesheet"), 170);
       lockSheets(false);
     } finally { timeClosing = false; }
   }
@@ -660,9 +708,9 @@
       g.append(b);
     }
   }
-  $("cal-prev").addEventListener("click", () => { calMonth.setMonth(calMonth.getMonth() - 1); renderCal(); });
-  $("cal-next").addEventListener("click", () => { calMonth.setMonth(calMonth.getMonth() + 1); renderCal(); });
-  $("cal-today").addEventListener("click", () => { calMonth = new Date(); calMonth.setDate(1); renderCal(); });
+  $("cal-prev").addEventListener("click", () => { calMonth.setMonth(calMonth.getMonth() - 1); renderCal(); replay($("cal-grid")); });
+  $("cal-next").addEventListener("click", () => { calMonth.setMonth(calMonth.getMonth() + 1); renderCal(); replay($("cal-grid")); });
+  $("cal-today").addEventListener("click", () => { calMonth = new Date(); calMonth.setDate(1); renderCal(); replay($("cal-grid")); });
 
   /* Сигнал */
   let audioCtx = null;
@@ -736,10 +784,11 @@
   function renderRun() {
     const el = $("clock-run");
     el.classList.toggle("done", !!timer.done);
-    if (timer.done) { el.textContent = "Таймер: время вышло"; el.hidden = false; }
-    else if (timer.end) { el.textContent = "Таймер " + fmtMS(timerLeft()); el.hidden = false; }
-    else if (sw.start) { el.textContent = "Секундомер " + fmtSW(swNow()).replace(/,\d$/, ""); el.hidden = false; }
-    else el.hidden = true;
+    const show = (txt) => { el.textContent = txt; if (el.hidden || el.classList.contains("is-leaving")) animShow(el); };
+    if (timer.done) show("Таймер: время вышло");
+    else if (timer.end) show("Таймер " + fmtMS(timerLeft()));
+    else if (sw.start) show("Секундомер " + fmtSW(swNow()).replace(/,\d$/, ""));
+    else animHide(el, 150);
   }
   function timeLoop() {
     if (timer.end && Date.now() >= timer.end) {
@@ -830,8 +879,8 @@
       g.append(b);
     }
   }
-  $("dp-prev").addEventListener("click", () => { dpMonth.setMonth(dpMonth.getMonth() - 1); renderDP(); });
-  $("dp-next").addEventListener("click", () => { dpMonth.setMonth(dpMonth.getMonth() + 1); renderDP(); });
+  $("dp-prev").addEventListener("click", () => { dpMonth.setMonth(dpMonth.getMonth() - 1); renderDP(); replay($("dp-grid")); });
+  $("dp-next").addEventListener("click", () => { dpMonth.setMonth(dpMonth.getMonth() + 1); renderDP(); replay($("dp-grid")); });
   $("rem-date-btn").addEventListener("click", renderDP);
   function renderTP() {
     const [h, m] = ($("rem-time").value || "09:00").split(":");
