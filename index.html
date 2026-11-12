@@ -126,19 +126,25 @@
       </div>
     </div>
     <input id="ed-head" class="ed-head" type="text" maxlength="20" autocomplete="off" placeholder="Заголовок" aria-label="Заголовок заметки">
-    <textarea id="ed-body" class="ed-body" maxlength="1000" placeholder="Текст" aria-label="Текст заметки"></textarea>
+    <div id="ed-rich" class="ed-rich" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Текст заметки" data-placeholder="Текст" spellcheck="true"></div>
+    <div id="ed-files" class="ed-files" hidden></div>
+    <input id="ed-file" type="file" class="sr" multiple>
     <div id="ed-count" class="ed-count" aria-live="polite"></div>
     <div class="sheet-foot">
       <div class="colors" role="radiogroup" aria-label="Цвет заметки">
-        <button type="button" class="dot" data-color="paper" aria-label="Бумага"></button>
-        <button type="button" class="dot" data-color="sky" aria-label="Голубой"></button>
-        <button type="button" class="dot" data-color="mint" aria-label="Мятный"></button>
-        <button type="button" class="dot" data-color="rose" aria-label="Розовый"></button>
-        <button type="button" class="dot" data-color="sand" aria-label="Песочный"></button>
-        <button type="button" class="dot" data-color="ink" aria-label="Тёмный"></button>
+        <button type="button" class="dot" data-color="paper" data-tip="Без цвета" aria-label="Без цвета"></button>
+        <button type="button" class="dot" data-color="sky" data-tip="Синий" aria-label="Синий"></button>
+        <button type="button" class="dot" data-color="mint" data-tip="Зелёный" aria-label="Зелёный"></button>
+        <button type="button" class="dot" data-color="sand" data-tip="Жёлтый" aria-label="Жёлтый"></button>
+        <button type="button" class="dot" data-color="rose" data-tip="Розовый" aria-label="Розовый"></button>
+        <button type="button" class="dot" data-color="violet" data-tip="Фиолетовый" aria-label="Фиолетовый"></button>
+        <button type="button" class="dot" data-color="ink" data-tip="Серый" aria-label="Серый"></button>
       </div>
       <div id="ed-actions" class="foot-actions">
-        <button id="ed-list" type="button" class="tool" data-tip="Список с галочками" aria-label="Список с галочками"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M4 5h4v4H4zM4 15h4v4H4zM11 7h9M11 17h9M5 7l1 1 1.5-2"/></svg></button>
+        <button id="ed-bold" type="button" class="tool ed-fmt" data-tip="Жирный (Ctrl+B)" aria-label="Жирный (Ctrl+B)"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M7 5h6a3.5 3.5 0 0 1 0 7H7zM7 12h7a3.5 3.5 0 0 1 0 7H7z"/></svg></button>
+        <button id="ed-italic" type="button" class="tool ed-fmt" data-tip="Курсив (Ctrl+I)" aria-label="Курсив (Ctrl+I)"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M10 5h8M6 19h8M14 5l-4 14"/></svg></button>
+        <button id="ed-list" type="button" class="tool ed-fmt" data-tip="Список с галочками" aria-label="Список с галочками"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M4 5h4v4H4zM4 15h4v4H4zM11 7h9M11 17h9M5 7l1 1 1.5-2"/></svg></button>
+        <button id="ed-attach" type="button" class="tool ed-fmt" data-tip="Прикрепить файл (до 5 МБ)" aria-label="Прикрепить файл (до 5 МБ)"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M21 11.5l-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6l7.9-7.9"/></svg></button>
         <button id="ed-pin" type="button" class="tool" aria-pressed="false" data-tip="Закрепить сверху" aria-label="Закрепить сверху">
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M9 3h6l-1 6 4 4H6l4-4zM12 13v8"/></svg>
         </button>

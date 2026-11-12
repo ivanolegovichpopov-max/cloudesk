@@ -483,7 +483,7 @@
   const svgIco = (d, s = 16, w = 1.8) => '<svg viewBox="0 0 24 24" width="' + s + '" height="' + s + '" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="' + w + '" stroke-linecap="round" stroke-linejoin="round" d="' + d + '"/></svg>';
   // у заметки отдельные заголовок (title) и текст (body)
   const noteTitle = (it) => (it.title || "").trim() || "Без заголовка";
-  const noteSub = (it) => (it.body || "").replace(/\s+/g, " ").trim();
+  const noteSub = (it) => stripMarks(it.body).replace(/\s+/g, " ").trim();
 
   // Приложения: name — название, spans — допустимые ширины, render — содержимое поля, add — действие «+»
   // Приложения: name — название, spans — допустимые ширины, render — содержимое поля, add — действие «+»,
@@ -511,8 +511,24 @@
   };
   const APP_ORDER = ["notes"];
 
-  /* Списки дел в заметке: строка «[ ] …», «[] …», «- …» — пункт; «[x] …» — отмеченный */
-  const CL_RE = /^(\s*)(\[\s?\]|\[[xXхХ✓]\]|-)\s+(.*)$/;
+  /* Списки дел в заметке: строка «[ ] …» (или «[] …») — пункт; «[x] …» — отмеченный */
+  const CL_RE = /^(\s*)(\[\s?\]|\[[xXхХ✓]\])\s?(.*)$/;
+  // **жирный** и _курсив_ → узлы (только текст и <b>/<i>, без вставки чужого HTML)
+  function inlineNodes(text) {
+    const frag = document.createDocumentFragment();
+    const re = /\*\*([^*]+)\*\*|_([^_]+)_/g;
+    let last = 0, m;
+    while ((m = re.exec(text))) {
+      if (m.index > last) frag.append(text.slice(last, m.index));
+      const el = document.createElement(m[1] != null ? "b" : "i");
+      el.append(inlineNodes(m[1] != null ? m[1] : m[2]));
+      frag.append(el);
+      last = re.lastIndex;
+    }
+    if (last < text.length) frag.append(text.slice(last));
+    return frag;
+  }
+  const stripMarks = (s) => (s || "").replace(/\*\*([^*]+)\*\*/g, "$1").replace(/_([^_]+)_/g, "$1").replace(/^\s*\[[ xXхХ✓]?\]\s?/gm, "");
   function parseLine(line) {
     const m = line.match(CL_RE);
     return m ? { check: true, done: /[xXхХ✓]/.test(m[2]), text: m[3] } : { check: false, text: line };
@@ -533,7 +549,8 @@
 
   const seenNotes = new Set();
   let boardFirst = true;
-  const NOTE_COLORS = [["paper", "Бумага"], ["sky", "Голубой"], ["mint", "Мятный"], ["rose", "Розовый"], ["sand", "Песочный"], ["ink", "Тёмный"]];
+  // цвета заметок — те же, что у групп ссылок в меню
+  const NOTE_COLORS = [["paper", "Без цвета"], ["sky", "Синий"], ["mint", "Зелёный"], ["sand", "Жёлтый"], ["rose", "Розовый"], ["violet", "Фиолетовый"], ["ink", "Серый"]];
   function noteCard(n, manual) {
     const el = document.createElement("div");
     el.className = "note"; el.dataset.color = n.color || "paper"; el.dataset.id = n.id;
@@ -557,9 +574,9 @@
         const cb = document.createElement("button"); cb.type = "button"; cb.className = "cl-box"; cb.setAttribute("role", "checkbox"); cb.setAttribute("aria-checked", String(pl.done));
         cb.setAttribute("aria-label", pl.text); cb.innerHTML = '<svg viewBox="0 0 24 24" width="11" height="11" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
         const li = i; cb.addEventListener("click", (e) => { e.stopPropagation(); toggleLine(n, li); });
-        const t = document.createElement("span"); t.textContent = pl.text;
+        const t = document.createElement("span"); t.append(inlineNodes(pl.text));
         row.append(cb, t);
-      } else row.textContent = lines[i];
+      } else row.append(inlineNodes(lines[i]));
       body.append(row); shown++;
     }
     el.append(body);
@@ -567,6 +584,8 @@
     const foot = document.createElement("div"); foot.className = "note-foot";
     const meta = document.createElement("span"); meta.className = "note-meta"; meta.textContent = fmtShort.format(new Date(n.updated_at)); foot.append(meta);
     const st = checklistStat(n.body);
+    const nf = ((n.data && n.data.files) || []).length;
+    if (nf) { const cl = document.createElement("span"); cl.className = "note-files"; cl.dataset.tip = "Файлов: " + nf; cl.innerHTML = svgIco("M21 11.5l-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6l7.9-7.9", 12); cl.append(String(nf)); foot.append(cl); }
     if (st.all) { const pr = document.createElement("span"); pr.className = "note-prog" + (st.done === st.all ? " full" : ""); pr.textContent = st.done + "/" + st.all; pr.dataset.tip = "Сделано пунктов"; foot.append(pr); }
     el.append(foot);
     // действия при наведении: закрепить, цвет, удалить
@@ -1027,8 +1046,12 @@
     if (id_.id && await removeItem(id_.id, "Напоминание удалено")) { animHide($("itemsheet"), 170); lockSheets(false); }
   });
 
-  /* ---------- Заметка: свой редактор, автосохранение ---------- */
-  const ed = { id: null, sec: null, color: "paper", pinned: false, timer: null, saving: null, dirty: false };
+  /* ---------- Заметка: свой редактор, автосохранение ----------
+     Текст хранится простой разметкой: **жирный**, _курсив_, строки «[ ] …» / «[x] …» — пункты списка.
+     В редакторе это видно как настоящий жирный, курсив и галочки. */
+  const ed = { id: null, sec: null, color: "paper", pinned: false, files: [], filesNew: [], filesRemoved: [], timer: null, saving: null, dirty: false };
+  const ED_LIM = { head: 20, body: 1000, files: 5, fileSize: 5 * 1024 * 1024 };
+  const rich = $("ed-rich");
 
   function setEdColor(c) {
     ed.color = c;
@@ -1040,17 +1063,210 @@
     d.addEventListener("click", () => { setEdColor(d.dataset.color); queueSave(0); });
   });
 
+  // разметка → строки редактора
+  function cbxEl(done) {
+    const c = document.createElement("span");
+    c.className = "cbx"; c.contentEditable = "false"; c.setAttribute("role", "checkbox"); c.setAttribute("aria-checked", String(!!done));
+    c.innerHTML = '<svg viewBox="0 0 24 24" width="11" height="11" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+    return c;
+  }
+  function lineEl(line) {
+    const d = document.createElement("div"); d.className = "ln";
+    const pl = parseLine(line);
+    if (pl.check) { d.classList.add("cl"); if (pl.done) d.classList.add("done"); d.append(cbxEl(pl.done)); }
+    const frag = inlineNodes(pl.check ? pl.text : line);
+    if (frag.childNodes.length) d.append(frag); else d.append(document.createElement("br"));
+    return d;
+  }
+  function setRich(body) {
+    rich.textContent = "";
+    (body || "").split("\n").forEach((l) => rich.append(lineEl(l)));
+    richEmpty();
+  }
+  // строки редактора → разметка
+  function serInline(node) {
+    let s = "";
+    node.childNodes.forEach((n) => {
+      if (n.nodeType === 3) s += n.nodeValue.replace(/​/g, "");
+      else if (n.nodeType === 1) {
+        if (n.classList.contains("cbx") || n.tagName === "BR") return;
+        const inner = serInline(n);
+        const fw = n.style && n.style.fontWeight, fs = n.style && n.style.fontStyle;
+        const b = n.tagName === "B" || n.tagName === "STRONG" || fw === "bold" || Number(fw) >= 600;
+        const i = n.tagName === "I" || n.tagName === "EM" || fs === "italic";
+        let t = inner;
+        if (i && t.trim()) t = "_" + t + "_";
+        if (b && t.trim()) t = "**" + t + "**";
+        s += t;
+      }
+    });
+    return s;
+  }
+  function getRich() {
+    const out = [];
+    rich.childNodes.forEach((n) => {
+      if (n.nodeType === 3) { if (n.nodeValue) out.push(n.nodeValue); return; }
+      if (n.nodeType !== 1) return;
+      const t = serInline(n).replace(/\*\*\*\*/g, "").replace(/__/g, "");
+      out.push(n.classList.contains("cl") ? (n.classList.contains("done") ? "[x] " : "[ ] ") + t : t);
+    });
+    while (out.length > 1 && !out[out.length - 1].trim()) out.pop();
+    return out.join("\n");
+  }
+  function richEmpty() { rich.classList.toggle("is-empty", !getRich().trim() && !rich.querySelector(".cl")); }
+  // порядок в строках: всё — внутри строк, у пунктов есть галочка
+  function normRich() {
+    const sel = window.getSelection();
+    [...rich.childNodes].forEach((n) => {
+      if (n.nodeType === 3 && n.nodeValue) {
+        const d = document.createElement("div"); d.className = "ln"; rich.insertBefore(d, n); d.append(n);
+        if (sel.rangeCount && sel.anchorNode === n) { const r = document.createRange(); r.setStart(n, n.nodeValue.length); r.collapse(true); sel.removeAllRanges(); sel.addRange(r); }
+      } else if (n.nodeType === 1 && n.tagName !== "DIV") {
+        const d = document.createElement("div"); d.className = "ln"; rich.insertBefore(d, n); d.append(n);
+      } else if (n.nodeType === 1) {
+        n.classList.add("ln");
+        if (n.classList.contains("cl") && !n.querySelector(":scope > .cbx")) { n.classList.remove("done"); n.prepend(cbxEl(false)); }
+        if (!n.classList.contains("cl")) n.querySelectorAll(":scope > .cbx").forEach((c) => c.remove());
+      }
+    });
+    if (!rich.firstChild) rich.append(lineEl(""));
+  }
+  function curLine() {
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return null;
+    let n = sel.anchorNode;
+    while (n && n.parentNode !== rich) n = n.parentNode;
+    return n && n.nodeType === 1 ? n : null;
+  }
+  function caretAtLineStart(line) {
+    const sel = window.getSelection();
+    if (!sel.rangeCount || !sel.isCollapsed) return false;
+    const r = document.createRange(); r.selectNodeContents(line); r.setEnd(sel.anchorNode, sel.anchorOffset);
+    return !r.toString().replace(/​/g, "");
+  }
+  rich.addEventListener("keydown", (e) => {
+    const line = curLine();
+    if (!line) return;
+    // Enter в пустом пункте — выход из списка
+    if (e.key === "Enter" && line.classList.contains("cl") && !serInline(line).trim()) {
+      e.preventDefault(); line.classList.remove("cl", "done"); line.querySelector(".cbx")?.remove(); onRich(); return;
+    }
+    // Backspace в начале пункта — убирает галочку, текст остаётся
+    if (e.key === "Backspace" && line.classList.contains("cl") && caretAtLineStart(line)) {
+      e.preventDefault(); line.classList.remove("cl", "done"); line.querySelector(".cbx")?.remove(); onRich(); return;
+    }
+  });
+  // галочка в редакторе — нажимается как на карточке
+  rich.addEventListener("mousedown", (e) => { if (e.target.closest(".cbx")) e.preventDefault(); });
+  rich.addEventListener("click", (e) => {
+    const c = e.target.closest(".cbx");
+    if (!c) return;
+    const line = c.parentNode, done = !line.classList.contains("done");
+    line.classList.toggle("done", done); c.setAttribute("aria-checked", String(done));
+    onRich();
+  });
+  // вставка — только текст, без чужого оформления
+  rich.addEventListener("paste", (e) => {
+    e.preventDefault();
+    const t = (e.clipboardData.getData("text/plain") || "").replace(/\r/g, "");
+    const room = ED_LIM.body - getRich().length;
+    if (room > 0) document.execCommand("insertText", false, t.slice(0, room));
+  });
+  // предел длины: дальше 1000 символов не печатается
+  rich.addEventListener("beforeinput", (e) => {
+    if (/^insert/.test(e.inputType) && e.inputType !== "insertFromPaste" && getRich().length >= ED_LIM.body) e.preventDefault();
+  });
+  function onRich() { normRich(); richEmpty(); edCount(); queueSave(); }
+  rich.addEventListener("input", onRich);
+
+  // кнопки оформления не уводят фокус из текста
+  document.querySelectorAll("#editor .ed-fmt").forEach((b) => b.addEventListener("mousedown", (e) => e.preventDefault()));
+  function fmt(cmd) { if (document.activeElement !== rich) rich.focus(); document.execCommand("styleWithCSS", false, false); document.execCommand(cmd); onRich(); }
+  $("ed-bold").addEventListener("click", () => fmt("bold"));
+  $("ed-italic").addEventListener("click", () => fmt("italic"));
+  // «Список»: строки с курсором или выделенные становятся пунктами (и обратно)
+  $("ed-list").addEventListener("click", () => {
+    if (document.activeElement !== rich) { rich.focus(); const r = document.createRange(); r.selectNodeContents(rich.lastChild || rich); r.collapse(false); const s = window.getSelection(); s.removeAllRanges(); s.addRange(r); }
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return;
+    const rg = sel.getRangeAt(0);
+    const lines = [...rich.children].filter((l) => rg.intersectsNode(l));
+    if (!lines.length) return;
+    const all = lines.every((l) => l.classList.contains("cl"));
+    lines.forEach((l) => {
+      if (all) { l.classList.remove("cl", "done"); l.querySelector(".cbx")?.remove(); }
+      else if (!l.classList.contains("cl")) { l.classList.add("cl"); l.prepend(cbxEl(false)); }
+    });
+    onRich();
+  });
+
+  /* Вложения: до 5 файлов по 5 МБ, хранятся закрыто, открываются по временной ссылке */
+  const fmtSize = (b) => (b < 1024 ? b + " Б" : b < 1048576 ? Math.round(b / 1024) + " КБ" : (b / 1048576).toFixed(1).replace(".", ",") + " МБ");
+  const CLIP = "M21 11.5l-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6l7.9-7.9";
+  function renderEdFiles() {
+    const box = $("ed-files");
+    box.textContent = "";
+    box.hidden = !ed.files.length;
+    ed.files.forEach((f) => {
+      const row = document.createElement("div"); row.className = "ed-file";
+      const open = document.createElement("button");
+      open.type = "button"; open.className = "ed-file-open"; open.dataset.tip = "Скачать"; open.setAttribute("aria-label", "Скачать " + f.name);
+      open.innerHTML = svgIco(CLIP, 14);
+      const nm = document.createElement("span"); nm.className = "ed-file-name"; nm.textContent = f.name;
+      const sz = document.createElement("span"); sz.className = "ed-file-size"; sz.textContent = fmtSize(f.size);
+      open.append(nm, sz);
+      open.addEventListener("click", () => downloadFile(f));
+      const del = document.createElement("button");
+      del.type = "button"; del.className = "tool"; del.dataset.tip = "Открепить"; del.setAttribute("aria-label", "Открепить " + f.name);
+      del.innerHTML = svgIco("M6 6l12 12M18 6 6 18", 14);
+      del.addEventListener("click", () => {
+        ed.files = ed.files.filter((x) => x.path !== f.path);
+        if (ed.filesNew.includes(f.path)) { ed.filesNew = ed.filesNew.filter((p) => p !== f.path); sb.storage.from("attachments").remove([f.path]); }
+        else ed.filesRemoved.push(f.path);
+        renderEdFiles(); queueSave(0);
+      });
+      row.append(open, del);
+      box.append(row);
+    });
+    $("ed-attach").disabled = ed.files.length >= ED_LIM.files;
+  }
+  async function downloadFile(f) {
+    const { data, error } = await sb.storage.from("attachments").createSignedUrl(f.path, 60, { download: f.name });
+    if (error || !data) { toast("Не удалось открыть файл — проверьте интернет."); return; }
+    const a = document.createElement("a"); a.href = data.signedUrl; a.rel = "noopener"; a.download = f.name;
+    document.body.append(a); a.click(); a.remove();
+  }
+  $("ed-attach").addEventListener("click", () => $("ed-file").click());
+  $("ed-file").addEventListener("change", async (e) => {
+    const list = [...e.target.files]; e.target.value = "";
+    for (const file of list) {
+      if (ed.files.length >= ED_LIM.files) { toast("К заметке можно прикрепить не больше " + ED_LIM.files + " файлов."); break; }
+      if (file.size > ED_LIM.fileSize) { toast("«" + file.name + "» больше 5 МБ — такой файл не прикрепить."); continue; }
+      const ext = (file.name.match(/\.([A-Za-z0-9]{1,8})$/) || [, "bin"])[1].toLowerCase();
+      const path = state.user.id + "/" + Date.now() + "-" + Math.random().toString(36).slice(2, 8) + "." + ext;
+      $("ed-status").textContent = "Загружаю файл…";
+      const up = await sb.storage.from("attachments").upload(path, file, { contentType: file.type || "application/octet-stream", upsert: false });
+      if (up.error) { console.error(up.error); toast("Файл не загрузился — проверьте интернет."); $("ed-status").textContent = ""; continue; }
+      ed.files.push({ path, name: file.name.slice(0, 120), size: file.size, type: (file.type || "").slice(0, 80) });
+      ed.filesNew.push(path);
+      renderEdFiles(); queueSave(0);
+    }
+  });
+
   function openEditor(id, secId) {
     closeMenus(null);
     const n = id ? state.items.find((x) => x.id === id) : null;
     ed.id = n ? n.id : null;
     ed.sec = n ? n.section_id : secId || (state.sections.find((f) => f.app === "notes") || {}).id || null;
     ed.pinned = !!(n && n.pinned);
-    ed.snap = n ? { title: n.title || "", body: n.body, color: n.color, pinned: !!n.pinned } : null; // для «Отменить»
+    ed.files = ((n && n.data && n.data.files) || []).map((f) => Object.assign({}, f));
+    ed.filesNew = []; ed.filesRemoved = [];
+    ed.snap = n ? { title: n.title || "", body: n.body, color: n.color, pinned: !!n.pinned, data: Object.assign({}, n.data || {}) } : null; // для «Отменить»
     $("ed-pin").setAttribute("aria-pressed", String(ed.pinned));
     ed.dirty = false;
     $("ed-head").value = n ? n.title || "" : "";
-    $("ed-body").value = n ? n.body : "";
+    setRich(n ? n.body : "");
+    renderEdFiles();
     edCount();
     $("ed-delete").hidden = !n;
     $("ed-confirm").hidden = true;
@@ -1060,7 +1276,11 @@
     setEdColor(n ? n.color || "paper" : "paper");
     animShow($("editor"));
     lockSheets(true);
-    setTimeout(() => (n ? $("ed-body") : $("ed-head")).focus(), 30);
+    setTimeout(() => {
+      if (!n) { $("ed-head").focus(); return; }
+      rich.focus(); const r = document.createRange(); r.selectNodeContents(rich.lastChild || rich); r.collapse(false);
+      const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+    }, 30);
   }
 
   function queueSave(delay = 700) {
@@ -1074,11 +1294,14 @@
     clearTimeout(ed.timer);
     if (!ed.dirty) return;
     if (ed.saving) await ed.saving;
-    const body = $("ed-body").value.slice(0, ED_LIM.body), title = $("ed-head").value.trim().slice(0, ED_LIM.head);
-    if (!ed.id && !body.trim() && !title) { ed.dirty = false; $("ed-status").textContent = ""; return; }
+    const body = getRich().slice(0, ED_LIM.body), title = $("ed-head").value.trim().slice(0, ED_LIM.head);
+    if (!ed.id && !body.trim() && !title && !ed.files.length) { ed.dirty = false; $("ed-status").textContent = ""; return; }
     ed.dirty = false;
     ed.saving = (async () => {
-      const row = { title, body, color: ed.color, pinned: ed.pinned };
+      const cur = ed.id ? state.items.find((x) => x.id === ed.id) : null;
+      const data = Object.assign({}, (cur && cur.data) || {}, { files: ed.files });
+      if (!ed.files.length) delete data.files;
+      const row = { title, body, color: ed.color, pinned: ed.pinned, data };
       let res;
       if (ed.id) res = await sb.from("items").update(row).eq("id", ed.id).select(ITEM_COLS).single();
       else res = await sb.from("items").insert(Object.assign({ type: "note", section_id: ed.sec, position: nextPos(ed.sec) }, row)).select(ITEM_COLS).single();
@@ -1112,8 +1335,10 @@
         $("ed-status").textContent = "Не сохранилось — проверьте интернет и нажмите «Готово» ещё раз";
         return;
       }
+      // откреплённые файлы удаляются только теперь — до «Готово» их можно вернуть
+      if (ed.filesRemoved.length) { sb.storage.from("attachments").remove(ed.filesRemoved); ed.filesRemoved = []; }
       // пустая заметка не нужна
-      if (ed.id && !$("ed-body").value.trim() && !$("ed-head").value.trim() && !(await deleteNote(true))) return;
+      if (ed.id && !getRich().trim() && !$("ed-head").value.trim() && !ed.files.length && !(await deleteNote(true))) return;
       animHide($("editor"), 170);
       lockSheets(false);
     } finally {
@@ -1130,12 +1355,10 @@
     return true;
   }
 
-  $("ed-body").addEventListener("input", () => queueSave());
   $("ed-head").addEventListener("input", () => { queueSave(); edCount(); });
   // ограничения заметки: заголовок 20, текст 1000 символов; счётчик появляется ближе к пределу
-  const ED_LIM = { head: 20, body: 1000 };
   function edCount() {
-    const h = $("ed-head").value.length, b = $("ed-body").value.length;
+    const h = $("ed-head").value.length, b = getRich().length;
     const parts = [];
     if (h >= ED_LIM.head * 0.75) parts.push("Заголовок " + h + " / " + ED_LIM.head);
     if (b >= ED_LIM.body * 0.8) parts.push("Текст " + b.toLocaleString("ru-RU") + " / " + ED_LIM.body.toLocaleString("ru-RU"));
@@ -1143,20 +1366,12 @@
     el.textContent = parts.join(" · ");
     el.classList.toggle("full", h >= ED_LIM.head || b >= ED_LIM.body);
   }
-  $("ed-body").addEventListener("input", edCount);
   // Enter в заголовке — к тексту
-  $("ed-head").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); const t = $("ed-body"); t.focus(); t.selectionStart = t.selectionEnd = 0; } });
-  // «Список»: строки с курсором или выделенные становятся пунктами с галочками (и обратно)
-  $("ed-list").addEventListener("click", () => {
-    const ta = $("ed-body"), v = ta.value;
-    let a = ta.selectionStart, b = ta.selectionEnd;
-    const ls = v.lastIndexOf("\n", a - 1) + 1, le = v.indexOf("\n", b) === -1 ? v.length : v.indexOf("\n", b);
-    const chunk = v.slice(ls, le).split("\n");
-    const all = chunk.every((l) => !l.trim() || CL_RE.test(l));
-    const out = chunk.map((l) => (!l.trim() ? l : all ? l.replace(CL_RE, "$1$3") : CL_RE.test(l) ? l : "[ ] " + l)).join("\n");
-    ta.value = v.slice(0, ls) + out + v.slice(le);
-    ta.focus(); ta.selectionStart = ls; ta.selectionEnd = ls + out.length;
-    queueSave(0);
+  $("ed-head").addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault(); rich.focus();
+    const r = document.createRange(); r.selectNodeContents(rich.firstChild || rich); r.collapse(true);
+    const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
   });
   $("ed-pin").addEventListener("click", () => {
     ed.pinned = !ed.pinned;
@@ -1168,7 +1383,7 @@
   $("ed-confirm-no").addEventListener("click", () => { $("ed-confirm").hidden = true; $("ed-actions").hidden = false; replay($("ed-actions")); });
   $("ed-confirm-yes").addEventListener("click", () => deleteNote(false));
   $("editor").querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", closeEditor));
-  // «Отменить»: заметка возвращается к виду до открытия; новая — не создаётся
+  // «Отменить»: заметка возвращается к виду до открытия (и файлы тоже); новая — не создаётся
   async function cancelEditor() {
     if (edClosing) return;
     edClosing = true;
@@ -1178,17 +1393,20 @@
       if (ed.id && !ed.snap) { if (!(await removeItem(ed.id))) return; ed.id = null; }
       else if (ed.id && ed.snap) {
         const it = state.items.find((x) => x.id === ed.id);
-        if (it && ((it.title || "") !== ed.snap.title || it.body !== ed.snap.body || it.color !== ed.snap.color || !!it.pinned !== ed.snap.pinned)) {
+        if (it && ((it.title || "") !== ed.snap.title || it.body !== ed.snap.body || it.color !== ed.snap.color || !!it.pinned !== ed.snap.pinned || JSON.stringify(it.data || {}) !== JSON.stringify(ed.snap.data))) {
           const r = await sb.from("items").update(ed.snap).eq("id", ed.id).select(ITEM_COLS).single();
           if (r.error) { $("ed-status").textContent = "Не получилось отменить — проверьте интернет"; return; }
           Object.assign(it, r.data); itemsChanged();
         }
       }
+      if (ed.filesNew.length) sb.storage.from("attachments").remove(ed.filesNew);
+      ed.filesNew = []; ed.filesRemoved = [];
       animHide($("editor"), 170);
       lockSheets(false);
     } finally { edClosing = false; }
   }
   $("editor").querySelector("[data-cancel]").addEventListener("click", cancelEditor);
+
 
   /* ---------- Заставка ---------- */
   function setWall(preset, url) {
@@ -2272,6 +2490,10 @@
   $("trash-no").addEventListener("click", () => { $("trash-ask").hidden = true; $("trash-clear").hidden = false; });
   $("trash-yes").addEventListener("click", async () => {
     $("trash-ask").hidden = true; $("trash-clear").hidden = false;
+    // файлы удалённых навсегда заметок стираем из хранилища
+    const gone = await sb.from("items").select("data").not("deleted_at", "is", null);
+    const paths = ((gone && gone.data) || []).flatMap((r) => ((r.data && r.data.files) || []).map((f) => f.path)).filter(Boolean);
+    if (paths.length) await sb.storage.from("attachments").remove(paths);
     const res = [];
     for (const t of TRASH_TABLES) res.push(await sb.from(t).delete().not("deleted_at", "is", null));
     if (res.some((r) => r.error)) toast("Очистилось не всё — проверьте интернет.");
@@ -2335,7 +2557,7 @@
     const groups = [];
     // заметки; во второй строке — поле и фрагмент текста
     const fieldName = () => "";
-    const notes = state.items.filter((it) => it.type === "note" && norm((it.title || "") + " " + it.body).includes(q)).slice(0, 6).map((it) => {
+    const notes = state.items.filter((it) => it.type === "note" && norm((it.title || "") + " " + stripMarks(it.body)).includes(q)).slice(0, 6).map((it) => {
       const title = noteTitle(it);
       const extra = norm(title).includes(q) ? snippet(noteSub(it), "") : snippet(noteSub(it), q);
       return resultEl("note", title, [fieldName(it), extra].filter(Boolean).join(" · "), q, () => openEditor(it.id));
