@@ -1372,31 +1372,41 @@
     b.type = "button"; b.className = "app-tile"; b.setAttribute("role", "radio"); b.dataset.app = key;
     b.innerHTML = svgIco(a.icon, 22);
     const t = document.createElement("span"); t.textContent = a.name; b.append(t);
-    const s = document.createElement("small"); s.textContent = a.spans.join(" или ") + " кол."; b.append(s);
+    b.dataset.tip = "Ширина: " + a.spans.join(" или ") + (a.spans[a.spans.length - 1] === 1 ? " колонка" : " колонки");
     b.addEventListener("click", () => { fd.app = key; if (!a.spans.includes(fd.span)) fd.span = a.spans[a.spans.length - 1]; renderFieldForm(); });
     $("sec-apps").append(b);
   });
-  document.querySelectorAll("#sec-span [data-span]").forEach((b) => b.addEventListener("click", () => { fd.span = Number(b.dataset.span); renderFieldForm(); }));
+  // значок ширины: три столбика, закрашено столько, сколько колонок занимает поле
+  const spanIco = (n) => '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">' + [0, 1, 2].map((i) =>
+    '<rect x="' + (3 + i * 6.5) + '" y="5" width="5" height="14" rx="1" fill="' + (i < n ? "currentColor" : "none") + '" stroke="currentColor" stroke-width="1.5"/>').join("") + "</svg>";
+  [1, 2, 3].forEach((n) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "tool span-tool"; b.setAttribute("role", "radio"); b.dataset.span = n; b.innerHTML = spanIco(n);
+    b.addEventListener("click", () => { if (b.getAttribute("aria-disabled") === "true") { toast(b.dataset.tip); return; } fd.span = n; renderFieldForm(); });
+    $("sec-span").append(b);
+  });
   function renderFieldForm() {
     const a = APPS[fd.app];
-    const box = $("sec-opts"); box.textContent = "";
-    ((a && a.opts) || []).forEach((o) => {
-      const b = document.createElement("button");
-      b.type = "button"; b.className = "switch-row"; b.setAttribute("role", "switch"); b.setAttribute("aria-checked", String(!!fd.settings[o.key]));
-      b.innerHTML = '<span></span><span class="switch" aria-hidden="true"></span>'; b.firstChild.textContent = o.label;
-      b.addEventListener("click", () => { fd.settings = Object.assign({}, fd.settings, { [o.key]: !fd.settings[o.key] }); renderFieldForm(); });
-      box.append(b);
-    });
-    $("sec-opts-h").hidden = !box.children.length;
-    document.querySelectorAll("#sec-apps .app-tile").forEach((b) => {
-      b.setAttribute("aria-checked", String(b.dataset.app === fd.app));
-      b.disabled = !!fd.id && b.dataset.app !== fd.app; // приложение выбирается только при создании
-    });
+    // приложение выбирается только при создании; у существующего поля — что в нём
+    $("sec-apps").hidden = !!fd.id; $("sec-info").hidden = !fd.id;
+    document.querySelectorAll("#sec-apps .app-tile").forEach((b) => b.setAttribute("aria-checked", String(b.dataset.app === fd.app)));
+    if (fd.id && a) {
+      const info = $("sec-info"); info.textContent = "";
+      const f = state.sections.find((x) => x.id === fd.id);
+      const ico = document.createElement("span"); ico.className = "sec-info-ico"; ico.innerHTML = svgIco(a.icon, 28);
+      const name = document.createElement("div"); name.className = "sec-info-name"; name.textContent = a.name;
+      const n = a.total ? a.total(f) : a.count ? a.count(f) : 0;
+      const sub = document.createElement("div"); sub.className = "sec-info-sub";
+      sub.textContent = fd.app === "tasks" ? (n ? n + " " + plural(n, "задача", "задачи", "задач") : "Задач нет") : (n ? n + " " + plural(n, "заметка", "заметки", "заметок") : "Заметок нет");
+      info.append(ico, name, sub);
+    }
     document.querySelectorAll("#sec-span [data-span]").forEach((b) => {
       const n = Number(b.dataset.span), ok = !!a && a.spans.includes(n);
-      b.disabled = !ok;
-      b.dataset.tip = ok ? "" : (a ? a.name + ": только " + a.spans.join(" или ") + " кол." : "");
-      if (!b.dataset.tip) delete b.dataset.tip;
+      const label = n + " " + plural(n, "колонка", "колонки", "колонки");
+      b.dataset.tip = ok ? "Ширина: " + label : (a ? a.name + " — только " + a.spans.join(" или ") + " " + plural(a.spans[a.spans.length - 1], "колонка", "колонки", "колонки") : label);
+      b.setAttribute("aria-label", "Ширина: " + label);
+      if (ok) b.removeAttribute("aria-disabled"); else b.setAttribute("aria-disabled", "true");
+      b.classList.toggle("off", !ok);
       b.setAttribute("aria-checked", String(n === fd.span));
     });
   }

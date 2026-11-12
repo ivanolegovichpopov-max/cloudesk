@@ -848,8 +848,16 @@ input.bad { border-color: var(--danger) !important; }
 .app-tile small { font-size: 11px; color: var(--ink-dim); font-weight: 400; }
 .app-tile:hover:not(:disabled) { border-color: var(--accent); }
 .app-tile[aria-checked="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
-.sec-span button { flex: 1; height: 32px; font-size: 13px; }
-.sec-span button:disabled { opacity: .35; cursor: default; }
+/* окно поля: ширина — значками внизу слева; выбранная залита акцентом, недоступная бледная */
+.span-tools { display: flex; gap: 6px; }
+.span-tool[aria-checked="true"] { background: var(--accent); color: var(--accent-ink); }
+.span-tool.off { opacity: .35; }
+.sec-apps[hidden], .sec-info[hidden] { display: none; }
+/* существующее поле: крупно значок, название и сколько записей */
+.sec-info { flex: 1; display: grid; place-content: center; justify-items: center; gap: 6px; text-align: center; }
+.sec-info-ico { display: grid; place-items: center; width: 56px; height: 56px; border-radius: var(--r-lg); background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+.sec-info-name { font-size: 18px; font-weight: 600; }
+.sec-info-sub { font-size: 13px; color: var(--ink-dim); }
 .sec-colors { display: flex; flex-wrap: wrap; gap: 8px; }
 .sec-color { width: 32px; height: 32px; border-radius: 50%; border: 2px solid transparent; background: var(--gc); padding: 0; }
 .sec-color.none { background: var(--accent); }
