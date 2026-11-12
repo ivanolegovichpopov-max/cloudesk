@@ -164,7 +164,7 @@ body[data-wall="custom"] .wall  { background-color: #111; }
 .clock-date::before { content: "·"; margin-right: 10px; opacity: .7; }
 
 /* Меню: ряд одинаковых кнопок «значок + подпись»; у кнопки с выпадающим списком список открывается под ней */
-.top-actions { display: flex; align-items: center; gap: 6px; }
+.top-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; min-width: 0; }
 .top-item { position: relative; }
 .top-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
@@ -367,9 +367,14 @@ input:focus { outline: none; border-color: var(--accent); }
 .city-add .pick-btn { width: 100%; }
 .btn-ghost { display: inline-flex; align-items: center; }
 
-/* ---------- Поиск в центре шапки ---------- */
-.search { flex: 1; min-width: 0; display: flex; justify-content: center; align-items: center; gap: 8px; }
-.search-inner { position: relative; width: min(440px, 100%); }
+/* ---------- Поиск: значок-лупа справа, по нажатию поле выезжает влево ---------- */
+.search { min-width: 0; display: flex; justify-content: flex-end; align-items: center; gap: 6px; }
+.search-inner { position: relative; width: 360px; max-width: 100%; display: none; }
+.top.searching .search-open { display: none; }
+.top.searching .search-inner { display: block; animation: search-in .16s ease-out; }
+.top.searching .search-inner.is-leaving { animation: search-out .12s ease-in forwards; }
+@keyframes search-out { to { opacity: 0; transform: translateX(12px); } }
+@keyframes search-in { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: none; } }
 .search-box {
   display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 6px 0 12px;
   border: 1px solid var(--line); border-radius: var(--r); background: var(--glass-strong); color: var(--ink-dim);
@@ -384,7 +389,7 @@ input:focus { outline: none; border-color: var(--accent); }
 }
 .search-box:focus-within .search-kbd, #search-input:not(:placeholder-shown) ~ .search-kbd { display: none; }
 .search-clear { width: 28px; height: 28px; }
-.search-open, .search-cancel { display: none; }
+.search-cancel { display: none; }
 .search-cancel { flex: none; height: 38px; padding: 0 4px; border: 0; background: transparent; color: var(--on-wall); font-size: 14px; font-weight: 500; text-shadow: 0 1px 6px rgba(0,0,0,.35); }
 .pop.search-pop { left: 0; right: 0; min-width: 0; max-height: min(60vh, 480px); overflow: auto; padding: 4px 6px; }
 .search-pop .menu-group { padding: 6px 0 2px; }
@@ -591,15 +596,12 @@ button:disabled { cursor: default; opacity: .45; }
   /* телефон: вместо строки поиска — лупа; по нажатию поле занимает всю шапку */
   .top { gap: 8px; }
   .clock { flex: 1 1 auto; }
-  .search { flex: 0 0 auto; }
-  .search-inner, .search-kbd { display: none; }
-  .search-open { display: inline-flex; }
+  .search-kbd { display: none; }
   .top-chev { display: none; }
-  .top.searching .clock, .top.searching .top-actions, .top.searching .search-open { display: none; }
-  .top.searching .search { flex: 1; }
-  .top.searching .search-inner { display: block; flex: 1; width: auto; }
+  .top.searching .clock, .top.searching .top-item { display: none; }
+  .top.searching .top-actions, .top.searching .search { flex: 1; }
+  .top.searching .search-inner { flex: 1; width: auto; }
   .top.searching .search-cancel { display: inline-flex; align-items: center; }
-  .top.searching .search-inner { animation: fade-in .16s ease-out; }
   .link-fields { grid-template-columns: 1fr; }
   .rem-when { grid-template-columns: 1fr 1fr; }
   .rem-when .btn-primary { grid-column: 1 / -1; justify-content: center; }

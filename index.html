@@ -41,25 +41,24 @@
       <span id="clock-date" class="clock-date"></span>
       <span id="clock-run" class="clock-run" hidden></span>
     </button>
-    <!-- Поиск по столу: заметки, напоминания, ссылки -->
-    <div id="search" class="search">
-      <button type="button" id="search-open" class="top-btn search-open" data-tip="Поиск" aria-label="Поиск"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4"/></svg></button>
-      <div class="search-inner">
-        <div class="search-box">
-          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4"/></svg>
-          <input id="search-input" type="text" placeholder="Поиск" autocomplete="off" spellcheck="false"
-                 role="combobox" aria-expanded="false" aria-controls="search-pop" aria-autocomplete="list" aria-label="Поиск по заметкам, напоминаниям и ссылкам">
-          <button type="button" id="search-clear" class="tool search-clear" aria-label="Очистить" hidden>
-            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M6 6l12 12M18 6 6 18"/></svg>
-          </button>
-        </div>
-        <div id="search-pop" class="pop search-pop" role="listbox" hidden></div>
-      </div>
-      <button type="button" id="search-cancel" class="tool search-cancel" data-tip="Закрыть поиск" aria-label="Закрыть поиск"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M6 6l12 12M18 6 6 18"/></svg></button>
-    </div>
-
     <!-- Меню: одна кнопка, внутри группы с заголовками. Новые разделы добавляются отдельной группой -->
     <nav class="top-actions" aria-label="Меню">
+      <!-- Поиск по столу: заметки, напоминания, ссылки -->
+      <div id="search" class="search">
+        <button type="button" id="search-open" class="top-btn search-open" data-tip="Поиск" aria-label="Поиск"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4"/></svg></button>
+        <div class="search-inner">
+          <div class="search-box">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4"/></svg>
+            <input id="search-input" type="text" placeholder="Поиск" autocomplete="off" spellcheck="false"
+                   role="combobox" aria-expanded="false" aria-controls="search-pop" aria-autocomplete="list" aria-label="Поиск по заметкам, напоминаниям и ссылкам">
+            <button type="button" id="search-clear" class="tool search-clear" aria-label="Очистить" hidden>
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M6 6l12 12M18 6 6 18"/></svg>
+            </button>
+          </div>
+          <div id="search-pop" class="pop search-pop" role="listbox" hidden></div>
+        </div>
+        <button type="button" id="search-cancel" class="tool search-cancel" data-tip="Закрыть поиск" aria-label="Закрыть поиск"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M6 6l12 12M18 6 6 18"/></svg></button>
+      </div>
       <div class="top-item">
         <button id="btn-linkmenu" class="top-btn" data-tip="Ссылки" aria-label="Ссылки" type="button" aria-haspopup="menu" aria-expanded="false" data-menu="links-menu">
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>

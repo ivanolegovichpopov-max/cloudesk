@@ -1563,7 +1563,16 @@
     hidePop();
     if (clear) { $("search-input").value = ""; $("search-clear").hidden = true; }
     $("search-input").blur();
-    document.querySelector(".top").classList.remove("searching");
+    collapseSearch();
+  }
+  // поле сворачивается обратно в лупу — плавно тает в сторону значка
+  let collapseT = 0;
+  function collapseSearch() {
+    const top = document.querySelector(".top"), inner = document.querySelector(".search-inner");
+    if (!top.classList.contains("searching")) return;
+    inner.classList.add("is-leaving");
+    clearTimeout(collapseT);
+    collapseT = setTimeout(() => { inner.classList.remove("is-leaving"); top.classList.remove("searching"); }, 120);
   }
   $("search-input").addEventListener("input", runSearch);
   $("search-input").addEventListener("focus", () => { closeMenus(null); if ($("search-input").value.trim()) runSearch(); });
@@ -1575,9 +1584,9 @@
   });
   $("search-clear").addEventListener("click", () => { $("search-input").value = ""; runSearch(); $("search-input").focus(); });
   // клик мимо поиска закрывает список результатов
-  document.addEventListener("click", (e) => { if (!e.composedPath().includes($("search"))) { hidePop(); if (!$("search-input").value) document.querySelector(".top").classList.remove("searching"); } });
-  // телефон: лупа разворачивает поле на всю шапку
-  $("search-open").addEventListener("click", () => { closeMenus(null); document.querySelector(".top").classList.add("searching"); setTimeout(() => $("search-input").focus(), 30); });
+  document.addEventListener("click", (e) => { if (!e.composedPath().includes($("search"))) { hidePop(); if (!$("search-input").value) collapseSearch(); } });
+  // лупа разворачивает поле (на телефоне — на всю шапку)
+  $("search-open").addEventListener("click", () => { closeMenus(null); clearTimeout(collapseT); document.querySelector(".search-inner").classList.remove("is-leaving"); document.querySelector(".top").classList.add("searching"); setTimeout(() => $("search-input").focus(), 30); });
   $("search-cancel").addEventListener("click", () => closeSearch(true));
   // «/» или Ctrl+K — сразу в поиск (если не печатаете в поле и не открыто окно)
   document.addEventListener("keydown", (e) => {
@@ -1586,7 +1595,7 @@
     if (sheetOpen || $("desk").hidden) return;
     if ((e.key === "/" && !typing) || ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "л"))) {
       e.preventDefault();
-      if (window.matchMedia("(max-width: 560px)").matches) $("search-open").click(); else $("search-input").focus();
+      $("search-open").click();
     }
   });
 
