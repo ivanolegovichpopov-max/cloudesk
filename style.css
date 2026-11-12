@@ -1010,23 +1010,28 @@ input.bad { border-color: var(--danger) !important; }
 .tk-hint:not([hidden]) { animation: fade-in .15s ease-out; }
 .tk-grp { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .tk-gh {
-  display: flex; align-items: center; gap: 6px; padding: 2px 2px 4px; font-size: 11px; font-weight: 600;
+  display: flex; align-items: center; gap: 6px; padding: 2px 6px 4px; font-size: 11px; font-weight: 600;
   letter-spacing: .06em; text-transform: uppercase; color: var(--ink-dim);
 }
 .tk-gh.over { color: var(--danger); }
 .tk-gc { font-variant-numeric: tabular-nums; opacity: .8; }
 .tk-list { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; }
 .tk {
-  position: relative; display: flex; align-items: flex-start; gap: 8px; min-width: 0; padding: 7px 8px 7px 2px;
-  border-radius: var(--r); cursor: pointer; outline: none; color: var(--ink);
+  position: relative; display: flex; align-items: flex-start; gap: 8px; min-width: 0;
+  /* справа всегда оставлено место под значки «Срок» и «Удалить» — при наведении строка не перестраивается */
+  padding: 8px 68px 8px 6px;
+  border-radius: var(--r); cursor: pointer; outline: none; color: var(--ink); transition: background-color .12s ease;
 }
 .tk:hover, .tk:focus-visible { background: var(--hover); }
-/* важная — полоска акцента слева */
-.tk.prio::before { content: ""; position: absolute; left: 0; top: 7px; bottom: 7px; width: 2px; border-radius: 1px; background: var(--accent); }
-.tk .tk-grip { flex: none; width: 20px; height: 20px; margin: 0 -4px 0 0; opacity: 0; color: var(--ink-dim); }
+/* важная — тонкая полоска акцента у левого края строки */
+.tk.prio::before { content: ""; position: absolute; left: 0; top: 9px; bottom: 9px; width: 2px; border-radius: 1px; background: var(--accent); }
+/* ручка ⋮⋮ — своё место слева, видна при наведении */
+.tk .tk-grip { flex: none; width: 16px; height: 20px; margin: 0; padding: 0; border: 0; background: transparent; opacity: 0; color: var(--ink-dim); cursor: grab; transition: opacity .12s ease; }
+.tk .tk-grip svg { width: 14px; height: 14px; }
 .tk:hover .tk-grip, .tk-grip:focus-visible { opacity: 1; }
+.tk .tk-grip:hover { color: var(--ink); background: transparent; }
 @media (hover: none) { .tk .tk-grip { opacity: .6; } }
-.tk.is-done { padding-left: 26px; }
+.tk.is-done { padding-left: 30px; }
 .tk-check {
   flex: none; display: grid; place-items: center; width: 18px; height: 18px; margin-top: 1px; padding: 0;
   border: 1.5px solid currentColor; border-radius: 50%; background: transparent; color: var(--ink-dim); cursor: pointer;
@@ -1038,28 +1043,31 @@ input.bad { border-color: var(--danger) !important; }
 .tk-check[aria-checked="true"], .tk.checking .tk-check { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .tk-check[aria-checked="true"] svg, .tk.checking .tk-check svg { opacity: 1; }
 .tk-main { flex: 1; min-width: 0; display: grid; gap: 2px; }
-.tk-title { font-size: 14px; line-height: 1.35; overflow-wrap: anywhere; transition: opacity .2s ease; }
+.tk-title { font-size: 14px; line-height: 20px; overflow-wrap: anywhere; transition: opacity .2s ease; }
 .tk.is-done .tk-title { text-decoration: line-through; opacity: .55; }
 .tk.checking .tk-title { text-decoration: line-through; opacity: .55; }
 .tk.checking { animation: tk-out .26s ease-in forwards; animation-delay: .1s; }
 @keyframes tk-out { to { opacity: 0; transform: translateY(-3px); } }
-.tk-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 12px; color: var(--ink-dim); font-variant-numeric: tabular-nums; }
+.tk-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 12px; line-height: 16px; color: var(--ink-dim); font-variant-numeric: tabular-nums; }
 .tk-due.over { color: var(--danger); font-weight: 600; }
 .tk-ic { display: inline-grid; place-items: center; }
 .tk-subs { padding: 0 5px; border-radius: 4px; background: rgba(127,127,127,.18); font-weight: 600; font-size: 11px; line-height: 16px; }
 .tk-subs.full { background: var(--accent); color: var(--accent-ink); }
-/* действия при наведении — справа, поверх строки */
+/* значки при наведении — без рамки, прямо в строке, по центру по высоте */
 .tk-acts {
-  position: absolute; right: 4px; top: 4px; display: flex; gap: 2px; padding: 2px;
-  border-radius: var(--r); background: var(--sheet); box-shadow: 0 0 0 1px var(--line);
-  opacity: 0; transform: translateY(-2px); transition: opacity .12s ease, transform .12s ease; pointer-events: none;
+  position: absolute; right: 6px; top: 50%; display: flex; gap: 2px;
+  transform: translateY(-50%); opacity: 0; transition: opacity .12s ease; pointer-events: none;
 }
-.tk:hover .tk-acts, .tk:focus-within .tk-acts { opacity: 1; transform: none; pointer-events: auto; }
-.tk-acts .tool { width: 26px; height: 26px; }
-@media (hover: none) { .tk-acts { display: none; } }
+.tk:hover .tk-acts, .tk:focus-within .tk-acts { opacity: 1; pointer-events: auto; }
+.tk-acts .tool { width: 28px; height: 28px; color: var(--ink-dim); }
+.tk-acts .tool:hover { color: var(--ink); }
+@media (hover: none) { .tk-acts { display: none; } .tk { padding-right: 8px; } }
 .dragging .tk-acts { display: none; }
-.tk.dragging { position: fixed; z-index: 50; background: var(--sheet); box-shadow: 0 0 0 1px var(--accent); }
-.tk-done-btn { width: 100%; border: 0; background: transparent; cursor: pointer; text-align: left; border-radius: var(--r); padding: 4px 2px; }
+/* перетаскиваемая строка — плашкой окна с рамкой акцента; место, куда упадёт, — пунктир */
+.tk.dragging { position: fixed; z-index: 50; background: var(--sheet); box-shadow: inset 0 0 0 1px var(--accent); cursor: grabbing; }
+.tk.dragging .tk-grip { opacity: 1; }
+.tk-list > .drag-ph { min-height: 36px; }
+.tk-done-btn { width: 100%; border: 0; background: transparent; cursor: pointer; text-align: left; border-radius: var(--r); padding: 4px 6px; }
 .tk-done-btn:hover { color: var(--ink); }
 .tk-done-btn svg { transition: transform .15s ease; }
 .tk-done-btn[aria-expanded="true"] svg { transform: rotate(90deg); }
