@@ -1129,8 +1129,11 @@ input.bad { border-color: var(--danger) !important; }
 /* пустая колонка — пунктирное место, куда можно перетащить задачу */
 .tk-board .tk-list:empty, .tk-board .tk-list:has(> .drag-ph:only-child) { border: 1px dashed var(--line); }
 /* узкие колонки недели: без значков при наведении, название в одну строку с многоточием */
-.tk-board.week .tk { padding-right: 6px; gap: 6px; }
-.tk-board.week .tk-acts { display: none; }
+/* справа у карточки недели узкая полоса под значки: сверху ⋮⋮ (перенос), снизу «Удалить»; срок меняется переносом */
+.tk-board.week .tk { padding-right: 26px; gap: 6px; }
+.tk-board.week .tk-acts { top: auto; bottom: 4px; right: 2px; transform: none; }
+.tk-board.week .tk-acts .tool { width: 22px; height: 22px; }
+.tk-board.week .tk-acts .tool:not(:last-child) { display: none; }
 /* ручка ⋮⋮ в неделе — в правом верхнем углу карточки, место в строке не занимает: берёте и переносите на другой день */
 .tk-board.week .tk .tk-grip { position: absolute; top: 4px; right: 2px; width: 20px; height: 20px; }
 /* в неделе карточки выше: название до двух строк, срок и значки переносятся — ничего не обрезается;
