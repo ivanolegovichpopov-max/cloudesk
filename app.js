@@ -223,6 +223,38 @@
     });
   }
 
+  /* Подсказки: одна плашка на весь стол. Появляется у элемента с data-tip при наведении мышью,
+     встаёт под элементом (или над ним, если снизу нет места) и всегда остаётся в пределах экрана. */
+  const tipEl = document.createElement("div");
+  tipEl.className = "tip"; tipEl.setAttribute("role", "tooltip"); tipEl.hidden = true;
+  document.body.append(tipEl);
+  let tipFor = null, tipT = 0;
+  function hideTip() { clearTimeout(tipT); tipFor = null; tipEl.hidden = true; }
+  function showTip(el) {
+    if (!el.isConnected || el.getAttribute("aria-expanded") === "true" || document.querySelector(".dragging")) return;
+    tipEl.textContent = el.dataset.tip;
+    tipEl.hidden = false;
+    const r = el.getBoundingClientRect(), w = tipEl.offsetWidth, h = tipEl.offsetHeight, m = 8;
+    let x = r.left + r.width / 2 - w / 2;
+    x = Math.max(m, Math.min(x, window.innerWidth - w - m));
+    let y = r.bottom + 6;
+    if (y + h > window.innerHeight - m) y = r.top - 6 - h;
+    y = Math.max(m, y);
+    tipEl.style.left = x + "px"; tipEl.style.top = y + "px";
+  }
+  document.addEventListener("pointerover", (e) => {
+    if (e.pointerType !== "mouse") return;
+    const el = e.target.closest && e.target.closest("[data-tip]");
+    if (el === tipFor) return;
+    hideTip();
+    if (!el || el.disabled) return;
+    tipFor = el;
+    tipT = setTimeout(() => showTip(el), 300);
+  });
+  ["pointerdown", "keydown", "wheel"].forEach((t) => document.addEventListener(t, hideTip, true));
+  document.addEventListener("scroll", hideTip, true);
+  window.addEventListener("blur", hideTip);
+
   let toastTimer;
   function toast(text) {
     const t = $("toast");
@@ -1150,15 +1182,20 @@
       const items = state.links.filter((l) => (l.group_id || null) === gid);
       if (!items.length) return;
       const box = document.createElement("div"); box.className = "links-sec";
-      if (gid) { const h = document.createElement("div"); h.className = "menu-label"; h.textContent = name; box.append(h); }
-      items.forEach((l) => { const a = linkEl(l, "menu-item link-item"); a.setAttribute("role", "menuitem"); box.append(a); });
+      const gc = gid ? (state.groups.find((g) => g.id === gid) || {}).color : null;
+      if (gid) {
+        const h = document.createElement("div"); h.className = "menu-label group-label";
+        const dot = document.createElement("i"); dot.className = "gdot"; if (gc) dot.dataset.gcolor = gc;
+        h.append(dot, document.createTextNode(name)); box.append(h);
+      }
+      items.forEach((l) => { const a = linkEl(l, "menu-item link-item"); a.setAttribute("role", "menuitem"); if (gc) a.dataset.gcolor = gc; box.append(a); });
       list.append(box);
     });
   }
 
   async function loadLinks() {
     const [g, l] = await Promise.all([
-      sb.from("link_groups").select("id,name,position").order("position").order("created_at"),
+      sb.from("link_groups").select("id,name,position,color").order("position").order("created_at"),
       sb.from("links").select("id,title,url,position,group_id").order("position").order("created_at"),
     ]);
     if (!g.error) state.groups = g.data || [];
@@ -1171,7 +1208,7 @@
   const tmp = () => "new" + ++newSeq;
   function openLinks() {
     closeMenus(null);
-    dgroups = state.groups.map((g) => ({ id: g.id, name: g.name, removed: false }));
+    dgroups = state.groups.map((g) => ({ id: g.id, name: g.name, color: g.color || null, removed: false }));
     draft = state.links.map((l) => ({ id: l.id, title: l.title, url: l.url, gid: l.group_id || null, removed: false }));
     if (!draft.length && !dgroups.length) { const d = { id: tmp(), title: "", url: "", gid: null, removed: false, isNew: true }; draft.push(d); focusNext = d.id; }
     $("links-status").textContent = "";
@@ -1224,7 +1261,13 @@
               if (g.isNew && !links.length) { dgroups.splice(idx, 1); renderDraft(); return; }
               g.removed = true; g.moved = links.map((d) => d.id); links.forEach((d) => (d.gid = null)); renderDraft();
             });
-        h.append(move, name, count, act);
+        const sw = document.createElement("button");
+        sw.type = "button"; sw.className = "tool gswatch"; sw.disabled = g.removed;
+        sw.dataset.tip = "Цвет группы"; sw.setAttribute("aria-label", "Цвет группы"); sw.setAttribute("aria-haspopup", "listbox"); sw.setAttribute("aria-expanded", "false");
+        sw.dataset.menu = "lg-pop";
+        const dot = document.createElement("i"); dot.className = "gdot big"; if (g.color) dot.dataset.gcolor = g.color; sw.append(dot);
+        sw.addEventListener("click", (e) => { e.stopPropagation(); openColorPick(sw, g); });
+        h.append(move, sw, name, count, act);
         sec.append(h);
         if (g.removed) { const n = document.createElement("div"); n.className = "link-removed-note"; n.textContent = "Группа будет удалена при закрытии, её ссылки перейдут в «Без группы»"; sec.append(n); }
         if (g.id === focusNext) setTimeout(() => name.focus(), 20);
@@ -1258,10 +1301,6 @@
     if (d.removed) { const note = document.createElement("div"); note.className = "link-removed-note"; note.textContent = "Будет удалена при закрытии"; fields.append(note); }
     const acts = document.createElement("div"); acts.className = "link-acts";
     if (!d.removed) {
-      const gb = tool(P.folder, "Перенести в группу", null, !liveGroups().length);
-      gb.dataset.menu = "lg-pop"; gb.setAttribute("aria-haspopup", "listbox"); gb.setAttribute("aria-expanded", "false");
-      gb.addEventListener("click", (e) => { e.stopPropagation(); openGroupPick(gb, d); });
-      acts.append(gb);
       acts.append(tool(P.x, "Удалить", () => { if (d.isNew) draft.splice(draft.indexOf(d), 1); else d.removed = true; renderDraft(); }));
     } else acts.append(tool(P.undo, "Вернуть", () => { d.removed = false; renderDraft(); }));
     row.append(move, fields, acts);
@@ -1269,36 +1308,32 @@
     return row;
   }
 
-  // Выбор группы для ссылки: свой список, открывается у кнопки с папкой
-  function openGroupPick(btn, d) {
+  // Цвет группы: свой выбор из готовых цветов, открывается у кружка в заголовке группы
+  const GCOLORS = [[null, "Без цвета"], ["sky", "Синий"], ["mint", "Зелёный"], ["sand", "Жёлтый"], ["rose", "Розовый"], ["violet", "Фиолетовый"], ["ink", "Серый"]];
+  function openColorPick(btn, g) {
     const pop = $("lg-pop");
-    const wasOpen = !pop.hidden && pop._for === d.id;
+    const wasOpen = !pop.hidden && pop._for === g.id;
     closeMenus(null);
     if (wasOpen) return;
-    pop._for = d.id;
+    pop._for = g.id;
     pop.textContent = "";
-    const h = document.createElement("div"); h.className = "menu-label"; h.textContent = "Перенести в группу"; pop.append(h);
-    [{ id: null, name: "Без группы" }].concat(liveGroups()).forEach((g) => {
+    const h = document.createElement("div"); h.className = "menu-label"; h.textContent = "Цвет группы"; pop.append(h);
+    const grid = document.createElement("div"); grid.className = "gcolors";
+    GCOLORS.forEach(([c, label]) => {
       const it = document.createElement("button");
-      it.type = "button"; it.className = "menu-item"; it.setAttribute("role", "option");
-      it.setAttribute("aria-checked", String(d.gid === g.id));
-      const span = document.createElement("span"); span.textContent = g.name || "Без названия";
-      it.append(span);
-      it.insertAdjacentHTML("beforeend", '<svg class="check" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="' + P.check + '"/></svg>');
-      it.addEventListener("click", () => {
-        closeMenus(null);
-        if (d.gid === g.id) return;
-        d.gid = g.id; draft.splice(draft.indexOf(d), 1); draft.push(d); renderDraft();
-      });
-      pop.append(it);
+      it.type = "button"; it.className = "gcolor"; it.setAttribute("role", "option");
+      it.setAttribute("aria-checked", String((g.color || null) === c)); it.setAttribute("aria-label", label); it.dataset.tip = label;
+      const dot = document.createElement("i"); dot.className = "gdot big"; if (c) dot.dataset.gcolor = c; it.append(dot);
+      it.addEventListener("click", () => { closeMenus(null); g.color = c; renderDraft(); });
+      grid.append(it);
     });
+    pop.append(grid);
     const r = btn.getBoundingClientRect();
-    pop.style.left = Math.max(8, Math.min(r.right - 220, window.innerWidth - 228)) + "px";
     animShow(pop);
-    const ph = pop.offsetHeight;
+    const pw = pop.offsetWidth, ph = pop.offsetHeight;
+    pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - pw - 8)) + "px";
     const below = r.bottom + 4 + ph < window.innerHeight - 8;
     pop.style.top = (below ? r.bottom + 4 : Math.max(8, r.top - 4 - ph)) + "px";
-    pop.classList.toggle("pop-up", !below);
     btn.setAttribute("aria-expanded", "true");
   }
   $("links-list").addEventListener("scroll", () => closeMenus(null), { passive: true });
@@ -1350,7 +1385,7 @@
     draft.push(d); focusNext = d.id; renderDraft();
   });
   $("groups-new").addEventListener("click", () => {
-    const g = { id: tmp(), name: "", removed: false, isNew: true };
+    const g = { id: tmp(), name: "", color: null, removed: false, isNew: true };
     dgroups.push(g); focusNext = g.id; renderDraft();
     const box = $("links-list"); box.scrollTop = box.scrollHeight;
   });
@@ -1393,11 +1428,11 @@
       await Promise.all(keepGroups.map(async (g, i) => {
         const name = g.name.trim().slice(0, 40);
         if (g.isNew) {
-          const r = chk(await sb.from("link_groups").insert({ name, position: i }).select("id").single());
+          const r = chk(await sb.from("link_groups").insert({ name, position: i, color: g.color || null }).select("id").single());
           if (r.data) { idMap[g.id] = r.data.id; g.id = r.data.id; g.isNew = false; }
         } else {
           const o = state.groups.find((x) => x.id === g.id);
-          if (!o || o.name !== name || o.position !== i) chk(await sb.from("link_groups").update({ name, position: i }).eq("id", g.id));
+          if (!o || o.name !== name || o.position !== i || (o.color || null) !== (g.color || null)) chk(await sb.from("link_groups").update({ name, position: i, color: g.color || null }).eq("id", g.id));
         }
       }));
       draft.forEach((d) => { if (d.gid && idMap[d.gid]) d.gid = idMap[d.gid]; });
@@ -1420,7 +1455,7 @@
       await loadLinks();
       if (errs.length) {
         console.error(errs[0]);
-        dgroups = state.groups.map((g) => ({ id: g.id, name: g.name, removed: false }));
+        dgroups = state.groups.map((g) => ({ id: g.id, name: g.name, color: g.color || null, removed: false }));
         draft = state.links.map((l) => ({ id: l.id, title: l.title, url: l.url, gid: l.group_id || null, removed: false }));
         renderDraft();
         $("links-status").textContent = "Сохранилось не всё — проверьте интернет и нажмите «Готово» ещё раз";
