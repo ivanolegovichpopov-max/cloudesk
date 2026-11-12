@@ -288,13 +288,21 @@
   window.addEventListener("resize", fadeAll);
 
   let toastTimer;
-  function toast(text) {
+  // уведомление; с действием (например «Вернуть») висит дольше
+  function toast(text, actionLabel, onAction) {
     const t = $("toast");
-    t.textContent = text;
+    t.textContent = "";
+    const s = document.createElement("span"); s.textContent = text; t.append(s);
+    if (actionLabel) {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "toast-act"; b.textContent = actionLabel;
+      b.addEventListener("click", () => { clearTimeout(toastTimer); animHide(t, 180); onAction(); });
+      t.append(b);
+    }
     animShow(t);
     replay(t, "toast-in");
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => animHide(t, 180), 4000);
+    toastTimer = setTimeout(() => animHide(t, 180), actionLabel ? 7000 : 4000);
   }
 
   const fmtTime = new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit" });
@@ -472,16 +480,24 @@
   const noteSub = (it) => (it.body || "").split("\n").slice(1).join(" ").replace(/\s+/g, " ").trim();
 
   // Приложения: name — название, spans — допустимые ширины, render — содержимое поля, add — действие «+»
+  // Приложения: name — название, spans — допустимые ширины, render — содержимое поля, add — действие «+»,
+  // opts — переключатели в окне поля (хранятся в настройках поля)
   const APPS = {
     notes: {
       name: "Заметки", icon: IC.note, spans: [2, 3], addTip: "Новая заметка",
+      opts: [{ key: "manual", label: "Свой порядок — перетаскиванием" }],
       add: (f) => openEditor(null, f.id),
       render: (f, body) => {
+        const manual = !!(f.settings && f.settings.manual);
         const list = state.items.filter((it) => it.type === "note" && it.section_id === f.id)
-          .sort((a, b) => (b.pinned - a.pinned) || (new Date(b.updated_at) - new Date(a.updated_at)));
+          .sort((a, b) => (!!b.pinned - !!a.pinned) || (manual ? a.position - b.position : 0) || (new Date(b.updated_at) - new Date(a.updated_at)));
         if (!list.length) { const e = document.createElement("div"); e.className = "fld-empty"; e.textContent = "Заметок нет"; body.append(e); return; }
-        const grid = document.createElement("div"); grid.className = "notes";
-        list.forEach((n) => grid.append(noteCard(n)));
+        const grid = document.createElement("div"); grid.className = "notes"; grid.dataset.field = f.id;
+        const hasPinned = list.some((n) => !!n.pinned), hasOther = list.some((n) => !n.pinned);
+        list.forEach((n, i) => {
+          if (hasPinned && hasOther && !n.pinned && list[i - 1] && list[i - 1].pinned) { const sep = document.createElement("div"); sep.className = "notes-sep"; sep.setAttribute("role", "separator"); grid.append(sep); }
+          grid.append(noteCard(n, manual));
+        });
         body.append(grid);
       },
       count: (f) => state.items.filter((it) => it.type === "note" && it.section_id === f.id).length,
@@ -489,20 +505,127 @@
   };
   const APP_ORDER = ["notes"];
 
+  /* Списки дел в заметке: строка «[ ] …», «[] …», «- …» — пункт; «[x] …» — отмеченный */
+  const CL_RE = /^(\s*)(\[\s?\]|\[[xXхХ✓]\]|-)\s+(.*)$/;
+  function parseLine(line) {
+    const m = line.match(CL_RE);
+    return m ? { check: true, done: /[xXхХ✓]/.test(m[2]), text: m[3] } : { check: false, text: line };
+  }
+  function checklistStat(body) {
+    let all = 0, done = 0;
+    (body || "").split("\n").slice(1).forEach((l) => { const p = parseLine(l); if (p.check) { all++; if (p.done) done++; } });
+    return { all, done };
+  }
+  function toggleLine(n, lineIdx) {
+    const lines = (n.body || "").split("\n");
+    const m = lines[lineIdx] && lines[lineIdx].match(CL_RE);
+    if (!m) return;
+    const done = /[xXхХ✓]/.test(m[2]);
+    lines[lineIdx] = m[1] + (done ? "[ ]" : "[x]") + " " + m[3];
+    patchItem(n.id, { body: lines.join("\n") });
+  }
+
   const seenNotes = new Set();
   let boardFirst = true;
-  function noteCard(n) {
-    const el = document.createElement("button");
-    el.type = "button"; el.className = "note"; el.dataset.color = n.color || "paper"; el.dataset.id = n.id;
+  const NOTE_COLORS = [["paper", "Бумага"], ["sky", "Голубой"], ["mint", "Мятный"], ["rose", "Розовый"], ["sand", "Песочный"], ["ink", "Тёмный"]];
+  function noteCard(n, manual) {
+    const el = document.createElement("div");
+    el.className = "note"; el.dataset.color = n.color || "paper"; el.dataset.id = n.id;
+    el.tabIndex = 0; el.setAttribute("role", "button"); el.setAttribute("aria-label", "Заметка «" + noteTitle(n) + "»");
     if (!seenNotes.has(n.id)) { seenNotes.add(n.id); if (!boardFirst) el.classList.add("fade-in"); }
-    const h = document.createElement("p"); h.className = "note-title"; h.textContent = noteTitle(n); el.append(h);
-    const rest = (n.body || "").split("\n").slice(1).join("\n").trim();
-    if (rest) { const p = document.createElement("p"); p.className = "note-text"; p.textContent = rest; el.append(p); }
-    const meta = document.createElement("div"); meta.className = "note-meta"; meta.textContent = fmtShort.format(new Date(n.updated_at)); el.append(meta);
-    if (n.pinned) { const pin = document.createElement("span"); pin.className = "note-pin"; pin.setAttribute("aria-label", "Закреплена"); pin.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="' + IC.pin + '"/></svg>'; el.append(pin); }
-    el.addEventListener("click", () => openEditor(n.id));
+    // заголовок
+    const head = document.createElement("div"); head.className = "note-head";
+    const h = document.createElement("p"); h.className = "note-title"; h.textContent = noteTitle(n); head.append(h);
+    if (n.pinned) { const pin = document.createElement("span"); pin.className = "note-pin"; pin.setAttribute("aria-label", "Закреплена"); pin.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="currentColor" d="' + IC.pin + '"/></svg>'; head.append(pin); }
+    el.append(head);
+    // текст: до 3 строк; пункты списка — с галочками, которые ставятся прямо здесь
+    const body = document.createElement("div"); body.className = "note-body";
+    const lines = (n.body || "").split("\n");
+    let shown = 0;
+    for (let i = 1; i < lines.length && shown < 3; i++) {
+      if (!lines[i].trim()) continue;
+      const pl = parseLine(lines[i]);
+      const row = document.createElement("div"); row.className = "note-line";
+      if (pl.check) {
+        row.classList.add("cl"); if (pl.done) row.classList.add("done");
+        const cb = document.createElement("button"); cb.type = "button"; cb.className = "cl-box"; cb.setAttribute("role", "checkbox"); cb.setAttribute("aria-checked", String(pl.done));
+        cb.setAttribute("aria-label", pl.text); cb.innerHTML = '<svg viewBox="0 0 24 24" width="11" height="11" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+        const li = i; cb.addEventListener("click", (e) => { e.stopPropagation(); toggleLine(n, li); });
+        const t = document.createElement("span"); t.textContent = pl.text;
+        row.append(cb, t);
+      } else row.textContent = lines[i];
+      body.append(row); shown++;
+    }
+    el.append(body);
+    // низ: дата и прогресс списка — всегда на одной линии у всех карточек
+    const foot = document.createElement("div"); foot.className = "note-foot";
+    const meta = document.createElement("span"); meta.className = "note-meta"; meta.textContent = fmtShort.format(new Date(n.updated_at)); foot.append(meta);
+    const st = checklistStat(n.body);
+    if (st.all) { const pr = document.createElement("span"); pr.className = "note-prog" + (st.done === st.all ? " full" : ""); pr.textContent = st.done + "/" + st.all; pr.dataset.tip = "Сделано пунктов"; foot.append(pr); }
+    el.append(foot);
+    // действия при наведении: закрепить, цвет, удалить
+    const acts = document.createElement("div"); acts.className = "note-acts";
+    const mk = (tip, path, fn, cls) => { const b = document.createElement("button"); b.type = "button"; b.className = "tool" + (cls ? " " + cls : ""); b.dataset.tip = tip; b.setAttribute("aria-label", tip); b.innerHTML = svgIco(path, 15); b.addEventListener("click", (e) => { e.stopPropagation(); fn(b); }); return b; };
+    const pinB = mk(n.pinned ? "Открепить" : "Закрепить", "M9 3h6l-1 6 4 4H6l4-4zM12 13v8", () => patchItem(n.id, { pinned: !n.pinned }));
+    pinB.setAttribute("aria-pressed", String(!!n.pinned));
+    acts.append(pinB,
+      mk("Цвет", "M12 3a9 9 0 1 0 0 18c1 0 1.6-.7 1.6-1.5 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.8.7-1.4 1.5-1.4H16a5 5 0 0 0 5-5c0-4.3-4-7.9-9-7.9zM7.5 12h.01M9.5 7.5h.01M14.5 7.5h.01", (b) => openNoteColor(b, n)),
+      mk("Удалить", "M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3", () => removeItem(n.id, "Заметка удалена")));
+    el.append(acts);
+    if (manual) { const g = gripBtn("Заметка «" + noteTitle(n) + "»"); g.classList.add("note-grip"); head.prepend(g); }
+    el.addEventListener("click", (e) => { if (e.target.closest(".note-acts, .cl-box, .grip")) return; openEditor(n.id); });
+    el.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target === el) openEditor(n.id); });
     return el;
   }
+  // выбор цвета заметки прямо с карточки
+  const ncPop = document.createElement("div");
+  ncPop.className = "pop note-color-pop"; ncPop.hidden = true; ncPop.setAttribute("role", "radiogroup"); ncPop.setAttribute("aria-label", "Цвет заметки");
+  document.body.append(ncPop);
+  let ncFor = null;
+  function openNoteColor(btn, n) {
+    if (!ncPop.hidden && ncFor === n.id) { animHide(ncPop, 120); ncFor = null; return; }
+    closeMenus(null); ncFor = n.id; ncAt = Date.now(); ncPop.textContent = "";
+    NOTE_COLORS.forEach(([c, name]) => {
+      const d = document.createElement("button"); d.type = "button"; d.className = "dot"; d.dataset.color = c; d.setAttribute("role", "radio");
+      d.setAttribute("aria-checked", String((n.color || "paper") === c)); d.setAttribute("aria-label", name); d.dataset.tip = name;
+      d.addEventListener("click", (e) => { e.stopPropagation(); animHide(ncPop, 120); ncFor = null; if ((n.color || "paper") !== c) patchItem(n.id, { color: c }); });
+      ncPop.append(d);
+    });
+    animShow(ncPop);
+    const r = btn.getBoundingClientRect(), w = ncPop.offsetWidth, hh = ncPop.offsetHeight, m = 8;
+    let x = Math.min(Math.max(m, r.right - w), window.innerWidth - w - m), y = r.bottom + 4;
+    if (y + hh > window.innerHeight - m) y = r.top - 4 - hh;
+    ncPop.style.left = x + "px"; ncPop.style.top = Math.max(m, y) + "px";
+  }
+  document.addEventListener("click", (e) => { if (!ncPop.hidden && !e.composedPath().includes(ncPop)) { animHide(ncPop, 120); ncFor = null; } });
+  let ncAt = 0; // прокрутка в первые мгновения после открытия (фокус, автопрокрутка) список не закрывает
+  window.addEventListener("scroll", () => { if (!ncPop.hidden && Date.now() - ncAt > 400) { animHide(ncPop, 120); ncFor = null; } }, true);
+
+  // свой порядок заметок: перетаскивание внутри поля
+  async function saveNoteOrder(grid) {
+    const ops = [];
+    const fid = grid.dataset.field; // заметку можно перетащить и в другое поле «Заметки»
+    [...grid.querySelectorAll(":scope > .note")].forEach((el, i) => {
+      const it = state.items.find((x) => x.id === el.dataset.id);
+      if (!it || (it.position === i && it.section_id === fid)) return;
+      it.position = i; it.section_id = fid;
+      ops.push(sb.from("items").update({ position: i, section_id: fid }).eq("id", it.id));
+    });
+    renderBoard();
+    const res = await Promise.all(ops);
+    if (res.some((r) => r.error)) { toast("Порядок не сохранился — проверьте интернет."); loadItems(); }
+  }
+  sortable($("board"), {
+    item: ".note", handle: ".note-grip", list: ".notes",
+    onDrop: (el) => saveNoteOrder(el.closest(".notes")),
+    onKey: (el, dir) => {
+      const sib = dir < 0 ? el.previousElementSibling : el.nextElementSibling;
+      if (!sib || !sib.matches(".note")) return;
+      if (dir < 0) sib.before(el); else sib.after(el);
+      const id = el.dataset.id; saveNoteOrder(el.closest(".notes"));
+      const g = $("board").querySelector('.note[data-id="' + id + '"] .note-grip'); if (g) g.focus();
+    },
+  });
 
   // Напоминания (окно «Время») и всё, у чего есть время (календарь, плашка в шапке, сигнал)
   function syncReminders() {
@@ -522,8 +645,8 @@
 
   async function loadItems() {
     const [secs, items] = await Promise.all([
-      sb.from("sections").select(SEC_COLS).order("position"),
-      sb.from("items").select(ITEM_COLS).order("position"),
+      sb.from("sections").select(SEC_COLS).is("deleted_at", null).order("position"),
+      sb.from("items").select(ITEM_COLS).is("deleted_at", null).order("position"),
     ]);
     if (secs.error || items.error) { toast("Не удалось загрузить стол. Обновите страницу."); return false; }
     state.sections = secs.data || [];
@@ -608,7 +731,7 @@
   });
 
   /* ---------- Окно поля: приложение, ширина, название, удаление ---------- */
-  const fd = { id: null, app: "notes", span: 3 };
+  const fd = { id: null, app: "notes", span: 3, settings: {} };
   APP_ORDER.forEach((key) => {
     const a = APPS[key];
     const b = document.createElement("button");
@@ -622,6 +745,15 @@
   document.querySelectorAll("#sec-span [data-span]").forEach((b) => b.addEventListener("click", () => { fd.span = Number(b.dataset.span); renderFieldForm(); }));
   function renderFieldForm() {
     const a = APPS[fd.app];
+    const box = $("sec-opts"); box.textContent = "";
+    ((a && a.opts) || []).forEach((o) => {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "switch-row"; b.setAttribute("role", "switch"); b.setAttribute("aria-checked", String(!!fd.settings[o.key]));
+      b.innerHTML = '<span></span><span class="switch" aria-hidden="true"></span>'; b.firstChild.textContent = o.label;
+      b.addEventListener("click", () => { fd.settings = Object.assign({}, fd.settings, { [o.key]: !fd.settings[o.key] }); renderFieldForm(); });
+      box.append(b);
+    });
+    $("sec-opts-h").hidden = !box.children.length;
     document.querySelectorAll("#sec-apps .app-tile").forEach((b) => {
       b.setAttribute("aria-checked", String(b.dataset.app === fd.app));
       b.disabled = !!fd.id && b.dataset.app !== fd.app; // приложение выбирается только при создании
@@ -640,6 +772,7 @@
     fd.id = f ? f.id : null; fd.app = f ? f.app : APP_ORDER[0];
     const a = APPS[fd.app];
     fd.span = f ? f.span : a.spans[a.spans.length - 1];
+    fd.settings = Object.assign({}, (f && f.settings) || {});
     $("sec-h").textContent = f ? "Поле: " + (APPS[f.app] ? APPS[f.app].name : "") : "Новое поле";
     $("sec-status").textContent = "";
     $("sec-delete").hidden = !f;
@@ -659,13 +792,14 @@
       if (!f) {
         $("sec-status").textContent = "Сохраняю…";
         const pos = state.sections.reduce((m, x) => Math.max(m, x.position), -1) + 1;
-        const r = await sb.from("sections").insert({ title, app: fd.app, span: fd.span, position: pos }).select(SEC_COLS).single();
+        const r = await sb.from("sections").insert({ title, app: fd.app, span: fd.span, position: pos, settings: fd.settings }).select(SEC_COLS).single();
         if (r.error) { $("sec-status").textContent = String(r.error.message).includes("sections_limit") ? "Не больше 30 полей" : "Не сохранилось — проверьте интернет"; return; }
         state.sections.push(r.data);
         renderBoard();
       } else {
         const patch = {};
         if (fd.span !== f.span) patch.span = fd.span;
+        if (JSON.stringify(fd.settings) !== JSON.stringify(f.settings || {})) patch.settings = fd.settings;
         if (Object.keys(patch).length) {
           $("sec-status").textContent = "Сохраняю…";
           const { error } = await sb.from("sections").update(patch).eq("id", f.id);
@@ -691,15 +825,16 @@
     const id = fd.id;
     if (!id) return;
     $("sec-status").textContent = "Удаляю…";
-    const di = await sb.from("items").delete().eq("section_id", id);
-    const del = di.error ? di : await sb.from("sections").delete().eq("id", id);
+    const mark = trashMark();
+    const di = await sb.from("items").update(mark).eq("section_id", id).is("deleted_at", null);
+    const del = di.error ? di : await sb.from("sections").update(mark).eq("id", id);
     if (del.error) { $("sec-status").textContent = "Не удалось — проверьте интернет"; return; }
     state.items = state.items.filter((it) => it.section_id !== id);
     state.sections = state.sections.filter((x) => x.id !== id);
     $("sec-status").textContent = "";
     animHide($("secsheet"), 170); lockSheets(false);
     itemsChanged();
-    toast("Поле удалено");
+    toast("Поле удалено", "Вернуть", () => restoreBatch(mark.deleted_batch));
   });
 
   async function createItem(row) {
@@ -720,11 +855,28 @@
     itemsChanged();
     return true;
   }
-  async function removeItem(id) {
-    const { error } = await sb.from("items").delete().eq("id", id);
+  // Удаление = в корзину (30 дней). label — что показать в уведомлении с «Вернуть»; без него — тихо
+  async function removeItem(id, label) {
+    const mark = trashMark();
+    const { error } = await sb.from("items").update(mark).eq("id", id);
     if (error) { toast("Не удалось удалить. Попробуйте ещё раз."); return false; }
     state.items = state.items.filter((x) => x.id !== id);
     itemsChanged();
+    if (label) toast(label, "Вернуть", () => restoreBatch(mark.deleted_batch));
+    return true;
+  }
+  const newId = () => (window.crypto && crypto.randomUUID ? crypto.randomUUID() : "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (c) => (c ^ (Math.random() * 16) >> (c / 4)).toString(16)));
+  function trashMark() { return { deleted_at: new Date().toISOString(), deleted_batch: newId() }; }
+  const TRASH_TABLES = ["items", "sections", "links", "link_groups"];
+  async function restoreBatch(batch) {
+    // запись, чьё поле тоже в корзине, возвращается вместе с полем — иначе ей негде появиться
+    const own = await sb.from("items").select("section_id").eq("deleted_batch", batch);
+    const secIds = [...new Set(((own && own.data) || []).map((r) => r.section_id).filter(Boolean))];
+    if (secIds.length) await sb.from("sections").update({ deleted_at: null, deleted_batch: null }).in("id", secIds).not("deleted_at", "is", null);
+    const res = await Promise.all(TRASH_TABLES.map((t) => sb.from(t).update({ deleted_at: null, deleted_batch: null }).eq("deleted_batch", batch)));
+    if (res.some((r) => r.error)) { toast("Не получилось вернуть — проверьте интернет."); return false; }
+    await Promise.all([loadItems(), loadLinks()]);
+    if (!$("setsheet").hidden) { if (!linksChanged()) prepareLinks(); renderTrash(); }
     return true;
   }
 
@@ -839,10 +991,12 @@
   $("it-title").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); closeItem(); } });
   $("itemsheet").querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", closeItem));
   $("itemsheet").querySelector("[data-cancel]").addEventListener("click", () => { closeMenus(null); animHide($("itemsheet"), 170); lockSheets(false); });
-  $("it-delete").addEventListener("click", () => { $("it-actions").hidden = true; $("it-confirm").hidden = false; replay($("it-confirm")); });
+  $("it-delete").addEventListener("click", async () => {
+    if (id_.id && await removeItem(id_.id, "Напоминание удалено")) { animHide($("itemsheet"), 170); lockSheets(false); }
+  });
   $("it-confirm-no").addEventListener("click", () => { $("it-confirm").hidden = true; $("it-actions").hidden = false; replay($("it-actions")); });
   $("it-confirm-yes").addEventListener("click", async () => {
-    if (id_.id && await removeItem(id_.id)) { animHide($("itemsheet"), 170); lockSheets(false); toast("Удалено"); }
+    if (id_.id && await removeItem(id_.id, "Напоминание удалено")) { animHide($("itemsheet"), 170); lockSheets(false); }
   });
 
   /* ---------- Заметка: свой редактор, автосохранение ---------- */
@@ -872,7 +1026,7 @@
     $("ed-confirm").hidden = true;
     $("ed-actions").hidden = false;
     $("ed-title").textContent = n ? "Заметка" : "Новая заметка";
-    $("ed-status").textContent = n ? "Сохранено" : "";
+    $("ed-status").textContent = n ? "Изменено " + fmtShort.format(new Date(n.updated_at)) : "";
     setEdColor(n ? n.color || "paper" : "paper");
     animShow($("editor"));
     lockSheets(true);
@@ -939,20 +1093,33 @@
 
   async function deleteNote(silent) {
     if (!ed.id) return true;
-    const ok = await removeItem(ed.id);
+    const ok = await removeItem(ed.id, silent ? null : "Заметка удалена");
     if (!ok) return false;
     ed.id = null;
-    if (!silent) { animHide($("editor"), 170); lockSheets(false); toast("Заметка удалена"); }
+    if (!silent) { animHide($("editor"), 170); lockSheets(false); }
     return true;
   }
 
   $("ed-body").addEventListener("input", () => queueSave());
+  // «Список»: строки с курсором или выделенные становятся пунктами с галочками (и обратно)
+  $("ed-list").addEventListener("click", () => {
+    const ta = $("ed-body"), v = ta.value;
+    let a = ta.selectionStart, b = ta.selectionEnd;
+    const ls = v.lastIndexOf("\n", a - 1) + 1, le = v.indexOf("\n", b) === -1 ? v.length : v.indexOf("\n", b);
+    const chunk = v.slice(ls, le).split("\n");
+    const all = chunk.every((l) => !l.trim() || CL_RE.test(l));
+    const out = chunk.map((l) => (!l.trim() ? l : all ? l.replace(CL_RE, "$1$3") : CL_RE.test(l) ? l : "[ ] " + l)).join("\n");
+    ta.value = v.slice(0, ls) + out + v.slice(le);
+    ta.focus(); ta.selectionStart = ls; ta.selectionEnd = ls + out.length;
+    queueSave(0);
+  });
   $("ed-pin").addEventListener("click", () => {
     ed.pinned = !ed.pinned;
     $("ed-pin").setAttribute("aria-pressed", String(ed.pinned));
     queueSave(0);
   });
-  $("ed-delete").addEventListener("click", () => { $("ed-actions").hidden = true; $("ed-confirm").hidden = false; replay($("ed-confirm")); });
+  // удаление без подтверждения: заметка уходит в корзину, в уведомлении — «Вернуть»
+  $("ed-delete").addEventListener("click", async () => { clearTimeout(ed.timer); if (ed.dirty) await saveNote(); deleteNote(false); });
   $("ed-confirm-no").addEventListener("click", () => { $("ed-confirm").hidden = true; $("ed-actions").hidden = false; replay($("ed-actions")); });
   $("ed-confirm-yes").addEventListener("click", () => deleteNote(false));
   $("editor").querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", closeEditor));
@@ -1240,9 +1407,13 @@
         try { await saveSettings({ cities: cities() }); citiesDirty = false; }
         catch (e) { console.error(e); setTab("cities"); $("time-status").textContent = "Города не сохранились — проверьте интернет"; return; }
       }
-      for (const id of [...remDel]) {
-        if (!(await removeItem(id))) { setTab("rem"); $("time-status").textContent = "Не удалось удалить — проверьте интернет"; return; }
-        remDel.delete(id);
+      if (remDel.size) {
+        const ids = [...remDel], mark = trashMark();
+        const { error } = await sb.from("items").update(mark).in("id", ids);
+        if (error) { setTab("rem"); $("time-status").textContent = "Не удалось удалить — проверьте интернет"; return; }
+        state.items = state.items.filter((x) => !remDel.has(x.id));
+        remDel.clear(); itemsChanged();
+        toast(ids.length === 1 ? "Напоминание удалено" : "Удалено напоминаний: " + ids.length, "Вернуть", () => restoreBatch(mark.deleted_batch));
       }
       $("time-status").textContent = "";
       animHide($("timesheet"), 170);
@@ -1660,8 +1831,8 @@
 
   async function loadLinks() {
     const [g, l] = await Promise.all([
-      sb.from("link_groups").select("id,name,position,color").order("position").order("created_at"),
-      sb.from("links").select("id,title,url,position,group_id").order("position").order("created_at"),
+      sb.from("link_groups").select("id,name,position,color").is("deleted_at", null).order("position").order("created_at"),
+      sb.from("links").select("id,title,url,position,group_id").is("deleted_at", null).order("position").order("created_at"),
     ]);
     if (!g.error) state.groups = g.data || [];
     if (!l.error) state.links = l.data || [];
@@ -1881,7 +2052,8 @@
       const idMap = {};
       const errs = [];
       const chk = (r) => { if (r && r.error) errs.push(r.error); return r; };
-      await Promise.all(dgroups.filter((g) => g.removed && !g.isNew).map((g) => sb.from("link_groups").delete().eq("id", g.id).then(chk)));
+      const lmark = trashMark();
+      await Promise.all(dgroups.filter((g) => g.removed && !g.isNew).map((g) => sb.from("link_groups").update(lmark).eq("id", g.id).then(chk)));
       await Promise.all(keepGroups.map(async (g, i) => {
         const name = g.name.trim().slice(0, 40);
         if (g.isNew) {
@@ -1900,7 +2072,7 @@
       order.forEach((gid) => keepLinks.filter((k) => k.d.gid === gid).forEach((k) => sorted.push(k)));
       keepLinks.filter((k) => !order.includes(k.d.gid)).forEach((k) => { k.d.gid = null; sorted.push(k); });
       const ops = [];
-      for (const d of draft) if (d.removed && !d.isNew) ops.push(sb.from("links").delete().eq("id", d.id).then(chk));
+      for (const d of draft) if (d.removed && !d.isNew) ops.push(sb.from("links").update(lmark).eq("id", d.id).then(chk));
       sorted.forEach(({ d, url, title }, i) => {
         const gid = d.gid && !String(d.gid).startsWith("new") ? d.gid : null;
         const o = state.links.find((l) => l.id === d.id);
@@ -1910,6 +2082,8 @@
       });
       await Promise.all(ops);
       await loadLinks();
+      const nRemoved = draft.filter((d) => d.removed && !d.isNew).length + dgroups.filter((g) => g.removed && !g.isNew).length;
+      if (nRemoved && !errs.length) toast("Удалено из ссылок: " + nRemoved, "Вернуть", () => restoreBatch(lmark.deleted_batch));
       if (errs.length) {
         console.error(errs[0]);
         dgroups = state.groups.map((g) => ({ id: g.id, name: g.name, color: g.color || null, removed: false }));
@@ -1947,6 +2121,7 @@
     document.querySelectorAll("#setsheet [data-tab]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === t)));
     document.querySelectorAll("#setsheet [data-panel]").forEach((p) => { p.hidden = p.dataset.panel !== t; if (!p.hidden) replay(p); });
     document.querySelectorAll("#setsheet .foot-tools").forEach((f) => (f.hidden = f.dataset.for !== t));
+    if (t === "trash") renderTrash();
   }
   document.querySelectorAll("#setsheet [data-tab]").forEach((b) => b.addEventListener("click", () => { closeMenus(null); setSetTab(b.dataset.tab); }));
   function openSettings(tab) {
@@ -2004,6 +2179,60 @@
     } finally { setClosing = false; }
   }
   $("setsheet").querySelector("[data-cancel]").addEventListener("click", cancelSettings);
+
+  /* ---------- Корзина: удалённое за 30 дней, восстановление пачкой ---------- */
+  const TRASH_DAYS = 30;
+  const TRASH_ICO = { field: "M4 5h16v14H4zM4 10h16", note: "M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 16h5", reminder: "M6 10a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6zM10 20a2 2 0 0 0 4 0", link: "M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1", group: "M3 7h6l2 2h10v10H3z" };
+  const UNDO_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M9 14 4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3"/></svg>';
+  const q_ = (s) => "«" + (s.length > 40 ? s.slice(0, 40) + "…" : s) + "»";
+  async function renderTrash() {
+    const since = new Date(Date.now() - TRASH_DAYS * 86400000).toISOString();
+    const pick = (t, cols) => sb.from(t).select(cols + ",deleted_at,deleted_batch").not("deleted_at", "is", null).gte("deleted_at", since).order("deleted_at", { ascending: false }).limit(300);
+    const [it, se, li, gr] = await Promise.all([pick("items", "id,type,title,body"), pick("sections", "id,app"), pick("links", "id,title"), pick("link_groups", "id,name")]);
+    if ([it, se, li, gr].some((r) => r.error)) { $("set-status").textContent = "Не удалось открыть корзину — проверьте интернет"; return; }
+    const batches = new Map();
+    const add = (kind, row) => {
+      const b = batches.get(row.deleted_batch) || { at: row.deleted_at, rows: [] };
+      b.rows.push(Object.assign({ kind }, row)); if (row.deleted_at > b.at) b.at = row.deleted_at;
+      batches.set(row.deleted_batch, b);
+    };
+    se.data.forEach((r) => add("field", r)); it.data.forEach((r) => add(r.type, r)); li.data.forEach((r) => add("link", r)); gr.data.forEach((r) => add("group", r));
+    const ul = $("trash-list"); ul.textContent = "";
+    const list = [...batches.entries()].sort((a, b) => (a[1].at < b[1].at ? 1 : -1));
+    for (const [batch, b] of list) {
+      const by = (k) => b.rows.filter((r) => r.kind === k);
+      const f = by("field"), notes = by("note"), rems = by("reminder"), links = by("link"), groups = by("group");
+      let kind, title;
+      if (f.length) { kind = "field"; const app = APPS[f[0].app]; title = "Поле " + q_(app ? app.name : "Поле") + (notes.length ? " и " + notes.length + " " + plural(notes.length, "заметка", "заметки", "заметок") : ""); }
+      else if (notes.length) { kind = "note"; title = notes.length === 1 ? "Заметка " + q_(noteTitle(notes[0])) : notes.length + " " + plural(notes.length, "заметка", "заметки", "заметок"); }
+      else if (rems.length) { kind = "reminder"; title = rems.length === 1 ? "Напоминание " + q_(rems[0].title || "") : "Напоминаний: " + rems.length; }
+      else if (links.length || groups.length) {
+        kind = links.length ? "link" : "group";
+        const parts = [];
+        if (links.length) parts.push(links.length === 1 ? "Ссылка " + q_(links[0].title) : links.length + " " + plural(links.length, "ссылка", "ссылки", "ссылок"));
+        if (groups.length) parts.push(groups.length === 1 ? "группа " + q_(groups[0].name) : groups.length + " " + plural(groups.length, "группа", "группы", "групп"));
+        title = parts.join(", "); title = title.charAt(0).toUpperCase() + title.slice(1);
+      } else { kind = "note"; title = "Запись"; }
+      const left = Math.max(1, Math.ceil((new Date(b.at).getTime() + TRASH_DAYS * 86400000 - Date.now()) / 86400000));
+      const lead = document.createElement("span"); lead.className = "trash-ico"; lead.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="' + TRASH_ICO[kind] + '"/></svg>';
+      const btn = delBtn("Восстановить", async () => { btn.disabled = true; if (!(await restoreBatch(batch))) btn.disabled = false; else toast("Восстановлено"); });
+      btn.innerHTML = UNDO_SVG; btn.classList.add("accent");
+      const sub = document.createDocumentFragment(); sub.append("Удалено " + fmtShort.format(new Date(b.at)) + " · ещё " + left + " " + plural(left, "день", "дня", "дней"));
+      ul.append(tRow({ lead, title, sub, tool: btn }));
+    }
+    $("trash-empty").hidden = list.length > 0;
+    $("trash-clear").disabled = !list.length;
+  }
+  $("trash-clear").addEventListener("click", () => { $("trash-clear").hidden = true; $("trash-ask").hidden = false; replay($("trash-ask")); });
+  $("trash-no").addEventListener("click", () => { $("trash-ask").hidden = true; $("trash-clear").hidden = false; });
+  $("trash-yes").addEventListener("click", async () => {
+    $("trash-ask").hidden = true; $("trash-clear").hidden = false;
+    const res = [];
+    for (const t of TRASH_TABLES) res.push(await sb.from(t).delete().not("deleted_at", "is", null));
+    if (res.some((r) => r.error)) toast("Очистилось не всё — проверьте интернет.");
+    else toast("Корзина очищена");
+    renderTrash();
+  });
   $("btn-settings").addEventListener("click", () => openSettings("look"));
   $("links-edit-btn").addEventListener("click", () => openSettings("links"));
 

@@ -606,8 +606,6 @@ button:disabled { cursor: default; opacity: .45; }
 @media (max-width: 560px) {
   .hide-sm { display: none; }
   .board { padding: 12px; }
-  .notes { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-  .note { padding: 10px 12px; }
   .presets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   /* телефон: вместо строки поиска — лупа; по нажатию поле занимает всю шапку */
   .top { gap: 8px; }
@@ -682,7 +680,7 @@ button, .pick-btn, .top-btn, .menu-item, .preset, .upload-tile, .note, .cal-day,
   transition: background-color .12s ease, border-color .12s ease, color .12s ease, opacity .12s ease, transform .08s ease;
 }
 button:active:not(:disabled):not(.switch-row), .upload-tile:active { transform: scale(.97); }
-.note:active, .preset:active, .cal-day:active { transform: scale(.985); }
+.preset:active, .cal-day:active { transform: scale(.985); }
 .note-sheet { transition: background-color .2s ease, color .2s ease; }
 
 @media (max-width: 560px) {
@@ -814,7 +812,6 @@ html:has(.dragging) .fade-scroll { -webkit-mask-image: none; mask-image: none; }
   background: transparent; color: var(--on-wall); opacity: .7; grid-column: span 1;
 }
 .fld-new:hover { opacity: 1; border-color: var(--accent); color: var(--accent); background: var(--glass); }
-.fld .notes { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
 @media (max-width: 760px) {
   .fields { grid-template-columns: minmax(0, 1fr); }
   .fld[data-span] { grid-column: auto; }
@@ -847,3 +844,60 @@ input.bad { border-color: var(--danger) !important; }
 /* напоминание, отмеченное к удалению: бледнее, зачёркнуто, вместо ✕ — «Вернуть»; удаляется по «Готово» */
 .t-row.removed { opacity: .5; }
 .t-row.removed .t-title, .t-row.removed .t-val { text-decoration: line-through; }
+/* уведомление с действием («Вернуть») */
+.toast { display: flex; align-items: center; gap: 14px; }
+.toast-act { border: 0; background: transparent; padding: 0; color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; }
+.toast-act:hover { text-decoration: underline; }
+/* корзина */
+.trash-ico { flex: none; display: grid; place-items: center; width: 20px; color: var(--ink-dim); }
+
+/* ---------- Приложение «Заметки»: ровная сетка карточек одной высоты ---------- */
+.fld .notes {
+  display: grid; gap: 10px; align-items: stretch;
+  grid-template-columns: repeat(var(--nc, 3), minmax(0, 1fr));
+}
+.fld[data-span="2"] .notes { --nc: 3; }
+.fld[data-span="3"] .notes { --nc: 5; }
+@media (max-width: 1100px) { .fld[data-span="3"] .notes { --nc: 4; } .fld[data-span="2"] .notes { --nc: 2; } }
+@media (max-width: 760px) { .fld[data-span] .notes { --nc: 2; } }
+.fld .note {
+  position: relative; min-width: 0; height: 136px; display: flex; flex-direction: column; gap: 4px; padding: 12px 12px 10px;
+  border: 1px solid var(--line); border-radius: var(--r); background: var(--n-bg); color: var(--n-fg);
+  text-align: left; cursor: pointer; outline: none; overflow: hidden;
+}
+.fld .note:hover, .fld .note:focus-visible { border-color: var(--accent); }
+.note-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.fld .note-title { flex: 1; min-width: 0; margin: 0; padding: 0; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.fld .note-pin { position: static; flex: none; opacity: .6; display: grid; }
+.note-body { flex: 1; min-height: 0; display: grid; align-content: start; gap: 2px; font-size: 13px; line-height: 1.4; overflow: hidden; }
+.note-line { min-width: 0; opacity: .8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.note-line.cl { display: flex; align-items: center; gap: 6px; opacity: .9; }
+.note-line.cl span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.note-line.cl.done span { text-decoration: line-through; opacity: .6; }
+.cl-box {
+  flex: none; display: grid; place-items: center; width: 14px; height: 14px; padding: 0;
+  border: 1.5px solid currentColor; border-radius: 4px; background: transparent; color: inherit; opacity: .7; cursor: pointer;
+}
+.cl-box svg { opacity: 0; }
+.cl-box[aria-checked="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); opacity: 1; }
+.cl-box[aria-checked="true"] svg { opacity: 1; }
+.cl-box:hover { opacity: 1; }
+.note-foot { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11px; font-variant-numeric: tabular-nums; }
+.fld .note-meta { margin: 0; opacity: .55; }
+.note-prog { padding: 1px 6px; border-radius: 4px; background: rgba(127,127,127,.18); font-weight: 600; opacity: .8; }
+.note-prog.full { background: var(--accent); color: var(--accent-ink); opacity: 1; }
+/* действия при наведении — в правом верхнем углу, поверх заголовка */
+.note-acts {
+  position: absolute; top: 6px; right: 6px; display: flex; gap: 2px; padding: 2px;
+  border-radius: var(--r); background: var(--n-bg); box-shadow: 0 0 0 1px var(--line);
+  opacity: 0; transform: translateY(-2px); transition: opacity .12s ease, transform .12s ease; pointer-events: none;
+}
+.fld .note:hover .note-acts, .fld .note:focus-within .note-acts { opacity: 1; transform: none; pointer-events: auto; }
+.note-acts .tool { width: 26px; height: 26px; color: inherit; }
+@media (hover: none) { .note-acts { display: none; } }
+/* ручка своего порядка — первой в строке заголовка, как везде на столе */
+.note-head .note-grip { margin: -8px -4px -8px -8px; color: inherit; }
+/* разделитель «закреплённые / остальные» */
+.notes-sep { grid-column: 1 / -1; height: 1px; background: var(--line); }
+.note-color-pop { position: fixed; z-index: 46; display: flex; gap: 6px; padding: 8px; min-width: 0; right: auto; bottom: auto; }
+.sec-opts { display: grid; gap: 8px; }
