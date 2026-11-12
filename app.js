@@ -118,7 +118,8 @@
   function tick() {
     const now = new Date();
     $("clock-time").textContent = fmtTime.format(now);
-    $("clock-date").textContent = fmtDate.format(now);
+    const d = fmtDate.format(now);
+    $("clock-date").textContent = d.charAt(0).toUpperCase() + d.slice(1);
   }
 
   function lockSheets(open) { document.documentElement.style.overflow = open ? "hidden" : ""; }
