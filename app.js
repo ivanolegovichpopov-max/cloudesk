@@ -172,21 +172,25 @@
       const home = { parent: item.parentNode, next: item.nextSibling };
       const ph = document.createElement(item.tagName === "LI" ? "li" : "div");
       ph.className = "drag-ph"; ph.style.height = r.height + "px";
+      if (o.grid) { const cs = getComputedStyle(item); ph.style.gridColumn = cs.gridColumnStart + " / " + cs.gridColumnEnd; }
       item.after(ph);
       item.classList.add("dragging");
       Object.assign(item.style, { width: r.width + "px", left: r.left + "px", top: r.top + "px" });
-      const dy0 = e.clientY - r.top;
+      const dy0 = e.clientY - r.top, dx0 = e.clientX - r.left;
       let lastY = e.clientY, raf = 0, done = false;
       try { h.setPointerCapture(e.pointerId); } catch (err) {}
       const scroller = o.scroller ? o.scroller() : null;
       const place = (x, y) => {
-        item.style.transform = "translateY(" + (y - dy0 - r.top) + "px)";
+        // в сетке (поля, карточки) элемент двигается свободно; в списке — только вверх-вниз
+        item.style.transform = o.grid ? "translate(" + (x - dx0 - r.left) + "px," + (y - dy0 - r.top) + "px)" : "translateY(" + (y - dy0 - r.top) + "px)";
         const el = document.elementFromPoint(x, y);
         if (!el || !root.contains(el)) return;
         const over = el.closest(o.item);
         if (over && over !== item && root.contains(over)) {
           const rr = over.getBoundingClientRect();
-          const before = y < rr.top + rr.height / 2 && !(o.fixed && over.matches(o.fixed));
+          const before = !(o.fixed && over.matches(o.fixed)) && (o.grid
+            ? (y < rr.top + rr.height * 0.25 || (y <= rr.bottom - rr.height * 0.25 && x < rr.left + rr.width / 2))
+            : y < rr.top + rr.height / 2);
           if (before) { if (over.previousSibling !== ph) over.before(ph); }
           else if (over.nextSibling !== ph) over.after(ph);
           return;
@@ -199,9 +203,10 @@
         if (!scroller || done) return;
         const sr = scroller.getBoundingClientRect();
         const v = lastY < sr.top + 40 ? -8 : lastY > sr.bottom - 40 ? 8 : 0;
-        if (v) { scroller.scrollTop += v; place(e.clientX, lastY); raf = requestAnimationFrame(tick); }
+        if (v) { scroller.scrollTop += v; place(lastX, lastY); raf = requestAnimationFrame(tick); }
       };
-      const move = (ev) => { lastY = ev.clientY; place(ev.clientX, ev.clientY); if (!raf) raf = requestAnimationFrame(tick); };
+      let lastX = e.clientX;
+      const move = (ev) => { lastY = ev.clientY; lastX = ev.clientX; place(ev.clientX, ev.clientY); if (!raf) raf = requestAnimationFrame(tick); };
       const finish = (cancel) => {
         if (done) return; done = true;
         cancelAnimationFrame(raf);
@@ -617,7 +622,7 @@
     if (res.some((r) => r.error)) { toast("Порядок не сохранился — проверьте интернет."); loadItems(); }
   }
   sortable($("board"), {
-    item: ".note", handle: ".note-grip", list: ".notes",
+    item: ".note", handle: ".note-grip", list: ".notes", grid: true,
     onDrop: (el) => saveNoteOrder(el.closest(".notes")),
     onKey: (el, dir) => {
       const sib = dir < 0 ? el.previousElementSibling : el.nextElementSibling;
@@ -720,7 +725,7 @@
     if (res.some((r) => r.error)) { toast("Порядок не сохранился — проверьте интернет."); loadItems(); }
   }
   sortable($("board"), {
-    item: ".fld", handle: ".fld-grip", list: "#board",
+    item: ".fld", handle: ".fld-grip", list: "#board", grid: true,
     onDrop: () => saveFieldOrder(),
     onKey: (el, dir) => {
       const sib = dir < 0 ? el.previousElementSibling : el.nextElementSibling;

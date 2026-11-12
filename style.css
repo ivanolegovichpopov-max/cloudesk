@@ -908,3 +908,7 @@ input.bad { border-color: var(--danger) !important; }
 .notes-sep { grid-column: 1 / -1; height: 1px; background: var(--line); }
 .note-color-pop { position: fixed; z-index: 46; display: flex; gap: 6px; padding: 8px; min-width: 0; right: auto; bottom: auto; }
 .sec-opts { display: grid; gap: 8px; }
+/* перетаскиваемая карточка всегда «висит» над сеткой */
+.fld .note.dragging, .fld.dragging { position: fixed; }
+.dragging, .dragging * { pointer-events: none !important; }
+.dragging .note-acts { display: none; }
