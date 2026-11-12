@@ -1073,7 +1073,7 @@ input.bad { border-color: var(--danger) !important; }
 /* перетаскиваемая строка — плашкой окна с рамкой акцента; место, куда упадёт, — пунктир */
 .tk.dragging { position: fixed; z-index: 50; background: var(--sheet); box-shadow: inset 0 0 0 1px var(--accent); cursor: grabbing; }
 .tk.dragging .tk-grip { opacity: 1; }
-.tk-list > .drag-ph { min-height: 36px; }
+.tk-list > .drag-ph { min-height: var(--tk-row); }
 .tk-done-btn { width: 100%; border: 0; background: transparent; cursor: pointer; text-align: left; border-radius: var(--r); padding: 4px 6px; }
 .tk-done-btn:hover { color: var(--ink); }
 .tk-done-btn svg { transition: transform .15s ease; }
@@ -1123,7 +1123,9 @@ input.bad { border-color: var(--danger) !important; }
 .tk-board.halves { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .tk-board.week { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
 .tk-col, .tk-board.week > .tk-grp { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-.tk-board .tk-list { min-height: 44px; border-radius: var(--r); }
+/* пустое место под задачу — ровно высотой строки задачи (8 + 20 + 2 + 16 + 8 = 54 px) */
+:root { --tk-row: 54px; }
+.tk-board .tk-list { min-height: var(--tk-row); border-radius: var(--r); }
 /* пустая колонка — пунктирное место, куда можно перетащить задачу */
 .tk-board .tk-list:empty, .tk-board .tk-list:has(> .drag-ph:only-child) { border: 1px dashed var(--line); }
 /* узкие колонки недели: без значков при наведении, название в одну строку с многоточием */
