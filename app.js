@@ -427,7 +427,7 @@
     const [prof, notes, sets] = await Promise.all([
       sb.from("profiles").select("first_name,last_name,username,photo_url").eq("id", user.id).maybeSingle(),
       sb.from("notes").select("id,body,color,pinned,updated_at").order("pinned", { ascending: false }).order("updated_at", { ascending: false }),
-      sb.from("settings").select("wallpaper_preset,wallpaper_path,theme,cities").eq("user_id", user.id).maybeSingle(),
+      sb.from("settings").select("wallpaper_preset,wallpaper_path,wallpaper_weekly,wallpaper_week_from,theme,cities").eq("user_id", user.id).maybeSingle(),
     ]);
     $("notes-loading").hidden = true;
 
@@ -655,13 +655,43 @@
         return;
       }
     }
-    setWall(s && s.wallpaper_preset, null);
+    setWall(shownPreset(), null);
   }
+  // Смена заставки раз в неделю: от выбранной заставки по кругу, новая — каждый понедельник
+  const weekIndex = (d = new Date()) => Math.floor((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) - Date.UTC(1970, 0, 5)) / 604800000);
+  function shownPreset() {
+    const s = state.settings || {};
+    const base = Math.max(0, PRESETS.findIndex((p) => p.id === s.wallpaper_preset));
+    if (!s.wallpaper_weekly || s.wallpaper_path) return PRESETS[base].id;
+    const k = weekIndex() - (s.wallpaper_week_from == null ? weekIndex() : s.wallpaper_week_from);
+    return PRESETS[(((base + k) % PRESETS.length) + PRESETS.length) % PRESETS.length].id;
+  }
+  function renderWeekly() {
+    const on = !!(state.settings && state.settings.wallpaper_weekly && !state.settings.wallpaper_path);
+    $("wall-weekly").setAttribute("aria-checked", String(on));
+  }
+  $("wall-weekly").addEventListener("click", () => {
+    const s = state.settings || {};
+    const on = !(s.wallpaper_weekly && !s.wallpaper_path);
+    const cur = shownPreset(), old = s.wallpaper_path;
+    state.settings = Object.assign({}, s, { wallpaper_weekly: on, wallpaper_preset: cur, wallpaper_path: null, wallpaper_week_from: weekIndex() });
+    renderWeekly();
+    if (old) setWall(cur, null);
+    trackWall(async () => {
+      await saveSettings({ wallpaper_weekly: on, wallpaper_preset: cur, wallpaper_path: null, wallpaper_week_from: weekIndex() });
+      if (old) await sb.storage.from("wallpapers").remove([old]);
+    }, "Настройка не сохранилась. Попробуйте ещё раз.");
+  });
+  // наступила новая неделя, пока стол открыт
+  setInterval(() => {
+    const s = state.settings;
+    if (s && s.wallpaper_weekly && !s.wallpaper_path && document.body.dataset.wall !== shownPreset()) setWall(shownPreset(), null);
+  }, 60000);
 
   async function saveSettings(patch) {
     const row = Object.assign({ user_id: state.user.id }, state.settings || {}, patch);
     const { data, error } = await sb.from("settings").upsert(row, { onConflict: "user_id" })
-      .select("wallpaper_preset,wallpaper_path,theme,cities").single();
+      .select("wallpaper_preset,wallpaper_path,wallpaper_weekly,wallpaper_week_from,theme,cities").single();
     if (error) throw error;
     state.settings = data;
   }
@@ -679,7 +709,7 @@
         const old = state.settings && state.settings.wallpaper_path;
         setWall(p.id, null);
         trackWall(async () => {
-          await saveSettings({ wallpaper_preset: p.id, wallpaper_path: null });
+          await saveSettings({ wallpaper_preset: p.id, wallpaper_path: null, wallpaper_week_from: weekIndex() });
           if (old) await sb.storage.from("wallpapers").remove([old]);
         }, "Заставка не сохранилась. Попробуйте ещё раз.");
       });
@@ -740,7 +770,8 @@
       const up = await sb.storage.from("wallpapers").upload(path, blob, { contentType: "image/jpeg", upsert: false });
       if (up.error) throw up.error;
       const old = state.settings && state.settings.wallpaper_path;
-      await saveSettings({ wallpaper_path: path });
+      await saveSettings({ wallpaper_path: path, wallpaper_weekly: false });
+      renderWeekly();
       if (old && old !== path) await sb.storage.from("wallpapers").remove([old]);
       if (state.wallUrl) URL.revokeObjectURL(state.wallUrl);
       state.wallUrl = URL.createObjectURL(blob);
@@ -1532,6 +1563,7 @@
     closeMenus(null);
     $("set-status").textContent = "";
     prepareLinks();
+    renderWeekly();
     setSetTab(tab || setTabNow);
     animShow($("setsheet"));
     lockSheets(true);
