@@ -264,6 +264,29 @@
     el._scrollT = setTimeout(() => el.classList.remove("is-scrolling"), 900);
   }, { capture: true, passive: true });
 
+  // Мягкий край у всего, что прокручивается: содержимое плавно тает у края, за которым есть ещё
+  const FADE_SEL = ".tab-panel, .stage-below, .t-list, .links-list, #links-menu-list, .pop-scroll, .tp-list, .ed-body, .presets, .notes";
+  function fadeUpdate(el) {
+    const over = el.scrollHeight - el.clientHeight > 1;
+    const oy = over && getComputedStyle(el).overflowY;
+    const on = over && (oy === "auto" || oy === "scroll");
+    el.classList.toggle("fade-scroll", on);
+    el.classList.toggle("fade-top", on && el.scrollTop > 1);
+    el.classList.toggle("fade-bottom", on && el.scrollTop + el.clientHeight < el.scrollHeight - 1);
+  }
+  let fadeQ = 0;
+  function fadeAll() {
+    if (fadeQ) return;
+    fadeQ = requestAnimationFrame(() => {
+      fadeQ = 0;
+      document.querySelectorAll(FADE_SEL).forEach((el) => { if (el.getClientRects().length) fadeUpdate(el); });
+    });
+  }
+  document.addEventListener("scroll", (e) => { if (e.target.matches && e.target.matches(FADE_SEL)) fadeUpdate(e.target); }, { capture: true, passive: true });
+  document.addEventListener("input", (e) => { if (e.target.matches && e.target.matches(FADE_SEL)) fadeUpdate(e.target); }, true);
+  new MutationObserver(fadeAll).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden"] });
+  window.addEventListener("resize", fadeAll);
+
   let toastTimer;
   function toast(text) {
     const t = $("toast");
@@ -1139,7 +1162,7 @@
       li.dataset.tz = tz;
       ul.append(li);
     }
-    const pop = $("city-pop");
+    const pop = $("city-pop-list");
     pop.textContent = "";
     const chosen = new Set(cities().concat(localTz));
     const left = CITY_LIST.filter((c) => !chosen.has(c[0]));
@@ -1551,7 +1574,7 @@
     const raw = $("search-input").value;
     const q = norm(raw.trim());
     $("search-clear").hidden = !raw;
-    const pop = $("search-pop");
+    const pop = $("search-list");
     pop.textContent = "";
     S.items = []; S.active = -1;
     if (!q) { hidePop(); return; }
@@ -1618,7 +1641,7 @@
   // клик мимо поиска закрывает список результатов
   document.addEventListener("click", (e) => { if (!e.composedPath().includes($("search"))) { hidePop(); if (!$("search-input").value) collapseSearch(); } });
   // лупа разворачивает поле (на телефоне — на всю шапку)
-  $("search-open").addEventListener("click", () => { closeMenus(null); clearTimeout(collapseT); document.querySelector(".search-inner").classList.remove("is-leaving"); document.querySelector(".top").classList.add("searching"); setTimeout(() => $("search-input").focus(), 30); });
+  $("search-open").addEventListener("click", () => { closeMenus(null); clearTimeout(collapseT); document.querySelector(".search-inner").classList.remove("is-leaving"); document.querySelector(".top").classList.add("searching"); $("search-input").focus(); });
   $("search-cancel").addEventListener("click", () => closeSearch(true));
   // «/» или Ctrl+K — сразу в поиск (если не печатаете в поле и не открыто окно)
   document.addEventListener("keydown", (e) => {

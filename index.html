@@ -50,12 +50,12 @@
           <div class="search-box">
             <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4"/></svg>
             <input id="search-input" type="text" placeholder="Поиск" autocomplete="off" spellcheck="false"
-                   role="combobox" aria-expanded="false" aria-controls="search-pop" aria-autocomplete="list" aria-label="Поиск по заметкам, напоминаниям и ссылкам">
+                   role="combobox" aria-expanded="false" aria-controls="search-list" aria-autocomplete="list" aria-label="Поиск по заметкам, напоминаниям и ссылкам">
             <button type="button" id="search-clear" class="tool search-clear" aria-label="Очистить" hidden>
               <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M6 6l12 12M18 6 6 18"/></svg>
             </button>
           </div>
-          <div id="search-pop" class="pop search-pop" role="listbox" hidden></div>
+          <div id="search-pop" class="pop search-pop" hidden><div id="search-list" class="pop-scroll" role="listbox"></div></div>
         </div>
         <button type="button" id="search-cancel" class="tool search-cancel" data-tip="Закрыть поиск" aria-label="Закрыть поиск"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M6 6l12 12M18 6 6 18"/></svg></button>
       </div>
@@ -289,7 +289,7 @@
         <span class="foot-tools" data-for="rem" hidden><button type="button" id="rem-add" class="tool accent" data-tip="Добавить напоминание" aria-label="Добавить напоминание"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14"/></svg></button></span>
         <span class="foot-tools" data-for="cities" hidden>
           <span class="field"><button type="button" id="city-add" class="tool accent" data-tip="Добавить город" aria-label="Добавить город" aria-haspopup="listbox" aria-expanded="false" data-menu="city-pop"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14"/></svg></button>
-            <div id="city-pop" class="pop pop-up pop-end" role="listbox" hidden></div>
+            <div id="city-pop" class="pop pop-up pop-end" hidden><div id="city-pop-list" class="pop-scroll" role="listbox"></div></div>
           </span>
         </span>
       </div>

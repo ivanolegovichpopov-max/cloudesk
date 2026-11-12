@@ -395,7 +395,8 @@ input:focus { outline: none; border-color: var(--accent); }
 .search-clear { width: 28px; height: 28px; }
 .search-cancel { display: none; }
 .search-cancel { flex: none; height: 38px; padding: 0 4px; border: 0; background: transparent; color: var(--on-wall); font-size: 14px; font-weight: 500; text-shadow: 0 1px 6px rgba(0,0,0,.35); }
-.pop.search-pop { left: 0; right: 0; min-width: 0; max-height: min(60vh, 480px); overflow: auto; padding: 4px 6px; }
+.pop.search-pop { left: 0; right: 0; min-width: 0; padding: 4px 6px; }
+.search-pop .pop-scroll { max-height: min(60vh, 480px); overflow: auto; }
 .search-pop .menu-group { padding: 6px 0 2px; }
 .search-item { justify-content: flex-start; align-items: flex-start; gap: 10px; padding: 8px 10px; white-space: normal; text-decoration: none; color: var(--ink); }
 .search-item.active { background: var(--hover); box-shadow: inset 2px 0 0 var(--accent); }
@@ -568,7 +569,8 @@ button:disabled { cursor: default; opacity: .45; }
   background: var(--sheet); border: 1px solid var(--line); border-radius: var(--r-lg);
   box-shadow: 0 8px 24px rgba(0,0,0,.18);
 }
-.pop-up { top: auto; bottom: calc(100% + 4px); max-height: 260px; overflow: auto; }
+.pop-up { top: auto; bottom: calc(100% + 4px); }
+.pop-up .pop-scroll { max-height: 246px; overflow: auto; }
 .pop-cal { width: 280px; display: grid; gap: 6px; }
 .dp-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
 .dp-grid .cal-dow { min-height: 22px; font-size: 10px; }
@@ -682,3 +684,18 @@ button:active:not(:disabled), .upload-tile:active { transform: scale(.97); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* Мягкий край прокрутки: у края, за которым есть ещё содержимое, оно плавно тает (24 px).
+   Работает везде, где что-то прокручивается; у фона и рамок окон ничего не тает */
+@property --fade-t { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@property --fade-b { syntax: "<length>"; inherits: false; initial-value: 0px; }
+.fade-scroll {
+  --fade-t: 0px; --fade-b: 0px;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 var(--fade-t), #000 calc(100% - var(--fade-b)), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 var(--fade-t), #000 calc(100% - var(--fade-b)), transparent 100%);
+  transition: --fade-t .15s ease, --fade-b .15s ease;
+}
+.fade-scroll.fade-top { --fade-t: 24px; }
+.fade-scroll.fade-bottom { --fade-b: 24px; }
+/* во время перетаскивания строка висит поверх всего — край не должен её прятать */
+html:has(.dragging) .fade-scroll { -webkit-mask-image: none; mask-image: none; }
