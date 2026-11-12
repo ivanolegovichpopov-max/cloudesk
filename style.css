@@ -699,3 +699,10 @@ button:active:not(:disabled), .upload-tile:active { transform: scale(.97); }
 .fade-scroll.fade-bottom { --fade-b: 24px; }
 /* во время перетаскивания строка висит поверх всего — край не должен её прятать */
 html:has(.dragging) .fade-scroll { -webkit-mask-image: none; mask-image: none; }
+
+/* Настройки → Оформление: тема на всю ширину, ниже плитки заставок */
+.tab-panel.look { gap: 8px; }
+.tab-panel.look > .t-head:first-child { padding-top: 0; }
+.tab-panel.look .segmented { flex: none; }
+.tab-panel.look .segmented button { flex: 1; height: 32px; font-size: 13px; }
+.tab-panel.look .t-head + .presets { margin-top: 0; }

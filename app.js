@@ -701,36 +701,17 @@
     probe.remove();
   }
 
-  $("btn-wall").addEventListener("click", () => {
-    closeMenus(null);
-    animShow($("wallsheet"));
-    lockSheets(true);
-  });
   // Сохранение заставки отслеживается: окно не закроется, пока оно не завершится
-  let wallJob = null, wallFailed = false, wallClosing = false;
+  let wallJob = null, wallFailed = false;
   function trackWall(fn, errText) {
     const job = (async () => {
-      try { await fn(); wallFailed = false; $("wall-status").textContent = ""; }
-      catch (e) { console.error(e); wallFailed = true; $("wall-status").textContent = ""; toast(errText); }
+      try { await fn(); wallFailed = false; $("set-status").textContent = ""; }
+      catch (e) { console.error(e); wallFailed = true; $("set-status").textContent = ""; toast(errText); }
     })();
     wallJob = job;
     job.finally(() => { if (wallJob === job) wallJob = null; });
     return job;
   }
-  async function closeWall() {
-    if (wallClosing) return;
-    wallClosing = true;
-    try {
-      if (wallJob) { $("wall-status").textContent = "Сохраняю…"; await wallJob; }
-      if (wallFailed) { $("wall-status").textContent = "Не сохранилось — выберите заставку ещё раз."; return; }
-      $("wall-status").textContent = "";
-      animHide($("wallsheet"), 170);
-      lockSheets(false);
-    } finally {
-      wallClosing = false;
-    }
-  }
-  $("wallsheet").querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", closeWall));
 
   // Уменьшаем фото до размера экрана: быстрее грузится и меньше места
   async function shrinkImage(file) {
@@ -751,7 +732,7 @@
     if (!file) return;
     if (!/^image\/(jpeg|png|webp)$/.test(file.type)) { toast("Подойдёт фото в формате JPG, PNG или WEBP."); return; }
     if (file.size > 30 * 1024 * 1024) { toast("Фото слишком большое: максимум 30 МБ."); return; }
-    const st = $("wall-status");
+    const st = $("set-status");
     st.textContent = "Загружаю…";
     trackWall(async () => {
       const blob = await shrinkImage(file);
@@ -1275,21 +1256,16 @@
   }
 
   /* Окно настройки: правим черновик, сохраняем при закрытии */
-  let draft = [], dgroups = [], linksClosing = false, newSeq = 0, focusNext = null;
+  let draft = [], dgroups = [], newSeq = 0, focusNext = null;
   const tmp = () => "new" + ++newSeq;
-  function openLinks() {
-    closeMenus(null);
+  function prepareLinks() {
     dgroups = state.groups.map((g) => ({ id: g.id, name: g.name, color: g.color || null, removed: false }));
     draft = state.links.map((l) => ({ id: l.id, title: l.title, url: l.url, gid: l.group_id || null, removed: false }));
     if (!draft.length && !dgroups.length) { const d = { id: tmp(), title: "", url: "", gid: null, removed: false, isNew: true }; draft.push(d); focusNext = d.id; }
-    $("links-status").textContent = "";
+    $("set-status").textContent = "";
     lastGid = null;
     renderDraft();
-    animShow($("linksheet"));
-    lockSheets(true);
   }
-  $("links-edit-btn").addEventListener("click", openLinks);
-  $("btn-links").addEventListener("click", openLinks);
 
   const ICON = (d, size = 16) => '<svg viewBox="0 0 24 24" width="' + size + '" height="' + size + '" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="' + d + '"/></svg>';
   const P = { up: "M6 15l6-6 6 6", down: "M6 9l6 6 6-6", x: "M6 6l12 12M18 6 6 18", undo: "M9 14l-4-4 4-4M5 10h9a5 5 0 0 1 0 10h-2", folder: "M3 7h6l2 2h10v10H3z", plus: "M12 5v14M5 12h14", check: "M5 12.5l4.5 4.5L19 7.5" };
@@ -1459,10 +1435,9 @@
     const box = $("links-list"); box.scrollTop = box.scrollHeight;
   });
 
-  async function closeLinks() {
-    if (linksClosing) return;
-    linksClosing = true;
-    try {
+  // Сохранение ссылок при закрытии настроек; false — окно остаётся открытым
+  async function saveLinks() {
+    {
       closeMenus(null);
       // 1) проверка
       let bad = 0;
@@ -1486,8 +1461,8 @@
         }
         keepGroups.push(g);
       }
-      if (bad) { renderDraft(); $("links-status").textContent = "Заполните отмеченное красным"; return; }
-      $("links-status").textContent = "Сохраняю…";
+      if (bad) { renderDraft(); $("set-status").textContent = "Заполните отмеченное красным"; return false; }
+      $("set-status").textContent = "Сохраняю…";
 
       // 2) группы: удаление, создание (нужны настоящие id), переименование и порядок
       const idMap = {};
@@ -1527,15 +1502,59 @@
         dgroups = state.groups.map((g) => ({ id: g.id, name: g.name, color: g.color || null, removed: false }));
         draft = state.links.map((l) => ({ id: l.id, title: l.title, url: l.url, gid: l.group_id || null, removed: false }));
         renderDraft();
-        $("links-status").textContent = "Сохранилось не всё — проверьте интернет и нажмите «Готово» ещё раз";
-        return;
+        $("set-status").textContent = "Сохранилось не всё — проверьте интернет и нажмите «Готово» ещё раз";
+        return false;
       }
-      $("links-status").textContent = "";
-      animHide($("linksheet"), 170);
-      lockSheets(false);
-    } finally { linksClosing = false; }
+      return true;
+    }
   }
-  $("linksheet").querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", closeLinks));
+  function linksChanged() {
+    const live = draft.filter((d) => !d.removed && (d.title.trim() || d.url.trim()));
+    if (dgroups.some((g) => g.removed || g.isNew) || draft.some((d) => d.removed)) return true;
+    if (live.length !== state.links.length || dgroups.length !== state.groups.length) return true;
+    if (dgroups.some((g, i) => { const o = state.groups[i]; return !o || o.id !== g.id || o.name !== g.name.trim() || (o.color || null) !== (g.color || null); })) return true;
+    const order = [null].concat(dgroups.map((g) => g.id));
+    const sorted = [];
+    order.forEach((gid) => live.filter((d) => d.gid === gid).forEach((d) => sorted.push(d)));
+    return sorted.some((d, i) => { const o = state.links[i]; return !o || o.id !== d.id || o.title !== d.title.trim() || o.url !== d.url.trim() || (o.group_id || null) !== d.gid; });
+  }
+
+  /* ---------- Окно «Настройки»: вкладки «Оформление» и «Быстрые ссылки» ---------- */
+  let setTabNow = "look", setClosing = false;
+  function setSetTab(t) {
+    setTabNow = t;
+    document.querySelectorAll("#setsheet [data-tab]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === t)));
+    document.querySelectorAll("#setsheet [data-panel]").forEach((p) => { p.hidden = p.dataset.panel !== t; if (!p.hidden) replay(p); });
+    document.querySelectorAll("#setsheet .foot-tools").forEach((f) => (f.hidden = f.dataset.for !== t));
+  }
+  document.querySelectorAll("#setsheet [data-tab]").forEach((b) => b.addEventListener("click", () => { closeMenus(null); setSetTab(b.dataset.tab); }));
+  function openSettings(tab) {
+    closeMenus(null);
+    $("set-status").textContent = "";
+    prepareLinks();
+    setSetTab(tab || setTabNow);
+    animShow($("setsheet"));
+    lockSheets(true);
+  }
+  async function closeSettings() {
+    if (setClosing) return;
+    setClosing = true;
+    try {
+      closeMenus(null);
+      if (wallJob) { $("set-status").textContent = "Сохраняю…"; await wallJob; }
+      if (wallFailed) { setSetTab("look"); $("set-status").textContent = "Не сохранилось — выберите заставку ещё раз."; return; }
+      if (linksChanged()) {
+        $("set-status").textContent = "Сохраняю…";
+        if (!(await saveLinks())) { setSetTab("links"); return; }
+      }
+      $("set-status").textContent = "";
+      animHide($("setsheet"), 170);
+      lockSheets(false);
+    } finally { setClosing = false; }
+  }
+  $("setsheet").querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", closeSettings));
+  $("btn-settings").addEventListener("click", () => openSettings("look"));
+  $("links-edit-btn").addEventListener("click", () => openSettings("links"));
 
   /* ---------- Поиск по столу ---------- */
   const S = { items: [], active: -1 };
@@ -1666,9 +1685,8 @@
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
     if (!$("editor").hidden) closeEditor();
-    else if (!$("wallsheet").hidden) closeWall();
+    else if (!$("setsheet").hidden) closeSettings();
     else if (!$("timesheet").hidden) closeTime();
-    else if (!$("linksheet").hidden) closeLinks();
   });
 
   // Клик по фону вокруг окна закрывает окно и не доходит до того, что под ним

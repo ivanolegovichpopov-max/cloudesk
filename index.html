@@ -85,31 +85,13 @@
           </div>
 
           <div class="menu-group">
-            <div class="menu-label">Оформление</div>
-            <button id="btn-wall" type="button" class="menu-item" role="menuitem">
-              <span class="menu-ico"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M4 5h16v14H4zM4 16l5-5 4 4 3-3 4 4M15 9.5h.01"/></svg>Заставка</span>
-              <svg class="chev" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M9 6l6 6-6 6"/></svg>
-            </button>
-            <div class="menu-row">
-              <span class="menu-ico"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 3a9 9 0 1 0 0 18zM12 3a9 9 0 0 1 0 18"/></svg>Тема</span>
-              <div class="segmented" role="radiogroup" aria-label="Тема оформления">
-                <button type="button" role="radio" data-theme-set="auto" data-tip="Как на устройстве" aria-label="Как на устройстве">Авто</button>
-                <button type="button" role="radio" data-theme-set="light">Светлая</button>
-                <button type="button" role="radio" data-theme-set="dark">Тёмная</button>
-              </div>
-            </div>
-          </div>
-
-          <div class="menu-group">
-            <div class="menu-label">Стол</div>
-            <button id="btn-links" type="button" class="menu-item" role="menuitem">
-              <span class="menu-ico"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>Быстрые ссылки</span>
+            <button id="btn-settings" type="button" class="menu-item" role="menuitem">
+              <span class="menu-ico"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4"/></svg>Настройки</span>
               <svg class="chev" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M9 6l6 6-6 6"/></svg>
             </button>
           </div>
 
           <div class="menu-group">
-            <div class="menu-label">Аккаунт</div>
             <button id="btn-logout" class="menu-item" type="button" role="menuitem">
               <span class="menu-ico"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10"/></svg>Выйти</span>
             </button>
@@ -176,25 +158,6 @@
 </div>
 
 <!-- Выбор заставки -->
-<div id="wallsheet" class="sheet-wrap" hidden>
-  <div class="sheet-backdrop" data-close></div>
-  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="wall-h">
-    <div class="sheet-bar">
-      <h3 id="wall-h">Заставка</h3>
-      <button type="button" class="tool done" data-close data-tip="Готово" aria-label="Готово"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>
-    </div>
-    <div id="presets" class="presets">
-    </div>
-    <input id="wall-file" type="file" accept="image/jpeg,image/png,image/webp" class="sr">
-    <div class="sheet-foot">
-      <span id="wall-status" class="ed-status" role="status"></span>
-      <div class="foot-actions">
-        <label class="tool" for="wall-file" data-tip="Загрузить своё фото" aria-label="Загрузить своё фото"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg></label>
-      </div>
-    </div>
-  </div>
-</div>
-
 <!-- Время: календарь, таймер, секундомер, напоминания, города -->
 <div id="timesheet" class="sheet-wrap" hidden>
   <div class="sheet-backdrop" data-close></div>
@@ -297,25 +260,44 @@
   </div>
 </div>
 
-<!-- Быстрые ссылки: настройка -->
-<div id="linksheet" class="sheet-wrap" hidden>
+<!-- Настройки: оформление (тема, заставка), ссылки. Новые настройки — новыми вкладками -->
+<div id="setsheet" class="sheet-wrap" hidden>
   <div class="sheet-backdrop" data-close></div>
-  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="links-h">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="set-h">
     <div class="sheet-bar">
-      <h3 id="links-h">Быстрые ссылки</h3>
+      <h3 id="set-h">Настройки</h3>
       <div class="sheet-tools">
-        <span id="links-status" class="ed-status" role="status"></span>
+        <span id="set-status" class="ed-status" role="status"></span>
         <button type="button" class="tool done" data-close data-tip="Готово" aria-label="Готово"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>
       </div>
     </div>
-    <div class="links-edit">
-      <div id="links-list" class="links-list"></div>
+    <div class="tabs" role="tablist" aria-label="Разделы настроек">
+      <button type="button" role="tab" data-tab="look" data-tip="Оформление" aria-label="Оформление"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 3a9 9 0 1 0 0 18c1 0 1.6-.7 1.6-1.5 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.8.7-1.4 1.5-1.4H16a5 5 0 0 0 5-5c0-4.3-4-7.9-9-7.9zM7.5 12h.01M9.5 7.5h.01M14.5 7.5h.01"/></svg></button>
+      <button type="button" role="tab" data-tab="links" data-tip="Быстрые ссылки" aria-label="Быстрые ссылки"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg></button>
     </div>
+
+    <section class="tab-panel look" data-panel="look" role="tabpanel">
+      <div class="t-head">Тема</div>
+      <div class="segmented" role="radiogroup" aria-label="Тема оформления">
+                <button type="button" role="radio" data-theme-set="auto" data-tip="Как на устройстве" aria-label="Как на устройстве">Авто</button>
+                <button type="button" role="radio" data-theme-set="light">Светлая</button>
+                <button type="button" role="radio" data-theme-set="dark">Тёмная</button>
+              </div>
+      <div class="t-head">Заставка</div>
+      <div id="presets" class="presets"></div>
+      <input id="wall-file" type="file" accept="image/jpeg,image/png,image/webp" class="sr">
+    </section>
+
+    <section class="tab-panel" data-panel="links" role="tabpanel" hidden>
+      <div id="links-list" class="links-list"></div>
+    </section>
+
     <div class="sheet-foot">
       <span class="foot-spacer"></span>
       <div class="foot-actions">
-        <button type="button" id="groups-new" class="tool" data-tip="Добавить группу" aria-label="Добавить группу"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M3 7h6l2 2h10v10H3zM12 12v5M9.5 14.5h5"/></svg></button>
-        <button type="button" id="links-new" class="tool accent" data-tip="Добавить ссылку" aria-label="Добавить ссылку"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14"/></svg></button>
+        <span class="foot-tools" data-for="look"><label class="tool accent" for="wall-file" data-tip="Загрузить своё фото" aria-label="Загрузить своё фото"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg></label></span>
+        <span class="foot-tools" data-for="links" hidden><button type="button" id="groups-new" class="tool" data-tip="Добавить группу" aria-label="Добавить группу"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M3 7h6l2 2h10v10H3zM12 12v5M9.5 14.5h5"/></svg></button>
+        <button type="button" id="links-new" class="tool accent" data-tip="Добавить ссылку" aria-label="Добавить ссылку"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14"/></svg></button></span>
       </div>
     </div>
   </div>
