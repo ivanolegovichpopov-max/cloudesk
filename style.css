@@ -1132,8 +1132,13 @@ input.bad { border-color: var(--danger) !important; }
 .tk-board.week .tk { padding-right: 6px; gap: 6px; }
 .tk-board.week .tk-acts { display: none; }
 .tk-board.week .tk-grip { display: none; }
-.tk-board.week .tk-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tk-board.week .tk-meta { flex-wrap: nowrap; overflow: hidden; }
+/* в неделе карточки выше: название до двух строк, срок и значки переносятся — ничего не обрезается;
+   все карточки и пустые места одной высоты: 8 + 40 + 2 + 32 + 8 = 90 px */
+.tk-board.week { --tk-row: 90px; }
+.tk-board.week .tk { height: var(--tk-row); }
+.tk-board.week .tk-title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.tk-board.week .tk-meta { flex-wrap: wrap; white-space: normal; max-height: 32px; overflow: hidden; }
+.tk-board.week .tk-desc { display: none; }
 .tk-rest { margin-top: 4px; }
 /* в широком поле вторая строка тоже в одну строку: срок, значки, серия, начало описания */
 .tk-board .tk-meta { flex-wrap: nowrap; overflow: hidden; white-space: nowrap; }
