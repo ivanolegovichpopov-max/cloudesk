@@ -457,6 +457,7 @@ html:has(.dragging), html:has(.dragging) * { cursor: grabbing !important; user-s
 .dropped { animation: fade-in .2s ease-out; }
 /* пустая группа — место, куда можно перетащить ссылку */
 .lg-links:empty, .lg-links:has(> .drag-ph:only-child) { min-height: 40px; border: 1px dashed var(--line); border-radius: var(--r); }
+.lg-links:empty::before { content: "Перетащите сюда ссылки"; display: grid; place-items: center; height: 40px; font-size: 12px; color: var(--ink-dim); }
 .city-item .grip { margin-left: -6px; }
 .foot-tools { display: inline-flex; align-items: center; gap: 2px; }
 .tool.accent { color: var(--accent); }
