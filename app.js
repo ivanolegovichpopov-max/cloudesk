@@ -186,7 +186,7 @@
       const scroller = o.scroller ? o.scroller() : null;
       const place = (x, y) => {
         // в сетке (поля, карточки) элемент двигается свободно; в списке — только вверх-вниз
-        item.style.transform = o.grid ? "translate(" + (x - dx0 - r.left) + "px," + (y - dy0 - r.top) + "px)" : "translateY(" + (y - dy0 - r.top) + "px)";
+        item.style.transform = o.grid || o.free ? "translate(" + (x - dx0 - r.left) + "px," + (y - dy0 - r.top) + "px)" : "translateY(" + (y - dy0 - r.top) + "px)";
         const el = document.elementFromPoint(x, y);
         if (!el || !root.contains(el)) return;
         const over = el.closest(o.item);
@@ -1076,7 +1076,8 @@
   let tkDragFrom = null;
   $("board").addEventListener("pointerdown", (e) => { const g = e.target.closest && e.target.closest(".tk-grip"); tkDragFrom = g ? g.closest(".tk-list") : null; }, true);
   sortable($("board"), {
-    item: ".tk:not(.is-done)", handle: ".tk-grip", list: ".tk-list:not(.done-list)",
+    // free: строка задачи едет за курсором и вбок — в другую колонку или день
+    item: ".tk:not(.is-done)", handle: ".tk-grip", list: ".tk-list:not(.done-list)", free: true,
     onDrop: (el) => {
       const ol = el.closest(".tk-list");
       if (!tkDragFrom || ol === tkDragFrom || ol.dataset.drop === tkDragFrom.dataset.drop) { saveTaskOrder(ol); return; }

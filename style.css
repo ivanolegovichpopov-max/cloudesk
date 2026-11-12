@@ -1131,7 +1131,8 @@ input.bad { border-color: var(--danger) !important; }
 /* узкие колонки недели: без значков при наведении, название в одну строку с многоточием */
 .tk-board.week .tk { padding-right: 6px; gap: 6px; }
 .tk-board.week .tk-acts { display: none; }
-.tk-board.week .tk-grip { display: none; }
+/* ручка ⋮⋮ в неделе — в правом верхнем углу карточки, место в строке не занимает: берёте и переносите на другой день */
+.tk-board.week .tk .tk-grip { position: absolute; top: 4px; right: 2px; width: 20px; height: 20px; }
 /* в неделе карточки выше: название до двух строк, срок и значки переносятся — ничего не обрезается;
    все карточки и пустые места одной высоты: 8 + 40 + 2 + 32 + 8 = 90 px */
 .tk-board.week { --tk-row: 90px; }
