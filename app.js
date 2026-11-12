@@ -465,6 +465,7 @@
     note: "M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 16h5",
     plus: "M12 5v14M5 12h14",
     pin: "M9 3h6l-1 6 4 4H6l4-4zM11 13h2v8h-2z",
+    set: "M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4",
   };
   const svgIco = (d, s = 16, w = 1.8) => '<svg viewBox="0 0 24 24" width="' + s + '" height="' + s + '" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="' + w + '" stroke-linecap="round" stroke-linejoin="round" d="' + d + '"/></svg>';
   const noteTitle = (it) => ((it.body || "").split("\n")[0] || "").trim() || "Без заголовка";
@@ -546,14 +547,17 @@
       el.className = "fld"; el.dataset.id = f.id; el.dataset.span = String(f.span);
       const head = document.createElement("div"); head.className = "fld-head";
       const g = gripBtn("Поле «" + f.title + "»"); g.classList.add("fld-grip");
-      const title = document.createElement("button");
-      title.type = "button"; title.className = "fld-title"; title.dataset.tip = "Настроить поле";
-      const tt = document.createElement("span"); tt.className = "fld-name"; tt.textContent = f.title || (app ? app.name : "Поле");
+      // заголовок — название приложения, просто текст; настройки — значок, появляется при наведении
+      const title = document.createElement("h2"); title.className = "fld-title";
+      const tt = document.createElement("span"); tt.className = "fld-name"; tt.textContent = app ? app.name : "Поле";
       title.append(tt);
       const n = app && app.count ? app.count(f) : 0;
       if (n) { const cnt = document.createElement("span"); cnt.className = "count"; cnt.textContent = String(n); title.append(cnt); }
-      title.addEventListener("click", () => openField(f.id));
-      head.append(g, title);
+      const set = document.createElement("button");
+      set.type = "button"; set.className = "tool fld-set"; set.dataset.tip = "Настройки поля"; set.setAttribute("aria-label", "Настройки поля «" + tt.textContent + "»");
+      set.innerHTML = svgIco(IC.set, 18);
+      set.addEventListener("click", () => openField(f.id));
+      head.append(g, title, set);
       if (app && app.add) {
         const add = document.createElement("button");
         add.type = "button"; add.className = "icon-primary fld-add";
@@ -629,7 +633,6 @@
       if (!b.dataset.tip) delete b.dataset.tip;
       b.setAttribute("aria-checked", String(n === fd.span));
     });
-    $("sec-title").placeholder = a ? a.name : "Название";
   }
   function openField(id) {
     closeMenus(null);
@@ -637,8 +640,7 @@
     fd.id = f ? f.id : null; fd.app = f ? f.app : APP_ORDER[0];
     const a = APPS[fd.app];
     fd.span = f ? f.span : a.spans[a.spans.length - 1];
-    $("sec-h").textContent = f ? "Поле" : "Новое поле";
-    $("sec-title").value = f ? f.title : "";
+    $("sec-h").textContent = f ? "Поле: " + (APPS[f.app] ? APPS[f.app].name : "") : "Новое поле";
     $("sec-status").textContent = "";
     $("sec-delete").hidden = !f;
     $("sec-confirm").hidden = true; $("sec-actions").hidden = false;
@@ -653,7 +655,7 @@
     try {
       const f = fd.id ? state.sections.find((x) => x.id === fd.id) : null;
       const a = APPS[fd.app];
-      const title = ($("sec-title").value.trim() || (a ? a.name : "Поле")).slice(0, 40);
+      const title = (a ? a.name : "Поле").slice(0, 40); // поле называется по приложению
       if (!f) {
         $("sec-status").textContent = "Сохраняю…";
         const pos = state.sections.reduce((m, x) => Math.max(m, x.position), -1) + 1;
@@ -663,7 +665,6 @@
         renderBoard();
       } else {
         const patch = {};
-        if (title !== f.title) patch.title = title;
         if (fd.span !== f.span) patch.span = fd.span;
         if (Object.keys(patch).length) {
           $("sec-status").textContent = "Сохраняю…";
@@ -678,7 +679,6 @@
       lockSheets(false);
     } finally { fldClosing = false; }
   }
-  $("sec-title").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); closeField(); } });
   $("secsheet").querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", closeField));
   $("sec-delete").addEventListener("click", () => {
     const n = state.items.filter((it) => it.section_id === fd.id).length;
@@ -1977,7 +1977,7 @@
     if (!q) { hidePop(); return; }
     const groups = [];
     // заметки; во второй строке — поле и фрагмент текста
-    const fieldName = (it) => { const s = state.sections.find((x) => x.id === it.section_id); return s ? s.title : ""; };
+    const fieldName = () => "";
     const notes = state.items.filter((it) => it.type === "note" && norm(it.body).includes(q)).slice(0, 6).map((it) => {
       const title = noteTitle(it);
       const extra = norm(title).includes(q) ? snippet(noteSub(it), "") : snippet(noteSub(it), q);

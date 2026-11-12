@@ -797,10 +797,14 @@ html:has(.dragging) .fade-scroll { -webkit-mask-image: none; mask-image: none; }
 .fld-grip { width: 24px; margin-left: -6px; opacity: 0; }
 .fld:hover .fld-grip, .fld-grip:focus-visible { opacity: .75; }
 .fld-title {
-  flex: 1; min-width: 0; display: flex; align-items: center; gap: 0; height: 36px; padding: 0 8px; margin-left: -4px;
-  border: 0; border-radius: var(--r); background: transparent; color: var(--ink); font-size: 15px; font-weight: 600; text-align: left;
+  flex: 1; min-width: 0; display: flex; align-items: center; height: 36px; margin: 0; padding: 0 2px;
+  color: var(--ink); font-size: 15px; font-weight: 600;
 }
-.fld-title:hover { background: var(--hover); }
+/* значок настроек — справа, рядом с «+», виден при наведении на поле (на сенсорных экранах — всегда) */
+.fld-set { opacity: 0; }
+.fld:hover .fld-set, .fld-set:focus-visible, .fld-set[aria-expanded="true"] { opacity: .75; }
+.fld-set:hover { opacity: 1; }
+@media (hover: none) { .fld-set { opacity: .75; } .fld-grip { opacity: .5; } }
 .fld-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fld-body { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding-bottom: 12px; }
 .fld-empty { height: 100%; display: grid; place-items: center; font-size: 14px; color: var(--ink-dim); }
