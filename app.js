@@ -1011,8 +1011,9 @@
     });
   }
 
-  /* ---------- Быстрые ссылки ---------- */
+  /* ---------- Быстрые ссылки (с группами) ---------- */
   state.links = [];
+  state.groups = [];
   function normUrl(u) {
     u = (u || "").trim();
     if (!u) return "";
@@ -1020,6 +1021,7 @@
     try { const x = new URL(u); return /^https?:$/.test(x.protocol) && x.hostname.includes(".") ? x.href : null; } catch (e) { return null; }
   }
   const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch (e) { return u; } };
+  const groupName = (id) => { const g = state.groups.find((x) => x.id === id); return g ? g.name : ""; };
   function linkEl(l, cls) {
     const a = document.createElement("a");
     a.className = cls;
@@ -1030,7 +1032,7 @@
     a.addEventListener("click", () => closeMenus(null));
     return a;
   }
-  // Ссылки — в выпадающем списке у кнопки «Ссылки»
+  // Список «Ссылки»: сначала без группы, затем группы с заголовками (пустые группы не показываем)
   function renderLinks() {
     const list = $("links-menu-list");
     list.textContent = "";
@@ -1041,20 +1043,35 @@
       list.append(e);
       return;
     }
-    state.links.forEach((l) => { const a = linkEl(l, "menu-item link-item"); a.setAttribute("role", "menuitem"); list.append(a); });
+    const sections = [[null, ""]].concat(state.groups.map((g) => [g.id, g.name]));
+    sections.forEach(([gid, name]) => {
+      const items = state.links.filter((l) => (l.group_id || null) === gid);
+      if (!items.length) return;
+      const box = document.createElement("div"); box.className = "links-sec";
+      if (gid) { const h = document.createElement("div"); h.className = "menu-label"; h.textContent = name; box.append(h); }
+      items.forEach((l) => { const a = linkEl(l, "menu-item link-item"); a.setAttribute("role", "menuitem"); box.append(a); });
+      list.append(box);
+    });
   }
 
   async function loadLinks() {
-    const { data, error } = await sb.from("links").select("id,title,url,position").order("position").order("created_at");
-    if (!error) { state.links = data || []; renderLinks(); }
+    const [g, l] = await Promise.all([
+      sb.from("link_groups").select("id,name,position").order("position").order("created_at"),
+      sb.from("links").select("id,title,url,position,group_id").order("position").order("created_at"),
+    ]);
+    if (!g.error) state.groups = g.data || [];
+    if (!l.error) state.links = l.data || [];
+    renderLinks();
   }
 
-  // Окно настройки: правим черновик, сохраняем при закрытии
-  let draft = [], linksClosing = false, newSeq = 0;
+  /* Окно настройки: правим черновик, сохраняем при закрытии */
+  let draft = [], dgroups = [], linksClosing = false, newSeq = 0, focusNext = null;
+  const tmp = () => "new" + ++newSeq;
   function openLinks() {
     closeMenus(null);
-    draft = state.links.map((l) => ({ id: l.id, title: l.title, url: l.url, removed: false }));
-    if (!draft.length) draft.push({ id: "new" + ++newSeq, title: "", url: "", removed: false, isNew: true });
+    dgroups = state.groups.map((g) => ({ id: g.id, name: g.name, removed: false }));
+    draft = state.links.map((l) => ({ id: l.id, title: l.title, url: l.url, gid: l.group_id || null, removed: false }));
+    if (!draft.length && !dgroups.length) { const d = { id: tmp(), title: "", url: "", gid: null, removed: false, isNew: true }; draft.push(d); focusNext = d.id; }
     $("links-status").textContent = "";
     renderDraft();
     animShow($("linksheet"));
@@ -1064,74 +1081,205 @@
   $("btn-links").addEventListener("click", openLinks);
 
   const ICON = (d, size = 16) => '<svg viewBox="0 0 24 24" width="' + size + '" height="' + size + '" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="' + d + '"/></svg>';
-  function renderDraft(focusId) {
-    const ol = $("links-list");
-    ol.textContent = "";
-    draft.forEach((d, i) => {
-      const li = document.createElement("li");
-      li.className = "link-row" + (d.removed ? " removed" : "") + (d.bad ? " bad" : "");
-      if (d.isNew && d.id === focusId) li.classList.add("fade-in");
-      const move = document.createElement("div"); move.className = "link-move";
-      const up = document.createElement("button"); up.type = "button"; up.className = "tool"; up.innerHTML = ICON("M6 15l6-6 6 6"); up.dataset.tip = "Выше"; up.setAttribute("aria-label", "Выше"); up.disabled = i === 0;
-      const dn = document.createElement("button"); dn.type = "button"; dn.className = "tool"; dn.innerHTML = ICON("M6 9l6 6 6-6"); dn.dataset.tip = "Ниже"; dn.setAttribute("aria-label", "Ниже"); dn.disabled = i === draft.length - 1;
-      up.addEventListener("click", () => { [draft[i - 1], draft[i]] = [draft[i], draft[i - 1]]; renderDraft(); });
-      dn.addEventListener("click", () => { [draft[i + 1], draft[i]] = [draft[i], draft[i + 1]]; renderDraft(); });
-      move.append(up, dn);
-      const fields = document.createElement("div"); fields.className = "link-fields";
-      const t = document.createElement("input"); t.type = "text"; t.maxLength = 40; t.placeholder = "Название"; t.value = d.title; t.disabled = d.removed;
-      t.setAttribute("aria-label", "Название ссылки");
-      const u = document.createElement("input"); u.type = "text"; u.maxLength = 500; u.placeholder = "Адрес, например rentikacrm.com"; u.value = d.url; u.disabled = d.removed;
-      u.setAttribute("aria-label", "Адрес ссылки"); u.inputMode = "url"; u.autocomplete = "off"; u.spellcheck = false;
-      t.addEventListener("input", () => { d.title = t.value; d.bad = false; li.classList.remove("bad"); });
-      u.addEventListener("input", () => { d.url = u.value; d.bad = false; li.classList.remove("bad");
-        if (!d.title.trim() && !d.titleTouched) { /* название подставим из адреса при сохранении */ } });
-      t.addEventListener("change", () => (d.titleTouched = true));
-      fields.append(t, u);
-      const act = document.createElement("button"); act.type = "button"; act.className = "tool";
-      if (d.removed) { act.innerHTML = ICON("M9 14l-4-4 4-4M5 10h9a5 5 0 0 1 0 10h-2"); act.dataset.tip = "Вернуть"; act.setAttribute("aria-label", "Вернуть"); act.addEventListener("click", () => { d.removed = false; renderDraft(); }); }
-      else { act.innerHTML = ICON("M6 6l12 12M18 6 6 18"); act.dataset.tip = "Удалить"; act.setAttribute("aria-label", "Удалить"); act.addEventListener("click", () => { if (d.isNew) draft.splice(i, 1); else d.removed = true; renderDraft(); }); }
-      li.append(move, fields, act);
-      if (d.removed) { const note = document.createElement("div"); note.className = "link-removed-note"; note.textContent = "Будет удалена при закрытии"; fields.append(note); }
-      ol.append(li);
-      if (d.id === focusId) setTimeout(() => (d.title ? u : t).focus(), 20);
-    });
-    $("links-new").disabled = draft.filter((d) => !d.removed).length >= 30;
+  const P = { up: "M6 15l6-6 6 6", down: "M6 9l6 6 6-6", x: "M6 6l12 12M18 6 6 18", undo: "M9 14l-4-4 4-4M5 10h9a5 5 0 0 1 0 10h-2", folder: "M3 7h6l2 2h10v10H3z", plus: "M12 5v14M5 12h14", check: "M5 12.5l4.5 4.5L19 7.5" };
+  function tool(path, tip, onClick, disabled) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "tool"; b.innerHTML = ICON(path);
+    b.dataset.tip = tip; b.setAttribute("aria-label", tip); b.disabled = !!disabled;
+    if (onClick) b.addEventListener("click", onClick);
+    return b;
   }
-  $("links-new").addEventListener("click", () => {
-    const d = { id: "new" + ++newSeq, title: "", url: "", removed: false, isNew: true };
-    draft.push(d); renderDraft(d.id);
-    const ol = $("links-list"); ol.scrollTop = ol.scrollHeight;
+  const liveGroups = () => dgroups.filter((g) => !g.removed);
+
+  function renderDraft() {
+    const box = $("links-list");
+    const keepScroll = box.scrollTop;
+    box.textContent = "";
+    const hasGroups = liveGroups().length > 0;
+    const sections = [{ id: null, name: "Без группы" }].concat(dgroups);
+    sections.forEach((g, gi) => {
+      const sec = document.createElement("section");
+      sec.className = "lg-sec" + (g.removed ? " removed" : "");
+      const links = draft.filter((d) => d.gid === g.id);
+      if (g.id === null && !hasGroups && !links.length) return;
+      // заголовок секции
+      if (g.id === null) {
+        if (hasGroups) { const h = document.createElement("div"); h.className = "lg-head plain"; h.textContent = "Без группы"; sec.append(h); }
+      } else {
+        const h = document.createElement("div"); h.className = "lg-head" + (g.bad ? " bad" : "");
+        const idx = dgroups.indexOf(g);
+        const move = document.createElement("div"); move.className = "link-move";
+        move.append(
+          tool(P.up, "Группу выше", () => { [dgroups[idx - 1], dgroups[idx]] = [dgroups[idx], dgroups[idx - 1]]; renderDraft(); }, idx === 0 || g.removed),
+          tool(P.down, "Группу ниже", () => { [dgroups[idx + 1], dgroups[idx]] = [dgroups[idx], dgroups[idx + 1]]; renderDraft(); }, idx === dgroups.length - 1 || g.removed));
+        const name = document.createElement("input");
+        name.type = "text"; name.maxLength = 40; name.placeholder = "Название группы"; name.value = g.name; name.disabled = g.removed;
+        name.className = "lg-name"; name.setAttribute("aria-label", "Название группы");
+        name.addEventListener("input", () => { g.name = name.value; g.bad = false; h.classList.remove("bad"); });
+        const count = document.createElement("span"); count.className = "lg-count"; count.textContent = links.length ? String(links.length) : "";
+        const act = g.removed
+          ? tool(P.undo, "Вернуть группу", () => { g.removed = false; (g.moved || []).forEach((id) => { const d = draft.find((x) => x.id === id); if (d) d.gid = g.id; }); g.moved = []; renderDraft(); })
+          : tool(P.x, "Удалить группу", () => {
+              if (g.isNew && !links.length) { dgroups.splice(idx, 1); renderDraft(); return; }
+              g.removed = true; g.moved = links.map((d) => d.id); links.forEach((d) => (d.gid = null)); renderDraft();
+            });
+        h.append(move, name, count, act);
+        sec.append(h);
+        if (g.removed) { const n = document.createElement("div"); n.className = "link-removed-note"; n.textContent = "Группа будет удалена при закрытии, её ссылки перейдут в «Без группы»"; sec.append(n); }
+        if (g.id === focusNext) setTimeout(() => name.focus(), 20);
+      }
+      if (!g.removed) {
+        const ol = document.createElement("ol"); ol.className = "lg-links";
+        links.forEach((d, li) => ol.append(linkRow(d, links, li)));
+        sec.append(ol);
+        const add = document.createElement("button");
+        add.type = "button"; add.className = "lg-add"; add.innerHTML = ICON(P.plus) + "<span>Ссылка</span>";
+        add.disabled = draft.filter((x) => !x.removed).length >= 30;
+        add.addEventListener("click", () => { const d = { id: tmp(), title: "", url: "", gid: g.id, removed: false, isNew: true }; draft.push(d); focusNext = d.id; renderDraft(); });
+        sec.append(add);
+      }
+      box.append(sec);
+    });
+    box.scrollTop = keepScroll;
+    $("groups-new").disabled = liveGroups().length >= 15;
+    focusNext = null;
+  }
+
+  function linkRow(d, siblings, li) {
+    const row = document.createElement("li");
+    row.className = "link-row" + (d.removed ? " removed" : "") + (d.bad ? " bad" : "");
+    if (d.id === focusNext) row.classList.add("fade-in");
+    const swap = (other) => { const a = draft.indexOf(d), b = draft.indexOf(other); [draft[a], draft[b]] = [draft[b], draft[a]]; renderDraft(); };
+    const move = document.createElement("div"); move.className = "link-move";
+    move.append(tool(P.up, "Выше", () => swap(siblings[li - 1]), li === 0), tool(P.down, "Ниже", () => swap(siblings[li + 1]), li === siblings.length - 1));
+    const fields = document.createElement("div"); fields.className = "link-fields";
+    const t = document.createElement("input"); t.type = "text"; t.maxLength = 40; t.placeholder = "Название"; t.value = d.title; t.disabled = d.removed; t.setAttribute("aria-label", "Название ссылки");
+    const u = document.createElement("input"); u.type = "text"; u.maxLength = 500; u.placeholder = "Адрес, например rentikacrm.com"; u.value = d.url; u.disabled = d.removed;
+    u.setAttribute("aria-label", "Адрес ссылки"); u.inputMode = "url"; u.autocomplete = "off"; u.spellcheck = false;
+    t.addEventListener("input", () => { d.title = t.value; });
+    u.addEventListener("input", () => { d.url = u.value; d.bad = false; row.classList.remove("bad"); });
+    fields.append(t, u);
+    if (d.removed) { const note = document.createElement("div"); note.className = "link-removed-note"; note.textContent = "Будет удалена при закрытии"; fields.append(note); }
+    const acts = document.createElement("div"); acts.className = "link-acts";
+    if (!d.removed) {
+      const gb = tool(P.folder, "Перенести в группу", null, !liveGroups().length);
+      gb.dataset.menu = "lg-pop"; gb.setAttribute("aria-haspopup", "listbox"); gb.setAttribute("aria-expanded", "false");
+      gb.addEventListener("click", (e) => { e.stopPropagation(); openGroupPick(gb, d); });
+      acts.append(gb);
+      acts.append(tool(P.x, "Удалить", () => { if (d.isNew) draft.splice(draft.indexOf(d), 1); else d.removed = true; renderDraft(); }));
+    } else acts.append(tool(P.undo, "Вернуть", () => { d.removed = false; renderDraft(); }));
+    row.append(move, fields, acts);
+    if (d.id === focusNext) setTimeout(() => (d.title ? u : t).focus(), 20);
+    return row;
+  }
+
+  // Выбор группы для ссылки: свой список, открывается у кнопки с папкой
+  function openGroupPick(btn, d) {
+    const pop = $("lg-pop");
+    const wasOpen = !pop.hidden && pop._for === d.id;
+    closeMenus(null);
+    if (wasOpen) return;
+    pop._for = d.id;
+    pop.textContent = "";
+    const h = document.createElement("div"); h.className = "menu-label"; h.textContent = "Перенести в группу"; pop.append(h);
+    [{ id: null, name: "Без группы" }].concat(liveGroups()).forEach((g) => {
+      const it = document.createElement("button");
+      it.type = "button"; it.className = "menu-item"; it.setAttribute("role", "option");
+      it.setAttribute("aria-checked", String(d.gid === g.id));
+      const span = document.createElement("span"); span.textContent = g.name || "Без названия";
+      it.append(span);
+      it.insertAdjacentHTML("beforeend", '<svg class="check" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="' + P.check + '"/></svg>');
+      it.addEventListener("click", () => {
+        closeMenus(null);
+        if (d.gid === g.id) return;
+        d.gid = g.id; draft.splice(draft.indexOf(d), 1); draft.push(d); renderDraft();
+      });
+      pop.append(it);
+    });
+    const r = btn.getBoundingClientRect();
+    pop.style.left = Math.max(8, Math.min(r.right - 220, window.innerWidth - 228)) + "px";
+    animShow(pop);
+    const ph = pop.offsetHeight;
+    const below = r.bottom + 4 + ph < window.innerHeight - 8;
+    pop.style.top = (below ? r.bottom + 4 : Math.max(8, r.top - 4 - ph)) + "px";
+    pop.classList.toggle("pop-up", !below);
+    btn.setAttribute("aria-expanded", "true");
+  }
+  $("links-list").addEventListener("scroll", () => closeMenus(null), { passive: true });
+
+  $("groups-new").addEventListener("click", () => {
+    const g = { id: tmp(), name: "", removed: false, isNew: true };
+    dgroups.push(g); focusNext = g.id; renderDraft();
+    const box = $("links-list"); box.scrollTop = box.scrollHeight;
   });
 
   async function closeLinks() {
     if (linksClosing) return;
     linksClosing = true;
     try {
-      // проверка: у каждой заполненной строки должен быть правильный адрес
+      closeMenus(null);
+      // 1) проверка
       let bad = 0;
-      const keep = [];
+      const keepLinks = [];
       for (const d of draft) {
+        d.bad = false;
         if (d.removed) continue;
-        if (!d.title.trim() && !d.url.trim()) continue; // пустая строка — просто не сохраняем
+        if (!d.title.trim() && !d.url.trim()) continue; // пустая строка — не сохраняем
         const url = normUrl(d.url);
         if (!url) { d.bad = true; bad++; continue; }
-        keep.push({ d, url, title: (d.title.trim() || hostOf(url)).slice(0, 40) });
+        keepLinks.push({ d, url, title: (d.title.trim() || hostOf(url)).slice(0, 40) });
       }
-      if (bad) { renderDraft(); $("links-status").textContent = bad === 1 ? "Проверьте адрес ссылки" : "Проверьте адреса ссылок"; return; }
+      const keepGroups = [];
+      for (const g of dgroups) {
+        g.bad = false;
+        if (g.removed) continue;
+        const used = keepLinks.some((k) => k.d.gid === g.id);
+        if (!g.name.trim()) {
+          if (used || !g.isNew) { g.bad = true; bad++; }
+          continue; // новая пустая группа без названия — просто не создаём
+        }
+        keepGroups.push(g);
+      }
+      if (bad) { renderDraft(); $("links-status").textContent = "Заполните отмеченное красным"; return; }
       $("links-status").textContent = "Сохраняю…";
+
+      // 2) группы: удаление, создание (нужны настоящие id), переименование и порядок
+      const idMap = {};
+      const errs = [];
+      const chk = (r) => { if (r && r.error) errs.push(r.error); return r; };
+      await Promise.all(dgroups.filter((g) => g.removed && !g.isNew).map((g) => sb.from("link_groups").delete().eq("id", g.id).then(chk)));
+      await Promise.all(keepGroups.map(async (g, i) => {
+        const name = g.name.trim().slice(0, 40);
+        if (g.isNew) {
+          const r = chk(await sb.from("link_groups").insert({ name, position: i }).select("id").single());
+          if (r.data) { idMap[g.id] = r.data.id; g.id = r.data.id; g.isNew = false; }
+        } else {
+          const o = state.groups.find((x) => x.id === g.id);
+          if (!o || o.name !== name || o.position !== i) chk(await sb.from("link_groups").update({ name, position: i }).eq("id", g.id));
+        }
+      }));
+      draft.forEach((d) => { if (d.gid && idMap[d.gid]) d.gid = idMap[d.gid]; });
+
+      // 3) ссылки: порядок — сначала «Без группы», затем по группам
+      const order = [null].concat(keepGroups.map((g) => g.id));
+      const sorted = [];
+      order.forEach((gid) => keepLinks.filter((k) => k.d.gid === gid).forEach((k) => sorted.push(k)));
+      keepLinks.filter((k) => !order.includes(k.d.gid)).forEach((k) => { k.d.gid = null; sorted.push(k); });
       const ops = [];
-      for (const d of draft) if (d.removed && !d.isNew) ops.push(sb.from("links").delete().eq("id", d.id));
-      keep.forEach(({ d, url, title }, i) => {
-        const orig = state.links.find((l) => l.id === d.id);
-        if (d.isNew) ops.push(sb.from("links").insert({ title, url, position: i }));
-        else if (!orig || orig.title !== title || orig.url !== url || orig.position !== i) ops.push(sb.from("links").update({ title, url, position: i }).eq("id", d.id));
+      for (const d of draft) if (d.removed && !d.isNew) ops.push(sb.from("links").delete().eq("id", d.id).then(chk));
+      sorted.forEach(({ d, url, title }, i) => {
+        const gid = d.gid && !String(d.gid).startsWith("new") ? d.gid : null;
+        const o = state.links.find((l) => l.id === d.id);
+        if (d.isNew) ops.push(sb.from("links").insert({ title, url, position: i, group_id: gid }).then(chk));
+        else if (!o || o.title !== title || o.url !== url || o.position !== i || (o.group_id || null) !== gid)
+          ops.push(sb.from("links").update({ title, url, position: i, group_id: gid }).eq("id", d.id).then(chk));
       });
-      const res = await Promise.all(ops);
-      const err = res.find((r) => r.error);
+      await Promise.all(ops);
       await loadLinks();
-      if (err) {
-        console.error(err.error);
-        draft = state.links.map((l) => ({ id: l.id, title: l.title, url: l.url, removed: false }));
+      if (errs.length) {
+        console.error(errs[0]);
+        dgroups = state.groups.map((g) => ({ id: g.id, name: g.name, removed: false }));
+        draft = state.links.map((l) => ({ id: l.id, title: l.title, url: l.url, gid: l.group_id || null, removed: false }));
         renderDraft();
         $("links-status").textContent = "Сохранилось не всё — проверьте интернет и нажмите «Готово» ещё раз";
         return;
@@ -1205,7 +1353,7 @@
       resultEl("rem", r.text, fmtRem.format(new Date(r.remind_at)) + (r.sent_at ? " · отправлено" : ""), q, () => openTime("rem")));
     if (rems.length) groups.push(["Напоминания", rems]);
     const links = state.links.filter((l) => norm(l.title).includes(q) || norm(l.url).includes(q)).slice(0, 6).map((l) =>
-      resultEl("link", l.title, hostOf(l.url), q, null, l.url));
+      resultEl("link", l.title, (l.group_id && groupName(l.group_id) ? groupName(l.group_id) + " · " : "") + hostOf(l.url), q, null, l.url));
     if (links.length) groups.push(["Ссылки", links]);
     if (!groups.length) {
       const e = document.createElement("div"); e.className = "menu-empty";

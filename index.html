@@ -335,18 +335,21 @@
       </div>
     </div>
     <div class="links-edit">
-      <ol id="links-list" class="links-list"></ol>
-      <button type="button" id="links-new" class="upload-tile row-tile">
-        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
-        <span>Добавить ссылку</span>
+      <div id="links-list" class="links-list"></div>
+      <button type="button" id="groups-new" class="upload-tile row-tile">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M3 7h6l2 2h10v10H3zM12 12v5M9.5 14.5h5"/></svg>
+        <span>Добавить группу</span>
       </button>
     </div>
     <div class="sheet-foot">
-      <p class="hint">Ссылки показываются в шапке в этом порядке и открываются в новой вкладке. Изменения сохраняются при закрытии.</p>
+      <p class="hint">Ссылки показываются в списке «Ссылки» по группам и в этом порядке. Перенести ссылку в другую группу — кнопка с папкой. Изменения сохраняются при закрытии.</p>
       <div class="foot-actions"><button type="button" class="btn-primary" data-close>Готово</button></div>
     </div>
   </div>
 </div>
+
+<!-- выбор группы для ссылки (вне окна, чтобы список не обрезался прокруткой) -->
+<div id="lg-pop" class="pop lg-pop" role="listbox" hidden></div>
 
 <div id="toast" class="toast" role="alert" hidden></div>
 
