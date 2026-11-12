@@ -672,7 +672,7 @@ button:disabled { cursor: default; opacity: .45; }
 button, .pick-btn, .top-btn, .menu-item, .preset, .upload-tile, .note, .cal-day, .dp-day, .tp-item, .tabs button, .segmented button, .chips button, .tool, .clock, input, textarea {
   transition: background-color .12s ease, border-color .12s ease, color .12s ease, opacity .12s ease, transform .08s ease;
 }
-button:active:not(:disabled), .upload-tile:active { transform: scale(.97); }
+button:active:not(:disabled):not(.switch-row), .upload-tile:active { transform: scale(.97); }
 .note:active, .preset:active, .cal-day:active { transform: scale(.985); }
 .note-sheet { transition: background-color .2s ease, color .2s ease; }
 
