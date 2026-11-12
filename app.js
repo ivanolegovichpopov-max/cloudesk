@@ -42,7 +42,6 @@
     b.addEventListener("click", async (e) => {
       e.stopPropagation();
       applyTheme(b.dataset.themeSet);
-      closeMenus(null);
       try { await saveSettings({ theme: b.dataset.themeSet }); }
       catch (err) { console.error(err); toast("Тема не сохранилась. Попробуйте ещё раз."); }
     }));
@@ -184,7 +183,8 @@
   function renderUser() {
     const p = state.profile || {};
     const name = [p.first_name, p.last_name].filter(Boolean).join(" ") || p.username || "Вы";
-    $("user-name").textContent = p.first_name || name;
+    $("user-name").textContent = name;
+    $("user-handle").textContent = p.username ? "@" + p.username : "Telegram";
     const ava = $("user-ava");
     ava.textContent = "";
     ava.style.backgroundImage = "";
@@ -193,11 +193,6 @@
     } else {
       ava.textContent = name.trim().charAt(0).toUpperCase();
     }
-    const who = $("menu-who");
-    who.textContent = "";
-    const b = document.createElement("b");
-    b.textContent = name;
-    who.append(b, document.createTextNode(p.username ? "@" + p.username : "Telegram"));
   }
 
   // Выпадающие меню верхней панели: открыто не больше одного, клик вне меню закрывает его
