@@ -2,6 +2,9 @@
 (function () {
   try {
     var t = localStorage.getItem("cloudesk-theme");
+    // заставка, которая была в прошлый раз, — сразу, без мелькания первой картинки
+    var w = localStorage.getItem("cloudesk-wall");
+    document.documentElement.setAttribute("data-wall", /^[a-z]{3,12}$/.test(w || "") ? w : "dusk");
     if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
     var a = JSON.parse(localStorage.getItem("cloudesk-accent") || "null");
     if (a && /^#[0-9a-f]{6}$/i.test(a.l) && /^#[0-9a-f]{6}$/i.test(a.d)) {

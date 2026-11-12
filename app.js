@@ -619,7 +619,7 @@
   /* ---------- Заставка ---------- */
   function setWall(preset, url) {
     const wall = $("wall");
-    if (!reduceMotion && document.body.dataset.wallReady) {
+    if (!reduceMotion && document.documentElement.dataset.wallReady) {
       const old = wall.cloneNode(false);
       old.removeAttribute("id");
       old.style.backgroundImage = getComputedStyle(wall).backgroundImage;
@@ -629,13 +629,15 @@
       setTimeout(() => old.remove(), 450);
       colorFade();
     }
-    document.body.dataset.wallReady = "1";
+    document.documentElement.dataset.wallReady = "1";
     if (url) {
-      document.body.dataset.wall = "custom";
+      document.documentElement.dataset.wall = "custom";
+      store.set("cloudesk-wall", "custom");
       wall.style.backgroundImage = 'url("' + url + '")';
     } else {
       const p = PRESETS.find((x) => x.id === preset) || PRESETS[0];
-      document.body.dataset.wall = p.id;
+      document.documentElement.dataset.wall = p.id;
+      store.set("cloudesk-wall", p.id);
       wall.style.backgroundImage = "";
       setAccent(p.h, p.s);
     }
@@ -685,7 +687,7 @@
   // наступила новая неделя, пока стол открыт
   setInterval(() => {
     const s = state.settings;
-    if (s && s.wallpaper_weekly && !s.wallpaper_path && document.body.dataset.wall !== shownPreset()) setWall(shownPreset(), null);
+    if (s && s.wallpaper_weekly && !s.wallpaper_path && document.documentElement.dataset.wall !== shownPreset()) setWall(shownPreset(), null);
   }, 60000);
 
   async function saveSettings(patch) {
@@ -722,12 +724,12 @@
     probe.className = "wall";
     probe.style.visibility = "hidden";
     document.body.append(probe);
-    const was = document.body.dataset.wall;
+    const was = document.documentElement.dataset.wall;
     document.querySelectorAll(".preset").forEach((b) => {
-      document.body.dataset.wall = b.dataset.preset;
+      document.documentElement.dataset.wall = b.dataset.preset;
       b.style.backgroundImage = getComputedStyle(probe).backgroundImage;
     });
-    document.body.dataset.wall = was;
+    document.documentElement.dataset.wall = was;
     probe.remove();
   }
 
