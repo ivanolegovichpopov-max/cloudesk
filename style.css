@@ -1067,7 +1067,7 @@ input.bad { border-color: var(--danger) !important; }
 }
 .tk:hover .tk-acts, .tk:focus-within .tk-acts { opacity: 1; pointer-events: auto; }
 .tk-acts .tool { width: 28px; height: 28px; color: var(--ink-dim); }
-.tk-acts .tool:hover { color: var(--ink); }
+.tk-acts .tool:hover, .tk-acts .tool:focus-visible { color: var(--ink); background: transparent; }
 @media (hover: none) { .tk-acts { display: none; } .tk { padding-right: 8px; } }
 .dragging .tk-acts { display: none; }
 /* перетаскиваемая строка — плашкой окна с рамкой акцента; место, куда упадёт, — пунктир */
@@ -1130,12 +1130,12 @@ input.bad { border-color: var(--danger) !important; }
 .tk-board .tk-list:empty, .tk-board .tk-list:has(> .drag-ph:only-child) { border: 1px dashed var(--line); }
 /* узкие колонки недели: без значков при наведении, название в одну строку с многоточием */
 /* справа у карточки недели узкая полоса под значки: сверху ⋮⋮ (перенос), снизу «Удалить»; срок меняется переносом */
-.tk-board.week .tk { padding-right: 26px; gap: 6px; }
-.tk-board.week .tk-acts { top: auto; bottom: 4px; right: 2px; transform: none; }
-.tk-board.week .tk-acts .tool { width: 22px; height: 22px; }
+.tk-board.week .tk { padding-right: 30px; gap: 6px; }
+.tk-board.week .tk-acts { top: auto; bottom: 6px; right: 6px; transform: none; }
+.tk-board.week .tk-acts .tool { width: 20px; height: 20px; }
 .tk-board.week .tk-acts .tool:not(:last-child) { display: none; }
 /* ручка ⋮⋮ в неделе — в правом верхнем углу карточки, место в строке не занимает: берёте и переносите на другой день */
-.tk-board.week .tk .tk-grip { position: absolute; top: 4px; right: 2px; width: 20px; height: 20px; }
+.tk-board.week .tk .tk-grip { position: absolute; top: 6px; right: 6px; width: 20px; height: 20px; }
 /* в неделе карточки выше: название до двух строк, срок и значки переносятся — ничего не обрезается;
    все карточки и пустые места одной высоты: 8 + 40 + 2 + 32 + 8 = 90 px */
 .tk-board.week { --tk-row: 90px; }
