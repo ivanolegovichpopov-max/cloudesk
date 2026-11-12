@@ -1,0 +1,461 @@
+(() => {
+  "use strict";
+
+  const SB_URL = "https://kgfhwjiexhwtxczjkgic.supabase.co";
+  // Публичный ключ: по нему ничего нельзя прочитать без входа, доступ закрыт правилами в базе
+  const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtnZmh3amlleGh3dHhjemprZ2ljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQ0NzU2MzIsImV4cCI6MjExMDA1MTYzMn0.gsIQN79Ca1gdO-e5PmYNEyZcvu1uJ9s1vqgYuOuiL2Q";
+  const BOT_ID = 9064192591;
+  const AUTH_FN = SB_URL + "/functions/v1/tg-auth";
+
+  const PRESETS = [
+    { id: "dusk", name: "Закат" },
+    { id: "apricot", name: "Абрикос" },
+    { id: "lake", name: "Озеро" },
+    { id: "peaks", name: "Горы" },
+    { id: "moss", name: "Мох" },
+    { id: "graphite", name: "Графит" },
+    { id: "night", name: "Ночь" },
+  ];
+
+  const $ = (id) => document.getElementById(id);
+  const sb = window.supabase.createClient(SB_URL, SB_KEY, {
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, storageKey: "cloudesk-auth" },
+  });
+
+  const state = { user: null, profile: null, notes: [], settings: null, wallUrl: null };
+
+  /* ---------- Мелочи ---------- */
+  let toastTimer;
+  function toast(text) {
+    const t = $("toast");
+    t.textContent = text;
+    t.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => (t.hidden = true), 4000);
+  }
+
+  const fmtTime = new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit" });
+  const fmtDate = new Intl.DateTimeFormat("ru-RU", { weekday: "long", day: "numeric", month: "long" });
+  const fmtShort = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  function tick() {
+    const now = new Date();
+    $("clock-time").textContent = fmtTime.format(now);
+    $("clock-date").textContent = fmtDate.format(now);
+  }
+
+  function lockSheets(open) { document.documentElement.style.overflow = open ? "hidden" : ""; }
+
+  /* ---------- Экраны ---------- */
+  function showLogin(msg) {
+    $("desk").hidden = true;
+    $("login").hidden = false;
+    $("login-msg").textContent = msg || "";
+    $("tg-login").disabled = false;
+    setWall("dusk", null);
+  }
+
+  async function showDesk() {
+    $("login").hidden = true;
+    $("desk").hidden = false;
+    tick();
+    await loadAll();
+  }
+
+  /* ---------- Вход через Telegram ---------- */
+  $("tg-login").addEventListener("click", () => {
+    if (!window.Telegram || !window.Telegram.Login) {
+      $("login-msg").textContent = "Не загрузился модуль Telegram. Обновите страницу.";
+      return;
+    }
+    $("tg-login").disabled = true;
+    $("login-msg").textContent = "Подтвердите вход в окне Telegram…";
+    window.Telegram.Login.auth({ bot_id: BOT_ID, request_access: false, lang: "ru" }, async (tgUser) => {
+      if (!tgUser) {
+        showLogin("Вход отменён.");
+        return;
+      }
+      try {
+        $("login-msg").textContent = "Проверяю…";
+        const r = await fetch(AUTH_FN, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", apikey: SB_KEY },
+          body: JSON.stringify(tgUser),
+        });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          const reasons = {
+            bad_signature: "Telegram не подтвердил вход. Попробуйте ещё раз.",
+            expired: "Данные входа устарели. Попробуйте ещё раз.",
+            not_configured: "Вход ещё настраивается. Загляните чуть позже.",
+          };
+          showLogin(reasons[j.error] || "Не получилось войти. Попробуйте ещё раз.");
+          return;
+        }
+        const { error } = await sb.auth.setSession({ access_token: j.access_token, refresh_token: j.refresh_token });
+        if (error) throw error;
+        await showDesk();
+      } catch (e) {
+        console.error(e);
+        showLogin("Нет связи с сервером. Проверьте интернет и попробуйте ещё раз.");
+      }
+    });
+  });
+
+  /* ---------- Пользователь ---------- */
+  function renderUser() {
+    const p = state.profile || {};
+    const name = [p.first_name, p.last_name].filter(Boolean).join(" ") || p.username || "Вы";
+    $("user-name").textContent = p.first_name || name;
+    const ava = $("user-ava");
+    ava.textContent = "";
+    ava.style.backgroundImage = "";
+    if (p.photo_url && /^https:\/\/t\.me\//.test(p.photo_url)) {
+      ava.style.backgroundImage = 'url("' + p.photo_url.replace(/["\\]/g, "") + '")';
+    } else {
+      ava.textContent = name.trim().charAt(0).toUpperCase();
+    }
+    const who = $("menu-who");
+    who.textContent = "";
+    const b = document.createElement("b");
+    b.textContent = name;
+    who.append(b, document.createTextNode(p.username ? "@" + p.username : "Telegram"));
+  }
+
+  $("btn-user").addEventListener("click", (e) => {
+    e.stopPropagation();
+    const m = $("user-menu");
+    m.hidden = !m.hidden;
+    $("btn-user").setAttribute("aria-expanded", String(!m.hidden));
+  });
+  document.addEventListener("click", (e) => {
+    const m = $("user-menu");
+    if (!m.hidden && !m.contains(e.target)) {
+      m.hidden = true;
+      $("btn-user").setAttribute("aria-expanded", "false");
+    }
+  });
+  $("btn-logout").addEventListener("click", async () => {
+    $("user-menu").hidden = true;
+    await sb.auth.signOut();
+    state.notes = [];
+    $("notes").textContent = "";
+    showLogin("Вы вышли.");
+  });
+
+  /* ---------- Загрузка данных ---------- */
+  async function loadAll() {
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) return showLogin();
+    state.user = user;
+    $("notes-loading").hidden = false;
+    $("notes-empty").hidden = true;
+
+    const [prof, notes, sets] = await Promise.all([
+      sb.from("profiles").select("first_name,last_name,username,photo_url").eq("id", user.id).maybeSingle(),
+      sb.from("notes").select("id,body,color,pinned,updated_at").order("pinned", { ascending: false }).order("updated_at", { ascending: false }),
+      sb.from("settings").select("wallpaper_preset,wallpaper_path").eq("user_id", user.id).maybeSingle(),
+    ]);
+    $("notes-loading").hidden = true;
+
+    if (prof.error || !prof.data) {
+      await sb.auth.signOut();
+      return showLogin("Учётная запись не найдена. Войдите через Telegram ещё раз.");
+    }
+    state.profile = prof.data;
+    renderUser();
+
+    if (notes.error) toast("Не удалось загрузить заметки. Обновите страницу.");
+    state.notes = notes.data || [];
+    renderNotes();
+
+    state.settings = sets.data || null;
+    await applyWallFromSettings();
+  }
+
+  /* ---------- Заметки ---------- */
+  function sortNotes() {
+    state.notes.sort((a, b) => (b.pinned - a.pinned) || (new Date(b.updated_at) - new Date(a.updated_at)));
+  }
+
+  function renderNotes() {
+    sortNotes();
+    const box = $("notes");
+    box.textContent = "";
+    const frag = document.createDocumentFragment();
+    for (const n of state.notes) {
+      const el = document.createElement("button");
+      el.type = "button";
+      el.className = "note";
+      el.dataset.color = n.color;
+      el.dataset.id = n.id;
+      const lines = n.body.split("\n");
+      const title = (lines[0] || "").trim() || "Без заголовка";
+      const rest = lines.slice(1).join("\n").trim();
+      const h = document.createElement("p");
+      h.className = "note-title";
+      h.textContent = title;
+      el.append(h);
+      if (rest) {
+        const p = document.createElement("p");
+        p.className = "note-text";
+        p.textContent = rest;
+        el.append(p);
+      }
+      const meta = document.createElement("div");
+      meta.className = "note-meta";
+      meta.textContent = fmtShort.format(new Date(n.updated_at));
+      el.append(meta);
+      if (n.pinned) {
+        const pin = document.createElement("span");
+        pin.className = "note-pin";
+        pin.setAttribute("aria-label", "Закреплена");
+        pin.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M9 3h6l-1 6 4 4H6l4-4zM11 13h2v8h-2z"/></svg>';
+        el.append(pin);
+      }
+      el.addEventListener("click", () => openEditor(n.id));
+      frag.append(el);
+    }
+    box.append(frag);
+    $("notes-empty").hidden = state.notes.length > 0;
+    $("notes-count").textContent = state.notes.length ? String(state.notes.length) : "";
+  }
+
+  // Редактор: новая заметка сохраняется, когда в ней появился текст; дальше — автосохранение
+  const ed = { id: null, color: "paper", pinned: false, timer: null, saving: null, dirty: false };
+
+  function setEdColor(c) {
+    ed.color = c;
+    document.querySelector("#editor .note-sheet").dataset.color = c;
+    document.querySelectorAll("#editor .dot").forEach((d) => d.setAttribute("aria-checked", String(d.dataset.color === c)));
+  }
+  document.querySelectorAll("#editor .dot").forEach((d) => {
+    d.setAttribute("role", "radio");
+    d.addEventListener("click", () => { setEdColor(d.dataset.color); queueSave(0); });
+  });
+
+  function openEditor(id) {
+    const n = id ? state.notes.find((x) => x.id === id) : null;
+    ed.id = n ? n.id : null;
+    ed.pinned = n ? n.pinned : false;
+    ed.dirty = false;
+    $("ed-body").value = n ? n.body : "";
+    $("ed-pin").setAttribute("aria-pressed", String(ed.pinned));
+    $("ed-delete").hidden = !n;
+    $("ed-confirm").hidden = true;
+    $("ed-status").textContent = n ? "Сохранено" : "";
+    setEdColor(n ? n.color : "paper");
+    $("editor").hidden = false;
+    lockSheets(true);
+    setTimeout(() => $("ed-body").focus(), 30);
+  }
+
+  function queueSave(delay = 700) {
+    ed.dirty = true;
+    $("ed-status").textContent = "…";
+    clearTimeout(ed.timer);
+    ed.timer = setTimeout(saveNote, delay);
+  }
+
+  async function saveNote() {
+    clearTimeout(ed.timer);
+    if (!ed.dirty) return;
+    if (ed.saving) await ed.saving;
+    const body = $("ed-body").value;
+    if (!ed.id && !body.trim()) { ed.dirty = false; $("ed-status").textContent = ""; return; }
+    ed.dirty = false;
+    ed.saving = (async () => {
+      const row = { body, color: ed.color, pinned: ed.pinned };
+      let res;
+      if (ed.id) {
+        res = await sb.from("notes").update(row).eq("id", ed.id).select("id,body,color,pinned,updated_at").single();
+      } else {
+        res = await sb.from("notes").insert(row).select("id,body,color,pinned,updated_at").single();
+      }
+      if (res.error) {
+        console.error(res.error);
+        ed.dirty = true;
+        $("ed-status").textContent = "Не сохранилось — проверьте интернет";
+        return;
+      }
+      const saved = res.data;
+      const i = state.notes.findIndex((x) => x.id === saved.id);
+      if (i >= 0) state.notes[i] = saved; else state.notes.push(saved);
+      ed.id = saved.id;
+      $("ed-delete").hidden = false;
+      $("ed-status").textContent = "Сохранено";
+      renderNotes();
+    })();
+    await ed.saving;
+    ed.saving = null;
+  }
+
+  async function closeEditor() {
+    await saveNote();
+    // пустая заметка не нужна
+    if (ed.id && !$("ed-body").value.trim()) await deleteNote(true);
+    $("editor").hidden = true;
+    lockSheets(false);
+  }
+
+  async function deleteNote(silent) {
+    if (!ed.id) return;
+    const { error } = await sb.from("notes").delete().eq("id", ed.id);
+    if (error) { toast("Не удалось удалить. Попробуйте ещё раз."); return; }
+    state.notes = state.notes.filter((x) => x.id !== ed.id);
+    ed.id = null;
+    renderNotes();
+    if (!silent) { $("editor").hidden = true; lockSheets(false); toast("Заметка удалена"); }
+  }
+
+  $("btn-new").addEventListener("click", () => openEditor(null));
+  $("ed-body").addEventListener("input", () => queueSave());
+  $("ed-pin").addEventListener("click", () => {
+    ed.pinned = !ed.pinned;
+    $("ed-pin").setAttribute("aria-pressed", String(ed.pinned));
+    queueSave(0);
+  });
+  $("ed-delete").addEventListener("click", () => { $("ed-confirm").hidden = false; });
+  $("ed-confirm-no").addEventListener("click", () => { $("ed-confirm").hidden = true; });
+  $("ed-confirm-yes").addEventListener("click", () => deleteNote(false));
+  $("editor").querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", closeEditor));
+
+  /* ---------- Заставка ---------- */
+  function setWall(preset, url) {
+    const wall = $("wall");
+    if (url) {
+      document.body.dataset.wall = "custom";
+      wall.style.backgroundImage = 'url("' + url + '")';
+    } else {
+      document.body.dataset.wall = preset || "dusk";
+      wall.style.backgroundImage = "";
+    }
+    document.querySelectorAll(".preset").forEach((p) =>
+      p.setAttribute("aria-checked", String(!url && p.dataset.preset === (preset || "dusk"))));
+  }
+
+  async function applyWallFromSettings() {
+    const s = state.settings;
+    if (s && s.wallpaper_path) {
+      const { data, error } = await sb.storage.from("wallpapers").download(s.wallpaper_path);
+      if (!error && data) {
+        if (state.wallUrl) URL.revokeObjectURL(state.wallUrl);
+        state.wallUrl = URL.createObjectURL(data);
+        setWall(null, state.wallUrl);
+        return;
+      }
+    }
+    setWall(s && s.wallpaper_preset, null);
+  }
+
+  async function saveSettings(patch) {
+    const row = Object.assign({ user_id: state.user.id }, state.settings || {}, patch);
+    const { data, error } = await sb.from("settings").upsert(row, { onConflict: "user_id" })
+      .select("wallpaper_preset,wallpaper_path").single();
+    if (error) throw error;
+    state.settings = data;
+  }
+
+  function buildPresets() {
+    const box = $("presets");
+    for (const p of PRESETS) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "preset";
+      b.dataset.preset = p.id;
+      b.setAttribute("role", "radio");
+      const s = document.createElement("span");
+      s.textContent = p.name;
+      b.append(s);
+      b.addEventListener("click", async () => {
+        const old = state.settings && state.settings.wallpaper_path;
+        setWall(p.id, null);
+        try {
+          await saveSettings({ wallpaper_preset: p.id, wallpaper_path: null });
+          if (old) await sb.storage.from("wallpapers").remove([old]);
+        } catch (e) { console.error(e); toast("Заставка не сохранилась. Попробуйте ещё раз."); }
+      });
+      box.append(b);
+    }
+  }
+  // превью пресетов: используем те же градиенты, что и для фона
+  function paintPresetPreviews() {
+    const probe = document.createElement("div");
+    probe.className = "wall";
+    probe.style.visibility = "hidden";
+    document.body.append(probe);
+    const was = document.body.dataset.wall;
+    document.querySelectorAll(".preset").forEach((b) => {
+      document.body.dataset.wall = b.dataset.preset;
+      b.style.backgroundImage = getComputedStyle(probe).backgroundImage;
+    });
+    document.body.dataset.wall = was;
+    probe.remove();
+  }
+
+  $("btn-wall").addEventListener("click", () => {
+    $("wallsheet").hidden = false;
+    lockSheets(true);
+  });
+  $("wallsheet").querySelectorAll("[data-close]").forEach((b) =>
+    b.addEventListener("click", () => { $("wallsheet").hidden = true; lockSheets(false); }));
+
+  // Уменьшаем фото до размера экрана: быстрее грузится и меньше места
+  async function shrinkImage(file) {
+    const bmp = await createImageBitmap(file);
+    const max = 2560;
+    const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
+    const c = document.createElement("canvas");
+    c.width = Math.round(bmp.width * k);
+    c.height = Math.round(bmp.height * k);
+    c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+    bmp.close && bmp.close();
+    return await new Promise((res) => c.toBlob(res, "image/jpeg", 0.85));
+  }
+
+  $("wall-file").addEventListener("change", async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) { toast("Подойдёт фото в формате JPG, PNG или WEBP."); return; }
+    if (file.size > 30 * 1024 * 1024) { toast("Фото слишком большое: максимум 30 МБ."); return; }
+    const st = $("wall-status");
+    st.textContent = "Загружаю…";
+    try {
+      const blob = await shrinkImage(file);
+      const path = state.user.id + "/" + Date.now() + ".jpg";
+      const up = await sb.storage.from("wallpapers").upload(path, blob, { contentType: "image/jpeg", upsert: false });
+      if (up.error) throw up.error;
+      const old = state.settings && state.settings.wallpaper_path;
+      await saveSettings({ wallpaper_path: path });
+      if (old && old !== path) await sb.storage.from("wallpapers").remove([old]);
+      if (state.wallUrl) URL.revokeObjectURL(state.wallUrl);
+      state.wallUrl = URL.createObjectURL(blob);
+      setWall(null, state.wallUrl);
+      st.textContent = "Готово";
+    } catch (err) {
+      console.error(err);
+      st.textContent = "";
+      toast("Не получилось загрузить фото. Попробуйте другое или повторите позже.");
+    }
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (!$("editor").hidden) closeEditor();
+    else if (!$("wallsheet").hidden) { $("wallsheet").hidden = true; lockSheets(false); }
+  });
+
+  /* ---------- Старт ---------- */
+  buildPresets();
+  paintPresetPreviews();
+  setInterval(tick, 20000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) tick(); });
+
+  sb.auth.onAuthStateChange((event) => {
+    if (event === "SIGNED_OUT" && !$("desk").hidden) showLogin("Сессия закончилась. Войдите снова.");
+  });
+
+  sb.auth.getSession().then(({ data }) => {
+    if (data.session) showDesk(); else showLogin();
+  });
+})();

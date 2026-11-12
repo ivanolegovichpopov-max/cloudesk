@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://telegram.org; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src https://kgfhwjiexhwtxczjkgic.supabase.co wss://kgfhwjiexhwtxczjkgic.supabase.co; img-src 'self' data: blob: https://t.me https://*.telegram.org https://*.telesco.pe https://kgfhwjiexhwtxczjkgic.supabase.co; frame-src https://oauth.telegram.org; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#1b1d24">
+<title>Рабочий стол</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Unbounded:wght@500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-wall="dusk">
+
+<div id="wall" class="wall" aria-hidden="true"></div>
+
+<!-- Экран входа -->
+<main id="login" class="login" hidden>
+  <div class="login-card">
+    <div class="login-mark" aria-hidden="true">
+      <span></span><span></span><span></span><span></span>
+    </div>
+    <h1>Рабочий стол</h1>
+    <p class="login-sub">Ваши заметки и заставка — на любом устройстве. Вход через ваш аккаунт Telegram, пароль не нужен.</p>
+    <button id="tg-login" class="btn-tg" type="button">
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M21.9 4.3 18.6 19.9c-.2 1.1-.9 1.4-1.8.9l-5-3.7-2.4 2.3c-.3.3-.5.5-1 .5l.4-5.1 9.3-8.4c.4-.4-.1-.6-.6-.2L6 13.4l-4.9-1.5c-1.1-.3-1.1-1.1.2-1.6l19.1-7.4c.9-.3 1.7.2 1.5 1.4Z"/></svg>
+      <span>Войти через Telegram</span>
+    </button>
+    <p id="login-msg" class="login-msg" role="status"></p>
+    <p class="login-note">Сайт получает только ваше имя, ник и фото из Telegram. Переписка и контакты ему недоступны.</p>
+  </div>
+</main>
+
+<!-- Рабочий стол -->
+<div id="desk" class="desk" hidden>
+  <header class="top">
+    <div class="clock">
+      <div id="clock-time" class="clock-time">--:--</div>
+      <div id="clock-date" class="clock-date"></div>
+    </div>
+    <div class="top-actions">
+      <button id="btn-wall" class="btn-glass" type="button" title="Сменить заставку">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M4 5h16v14H4zM4 16l5-5 4 4 3-3 4 4M15 9.5h.01"/></svg>
+        <span class="hide-sm">Заставка</span>
+      </button>
+      <button id="btn-user" class="user-chip" type="button" aria-haspopup="menu" aria-expanded="false">
+        <span id="user-ava" class="ava"></span>
+        <span id="user-name" class="hide-sm"></span>
+      </button>
+      <div id="user-menu" class="menu" role="menu" hidden>
+        <div id="menu-who" class="menu-who"></div>
+        <button id="btn-logout" class="menu-item" type="button" role="menuitem">Выйти</button>
+      </div>
+    </div>
+  </header>
+
+  <section class="board" aria-labelledby="notes-h">
+    <div class="board-head">
+      <h2 id="notes-h">Заметки <span id="notes-count" class="count"></span></h2>
+      <button id="btn-new" class="btn-primary" type="button">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
+        Новая заметка
+      </button>
+    </div>
+    <div id="notes" class="notes"></div>
+    <div id="notes-empty" class="empty" hidden>
+      <p class="empty-title">Здесь пока пусто</p>
+      <p>Нажмите «Новая заметка», чтобы записать первую мысль. Всё сохраняется само.</p>
+    </div>
+    <div id="notes-loading" class="empty">
+      <p>Загружаю заметки…</p>
+    </div>
+  </section>
+</div>
+
+<!-- Редактор заметки -->
+<div id="editor" class="sheet-wrap" hidden>
+  <div class="sheet-backdrop" data-close></div>
+  <div class="sheet note-sheet" role="dialog" aria-modal="true" aria-label="Заметка">
+    <div class="sheet-bar">
+      <div class="colors" role="radiogroup" aria-label="Цвет заметки">
+        <button type="button" class="dot" data-color="paper" aria-label="Бумага"></button>
+        <button type="button" class="dot" data-color="sky" aria-label="Голубой"></button>
+        <button type="button" class="dot" data-color="mint" aria-label="Мятный"></button>
+        <button type="button" class="dot" data-color="rose" aria-label="Розовый"></button>
+        <button type="button" class="dot" data-color="sand" aria-label="Песочный"></button>
+        <button type="button" class="dot" data-color="ink" aria-label="Тёмный"></button>
+      </div>
+      <div class="sheet-tools">
+        <button id="ed-pin" type="button" class="tool" aria-pressed="false" title="Закрепить сверху">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M9 3h6l-1 6 4 4H6l4-4zM12 13v8"/></svg>
+        </button>
+        <button id="ed-delete" type="button" class="tool" title="Удалить">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>
+        </button>
+        <button type="button" class="tool" data-close title="Закрыть">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+    </div>
+    <label class="sr" for="ed-body">Текст заметки</label>
+    <textarea id="ed-body" class="ed-body" maxlength="20000" placeholder="Первая строка станет заголовком…"></textarea>
+    <div class="sheet-foot">
+      <span id="ed-status" class="ed-status" role="status"></span>
+      <div id="ed-confirm" class="confirm" hidden>
+        <span>Удалить заметку?</span>
+        <button id="ed-confirm-yes" type="button" class="btn-danger">Удалить</button>
+        <button id="ed-confirm-no" type="button" class="btn-ghost">Отмена</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Выбор заставки -->
+<div id="wallsheet" class="sheet-wrap" hidden>
+  <div class="sheet-backdrop" data-close></div>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="wall-h">
+    <div class="sheet-bar">
+      <h3 id="wall-h">Заставка</h3>
+      <button type="button" class="tool" data-close title="Закрыть">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+    <div id="presets" class="presets"></div>
+    <div class="upload-row">
+      <label class="btn-primary upload-btn" for="wall-file">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg>
+        Загрузить своё фото
+      </label>
+      <input id="wall-file" type="file" accept="image/jpeg,image/png,image/webp" class="sr">
+      <span id="wall-status" class="ed-status" role="status"></span>
+    </div>
+    <p class="hint">Фото уменьшается до размера экрана и хранится в закрытом хранилище: видно только вам.</p>
+  </div>
+</div>
+
+<div id="toast" class="toast" role="alert" hidden></div>
+
+<script src="https://telegram.org/js/telegram-widget.js?22"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
