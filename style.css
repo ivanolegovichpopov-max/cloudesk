@@ -501,11 +501,15 @@ html { -webkit-tap-highlight-color: transparent; }
 input, textarea { caret-color: var(--accent); }
 ::placeholder { color: var(--ink-dim); opacity: 1; }
 /* полосы прокрутки */
-* { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+/* полосы прокрутки скрыты; появляются только пока список прокручивают (класс is-scrolling)
+   или когда мышь наведена прямо на место полосы — чтобы её можно было схватить */
+* { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+.is-scrolling { scrollbar-color: var(--line) transparent; }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; border: 2px solid transparent; background-clip: padding-box; }
-::-webkit-scrollbar-thumb:hover { background-color: var(--ink-dim); }
+::-webkit-scrollbar-thumb { background-color: transparent; border-radius: 4px; border: 2px solid transparent; background-clip: padding-box; }
+.is-scrolling::-webkit-scrollbar-thumb { background-color: var(--line); }
+::-webkit-scrollbar-thumb:hover, ::-webkit-scrollbar-thumb:active { background-color: var(--ink-dim); }
 ::-webkit-scrollbar-corner { background: transparent; }
 /* автозаполнение браузера не перекрашивает поля */
 input:-webkit-autofill, textarea:-webkit-autofill {

@@ -255,6 +255,15 @@
   document.addEventListener("scroll", hideTip, true);
   window.addEventListener("blur", hideTip);
 
+  // Полоса прокрутки показывается только пока прокручивают, потом прячется
+  document.addEventListener("scroll", (e) => {
+    const el = e.target === document ? document.documentElement : e.target;
+    if (!el.classList) return;
+    el.classList.add("is-scrolling");
+    clearTimeout(el._scrollT);
+    el._scrollT = setTimeout(() => el.classList.remove("is-scrolling"), 900);
+  }, { capture: true, passive: true });
+
   let toastTimer;
   function toast(text) {
     const t = $("toast");
