@@ -387,8 +387,18 @@
         </div>
         <button type="button" id="it-when-clear" class="tool" data-tip="Без срока" aria-label="Убрать срок"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M6 6l12 12M18 6 6 18"/></svg></button>
       </div>
+      <div id="it-task" class="it-task">
+        <div class="it-opt"><span class="it-opt-l">Напоминание</span><div id="it-remind" class="segmented" role="radiogroup" aria-label="Напоминание в Telegram"></div></div>
+        <div class="it-opt"><span class="it-opt-l">Повтор</span><div id="it-repeat" class="segmented" role="radiogroup" aria-label="Повтор"></div></div>
+        <button type="button" id="it-prio" class="switch-row" role="switch" aria-checked="false"><span>Важная — выше в своей группе</span><span class="switch" aria-hidden="true"></span></button>
+      </div>
       <button type="button" id="it-done" class="switch-row" role="switch" aria-checked="false"><span>Сделано</span><span class="switch" aria-hidden="true"></span></button>
-      <textarea id="it-body" class="it-body" maxlength="20000" placeholder="Подробности" aria-label="Подробности"></textarea>
+      <textarea id="it-body" class="it-body" maxlength="1000" placeholder="Описание" aria-label="Описание"></textarea>
+      <div id="it-subs-box" class="it-subs-box">
+        <div class="t-head it-subs-h">Подпункты <span id="it-subs-count" class="it-subs-count"></span></div>
+        <ol id="it-subs" class="it-subs"></ol>
+        <button type="button" id="it-sub-add" class="it-sub-add"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 5v14M5 12h14"/></svg><span>Подпункт</span></button>
+      </div>
     </div>
     <div class="sheet-foot">
       <span class="foot-spacer"></span>

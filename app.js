@@ -562,6 +562,7 @@
   state.items = []; state.sections = [];
   const IC = {
     note: "M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 16h5",
+    task: "M4 5h16v14H4zM8 12l3 3 5-6",
     plus: "M12 5v14M5 12h14",
     pin: "M9 3h6l-1 6 4 4H6l4-4zM11 13h2v8h-2z",
     set: "M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4",
@@ -595,8 +596,353 @@
       },
       count: (f) => state.items.filter((it) => it.type === "note" && it.section_id === f.id).length,
     },
+    tasks: {
+      name: "Задачи", icon: IC.task, spans: [1, 2, 3], addTip: "Новая задача",
+      limit: 100, limitTip: "В поле уже 100 задач — это предел. Удалите ненужные или создайте ещё одно поле «Задачи»",
+      add: (f) => { const i = $("board").querySelector('.fld[data-id="' + f.id + '"] .tk-input'); if (i) { i.scrollIntoView({ block: "nearest" }); i.focus(); } },
+      render: (f, body) => renderTasks(f, body),
+      // в заголовке — сколько осталось сделать; предел считает все задачи поля
+      count: (f) => state.items.filter((it) => it.type === "task" && it.section_id === f.id && !it.done).length,
+      total: (f) => state.items.filter((it) => it.type === "task" && it.section_id === f.id).length,
+    },
   };
-  const APP_ORDER = ["notes"];
+  const APP_ORDER = ["notes", "tasks"];
+
+  /* ---------- Приложение «Задачи» ----------
+     Задача — запись items (type "task"): title — название, body — описание, done/done_at — выполнена,
+     data: { due (ISO), allday, remind (минут до срока или null), repeat (day|weekdays|week|month), prio, subs: [{t, done}], tz },
+     remind_at — когда прислать напоминание в Telegram (считается из срока и remind). */
+  const TASK_LIM = { field: 100, title: 200, body: 1000, subs: 30, sub: 200 };
+  const REMINDS = [[null, "Нет"], [0, "В срок"], [15, "За 15 мин"], [60, "За час"], [1440, "За день"]];
+  const REPEATS = [[null, "Нет"], ["day", "День"], ["weekdays", "Будни"], ["week", "Неделя"], ["month", "Месяц"]];
+  const REPEAT_TXT = { day: "каждый день", weekdays: "по будням", week: "каждую неделю", month: "каждый месяц" };
+  const TZ = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) { return ""; } })();
+  const tData = (t) => t.data || {};
+  const taskDue = (t) => (tData(t).due ? new Date(tData(t).due) : null);
+  function remindAtFor(dueIso, allday, remind) {
+    if (!dueIso || remind == null) return null;
+    const base = new Date(dueIso);
+    if (allday) base.setHours(9, 0, 0, 0); // задача «на день» — напоминание в 9 утра
+    return new Date(base.getTime() - remind * 60000).toISOString();
+  }
+  const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+  function stepRepeat(d, rep) {
+    if (rep === "day") return addDays(d, 1);
+    if (rep === "week") return addDays(d, 7);
+    if (rep === "weekdays") { let x = addDays(d, 1); while (x.getDay() === 0 || x.getDay() === 6) x = addDays(x, 1); return x; }
+    if (rep === "month") { const x = new Date(d), day = x.getDate(); x.setDate(1); x.setMonth(x.getMonth() + 1); x.setDate(Math.min(day, new Date(x.getFullYear(), x.getMonth() + 1, 0).getDate())); return x; }
+    return null;
+  }
+  // следующий раз для повторяющейся задачи: от срока вперёд, но не в прошлое
+  function nextDue(t) {
+    const dt = tData(t);
+    let d = taskDue(t) || new Date();
+    const now = new Date(), today = dayKey(now);
+    let guard = 0;
+    do { d = stepRepeat(d, dt.repeat); guard++; } while (guard < 1000 && (dt.allday ? dayKey(d) < today : d <= now));
+    return d;
+  }
+  // в какую группу попадает задача
+  function taskGroup(t, now = new Date()) {
+    const d = taskDue(t);
+    if (!d) return "none";
+    const k = dayKey(d), today = dayKey(now);
+    if (tData(t).allday ? k < today : d < now) return "over";
+    if (k === today) return "today";
+    if (k === dayKey(addDays(now, 1))) return "tomorrow";
+    return "later";
+  }
+  const TASK_GROUPS = [["over", "Просрочено"], ["today", "Сегодня"], ["tomorrow", "Завтра"], ["later", "Позже"], ["none", "Без срока"]];
+  const fmtWdDate = new Intl.DateTimeFormat("ru-RU", { weekday: "short", day: "numeric", month: "short" });
+  const fmtWdDateY = new Intl.DateTimeFormat("ru-RU", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+  // «сегодня 15:00», «завтра», «вчера», «пт, 14 нояб.»
+  function dueLabel(iso, allday) {
+    const d = new Date(iso), now = new Date(), k = dayKey(d);
+    let day = k === dayKey(now) ? "сегодня" : k === dayKey(addDays(now, 1)) ? "завтра" : k === dayKey(addDays(now, -1)) ? "вчера"
+      : (d.getFullYear() === now.getFullYear() ? fmtWdDate : fmtWdDateY).format(d).replace(" г.", "");
+    return allday ? day : day + " " + fmtHM.format(d);
+  }
+
+  /* Быстрый ввод: срок, повтор и важность — прямо словами в строке задачи.
+     «Позвонить в банк завтра в 15:00» → задача «Позвонить в банк», срок завтра 15:00 */
+  const WD = { "понедельник": 1, "пн": 1, "вторник": 2, "вт": 2, "среду": 3, "среда": 3, "ср": 3, "четверг": 4, "чт": 4, "пятницу": 5, "пятница": 5, "пт": 5, "субботу": 6, "суббота": 6, "сб": 6, "воскресенье": 0, "вс": 0 };
+  const MON = { "января": 0, "февраля": 1, "марта": 2, "апреля": 3, "мая": 4, "июня": 5, "июля": 6, "августа": 7, "сентября": 8, "октября": 9, "ноября": 10, "декабря": 11 };
+  function parseTask(src) {
+    let s = " " + src.replace(/\s+/g, " ") + " ";
+    const now = new Date();
+    let day = null, time = null, abs = null, repeat = null, prio = false;
+    const B = "(?<=\\s)", E = "(?=[\\s,.;])";
+    const take = (re, fn) => { s = s.replace(new RegExp(B + re + E, "i"), (...m) => { fn(m); return " "; }); };
+    take("!{1,3}", () => (prio = true));
+    take("(?:важн(?:ое|ая|о))", () => (prio = true));
+    take("(?:каждый день|ежедневно)", () => (repeat = "day"));
+    take("(?:по будням|каждый будний день)", () => (repeat = "weekdays"));
+    take("(?:каждую неделю|еженедельно)", () => (repeat = "week"));
+    take("(?:каждый месяц|ежемесячно)", () => (repeat = "month"));
+    take("кажд(?:ый|ую|ое) (понедельник|вторник|среду|четверг|пятницу|субботу|воскресенье)", (m) => { repeat = "week"; const w = WD[m[1].toLowerCase()]; day = addDays(now, ((w - now.getDay() + 7) % 7) || 0); });
+    take("через (полчаса|час|(\\d{1,3}) ?(мин(?:ут[уы]?)?|час(?:а|ов)?|д(?:ень|ня|ней)|недел(?:ю|и|ь)))", (m) => {
+      if (m[1] === "полчаса") abs = new Date(now.getTime() + 30 * 60000);
+      else if (m[1] === "час") abs = new Date(now.getTime() + 3600000);
+      else {
+        const n = Number(m[2]), u = m[3].toLowerCase();
+        if (u.startsWith("мин")) abs = new Date(now.getTime() + n * 60000);
+        else if (u.startsWith("час")) abs = new Date(now.getTime() + n * 3600000);
+        else if (u.startsWith("д")) day = addDays(now, n);
+        else day = addDays(now, n * 7);
+      }
+    });
+    take("(?:на )?(сегодня|послезавтра|завтра)", (m) => { const w = m[1].toLowerCase(); day = addDays(now, w === "сегодня" ? 0 : w === "завтра" ? 1 : 2); });
+    take("(?:(?:в|во|к) )?(понедельник|вторник|среду|четверг|пятницу|субботу|воскресенье|пн|вт|ср|чт|пт|сб|вс)", (m) => { const w = WD[m[1].toLowerCase()]; day = addDays(now, ((w - now.getDay() + 7) % 7) || 7); });
+    take("(\\d{1,2})\\.(\\d{1,2})(?:\\.(\\d{2,4}))?", (m) => {
+      const y = m[3] ? (m[3].length === 2 ? 2000 + Number(m[3]) : Number(m[3])) : now.getFullYear();
+      let d = new Date(y, Number(m[2]) - 1, Number(m[1]));
+      if (!m[3] && dayKey(d) < dayKey(now)) d = new Date(y + 1, Number(m[2]) - 1, Number(m[1]));
+      if (d.getMonth() === Number(m[2]) - 1) day = d;
+    });
+    take("(\\d{1,2}) (января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)", (m) => {
+      const mo = MON[m[2].toLowerCase()];
+      let d = new Date(now.getFullYear(), mo, Number(m[1]));
+      if (dayKey(d) < dayKey(now)) d = new Date(now.getFullYear() + 1, mo, Number(m[1]));
+      if (d.getMonth() === mo) day = d;
+    });
+    const setTime = (h, mi, part) => {
+      h = Number(h); mi = Number(mi || 0);
+      if (part) { part = part.toLowerCase(); if ((part === "дня" || part === "вечера") && h < 12) h += 12; if (part === "ночи" && h === 12) h = 0; }
+      if (h < 24 && mi < 60) time = [h, mi];
+    };
+    take("(?:(?:в|к) )?(\\d{1,2}):(\\d{2})(?: (утра|дня|вечера|ночи))?", (m) => setTime(m[1], m[2], m[3]));
+    if (!time) take("(?:в|к) (\\d{1,2})(?: ?ч(?:ас(?:а|ов)?)?)?(?: (утра|дня|вечера|ночи))?", (m) => setTime(m[1], 0, m[2]));
+    if (!time) take("(\\d{1,2}) ?ч", (m) => setTime(m[1], 0));
+    let due = null, allday = false;
+    if (abs) due = abs;
+    else if (day || time) {
+      const d = new Date(day || now);
+      if (time) {
+        d.setHours(time[0], time[1], 0, 0);
+        if (!day && d <= now) d.setDate(d.getDate() + 1); // только время и оно прошло — значит завтра
+      } else { d.setHours(0, 0, 0, 0); allday = true; }
+      due = d;
+    } else if (repeat) { due = new Date(now); due.setHours(0, 0, 0, 0); allday = true; }
+    const title = s.replace(/\s+/g, " ").replace(/\s+([,.;])/g, "$1").replace(/^[\s,.;-]+|[\s,;-]+$/g, "").trim();
+    return { title: title || src.trim(), due: due ? due.toISOString() : null, allday, repeat, prio };
+  }
+
+  // строка задачи
+  const seenTasks = new Set();
+  function taskRow(t, opts) {
+    const dt = tData(t);
+    const li = document.createElement("li");
+    li.className = "tk" + (t.done ? " is-done" : "") + (dt.prio && !t.done ? " prio" : "");
+    li.dataset.id = t.id; li.tabIndex = 0; li.setAttribute("aria-label", "Задача «" + t.title + "»");
+    if (!seenTasks.has(t.id)) { seenTasks.add(t.id); if (!boardFirst) li.classList.add("fade-in"); }
+    if (!t.done && opts.drag) { const g = gripBtn("Задача «" + t.title + "»"); g.classList.add("tk-grip"); li.append(g); }
+    const cb = document.createElement("button");
+    cb.type = "button"; cb.className = "tk-check"; cb.setAttribute("role", "checkbox"); cb.setAttribute("aria-checked", String(!!t.done));
+    cb.setAttribute("aria-label", t.done ? "Вернуть в работу" : "Выполнено"); cb.dataset.tip = t.done ? "Вернуть в работу" : dt.repeat ? "Выполнено — следующий раз " + REPEAT_TXT[dt.repeat] : "Выполнено";
+    cb.innerHTML = '<svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+    cb.addEventListener("click", (e) => { e.stopPropagation(); toggleTask(t, li); });
+    const main = document.createElement("div"); main.className = "tk-main";
+    const title = document.createElement("div"); title.className = "tk-title"; title.textContent = t.title; main.append(title);
+    const meta = document.createElement("div"); meta.className = "tk-meta";
+    const ic = (path, tip) => { const s = document.createElement("span"); s.className = "tk-ic"; s.dataset.tip = tip; s.innerHTML = svgIco(path, 12, 2); return s; };
+    if (dt.due && !t.done) {
+      const d = document.createElement("span"); d.className = "tk-due" + (taskGroup(t) === "over" ? " over" : "");
+      d.textContent = dueLabel(dt.due, dt.allday); meta.append(d);
+    }
+    if (t.done && t.done_at) { const d = document.createElement("span"); d.className = "tk-due"; d.textContent = "выполнено " + dueLabel(t.done_at, true); meta.append(d); }
+    if (!t.done && dt.remind != null && dt.due) meta.append(ic("M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4", "Напоминание в Telegram"));
+    if (dt.repeat) meta.append(ic("M17 2l4 4-4 4M3 11v-1a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v1a4 4 0 0 1-4 4H3", "Повтор: " + REPEAT_TXT[dt.repeat]));
+    const subs = dt.subs || [];
+    if (subs.length) { const s = document.createElement("span"); s.className = "tk-subs" + (subs.every((x) => x.done) ? " full" : ""); s.textContent = subs.filter((x) => x.done).length + "/" + subs.length; s.dataset.tip = "Подпункты"; meta.append(s); }
+    if ((t.body || "").trim()) meta.append(ic("M5 7h14M5 12h14M5 17h9", "Есть описание"));
+    if (meta.childNodes.length) main.append(meta);
+    li.append(cb, main);
+    // при наведении: срок и удалить
+    const acts = document.createElement("div"); acts.className = "tk-acts";
+    const mk = (tip, path, fn) => { const b = document.createElement("button"); b.type = "button"; b.className = "tool"; b.dataset.tip = tip; b.setAttribute("aria-label", tip); b.innerHTML = svgIco(path, 15); b.addEventListener("click", (e) => { e.stopPropagation(); fn(b); }); return b; };
+    if (!t.done) acts.append(mk("Срок", "M4 6h16v14H4zM4 10h16M8 3v4M16 3v4", (b) => openTaskDue(b, t)));
+    acts.append(mk("Удалить", "M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3", () => removeItem(t.id, "Задача удалена")));
+    li.append(acts);
+    li.addEventListener("click", (e) => { if (e.target.closest(".tk-acts, .tk-check, .grip")) return; openItem(t.id); });
+    li.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target === li) openItem(t.id); else if (e.key === " " && e.target === li) { e.preventDefault(); toggleTask(t, li); } });
+    return li;
+  }
+
+  // галочка: обычная задача — в «Выполнено»; повторяющаяся — переезжает на следующий срок
+  async function toggleTask(t, li) {
+    const dt = tData(t);
+    if (!t.done && dt.repeat && dt.due) {
+      const nd = nextDue(t), iso = nd.toISOString();
+      if (li) li.classList.add("checking");
+      const subs = (dt.subs || []).map((x) => ({ t: x.t, done: false })); // подпункты на новый круг — снова пустые
+      const data = Object.assign({}, dt, { due: iso, subs });
+      setTimeout(async () => {
+        if (await patchItem(t.id, { data, remind_at: remindAtFor(iso, dt.allday, dt.remind) })) toast("Следующий раз — " + dueLabel(iso, dt.allday));
+      }, li ? 260 : 0);
+      return;
+    }
+    if (li && !t.done) { li.classList.add("checking"); await new Promise((r) => setTimeout(r, 260)); }
+    patchItem(t.id, { done: !t.done });
+  }
+
+  // быстрый выбор срока с карточки
+  const tdPop = document.createElement("div");
+  tdPop.className = "pop menu-pop task-due-pop"; tdPop.hidden = true; tdPop.setAttribute("role", "menu");
+  document.body.append(tdPop);
+  let tdFor = null, tdAt = 0;
+  function closeTdPop() { if (!tdPop.hidden) animHide(tdPop, 120); tdFor = null; }
+  function openTaskDue(btn, t) {
+    if (!tdPop.hidden && tdFor === t.id) { closeTdPop(); return; }
+    closeMenus(null); closeTdPop(); tdFor = t.id; tdAt = Date.now(); tdPop.textContent = "";
+    const dt = tData(t), now = new Date();
+    const keepTime = (d) => { // переносим день, время остаётся прежним (если было)
+      const x = new Date(d);
+      if (dt.due && !dt.allday) { const o = new Date(dt.due); x.setHours(o.getHours(), o.getMinutes(), 0, 0); return { due: x.toISOString(), allday: false }; }
+      x.setHours(0, 0, 0, 0); return { due: x.toISOString(), allday: true };
+    };
+    const nextMon = addDays(now, ((8 - now.getDay()) % 7) || 7);
+    const opts = [
+      ["Сегодня", () => keepTime(now), "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7v5l3 2"],
+      ["Завтра", () => keepTime(addDays(now, 1)), "M4 6h16v14H4zM4 10h16M8 3v4M16 3v4"],
+      ["Следующий понедельник", () => keepTime(nextMon), "M9 6l6 6-6 6"],
+      ["Без срока", () => ({ due: null, allday: false }), "M6 6l12 12M18 6 6 18"],
+    ];
+    opts.forEach(([label, fn, path]) => {
+      const b = document.createElement("button"); b.type = "button"; b.className = "menu-item"; b.setAttribute("role", "menuitem");
+      b.innerHTML = svgIco(path, 16); b.append(document.createTextNode(label));
+      b.addEventListener("click", (e) => {
+        e.stopPropagation(); closeTdPop();
+        const v = fn(), data = Object.assign({}, dt, v);
+        if (!v.due) { data.repeat = null; }
+        patchItem(t.id, { data, remind_at: remindAtFor(v.due, v.allday, dt.remind) });
+      });
+      tdPop.append(b);
+    });
+    const more = document.createElement("button"); more.type = "button"; more.className = "menu-item"; more.setAttribute("role", "menuitem");
+    more.innerHTML = svgIco("M4 6h16v14H4zM4 10h16M8 3v4M16 3v4M9 15h6", 16); more.append(document.createTextNode("Выбрать дату и время…"));
+    more.addEventListener("click", (e) => { e.stopPropagation(); closeTdPop(); openItem(t.id); });
+    tdPop.append(more);
+    animShow(tdPop);
+    const r = btn.getBoundingClientRect(), w = tdPop.offsetWidth, hh = tdPop.offsetHeight, m = 8;
+    let x = Math.min(Math.max(m, r.right - w), window.innerWidth - w - m), y = r.bottom + 4;
+    if (y + hh > window.innerHeight - m) y = r.top - 4 - hh;
+    tdPop.style.left = x + "px"; tdPop.style.top = Math.max(m, y) + "px";
+  }
+  document.addEventListener("click", (e) => { if (!tdPop.hidden && !e.composedPath().includes(tdPop)) closeTdPop(); });
+  window.addEventListener("scroll", () => { if (!tdPop.hidden && Date.now() - tdAt > 400) closeTdPop(); }, true);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !tdPop.hidden) { e.stopImmediatePropagation(); closeTdPop(); } }, true);
+
+  // поле «Задачи»: строка ввода, группы по срокам, свёрнутый блок «Выполнено»
+  const doneOpen = (fid) => store.get("cloudesk-done-" + fid) === "1";
+  function renderTasks(f, body) {
+    const all = state.items.filter((it) => it.type === "task" && it.section_id === f.id);
+    const wrap = document.createElement("div"); wrap.className = "tasks"; wrap.dataset.field = f.id;
+    // строка ввода
+    const form = document.createElement("form"); form.className = "tk-add";
+    const plus = document.createElement("span"); plus.className = "tk-add-ico"; plus.innerHTML = svgIco(IC.plus, 16, 2);
+    const inp = document.createElement("input"); inp.type = "text"; inp.className = "tk-input"; inp.maxLength = TASK_LIM.title + 60;
+    inp.placeholder = "Новая задача"; inp.setAttribute("aria-label", "Новая задача: можно сразу написать срок, например «завтра в 15:00»"); inp.autocomplete = "off";
+    inp.dataset.tip = "Срок можно написать словами: «завтра в 15:00», «в пятницу», «через 2 часа», «каждый день». «!» — важная";
+    const hint = document.createElement("div"); hint.className = "tk-hint"; hint.hidden = true;
+    const full = all.length >= TASK_LIM.field;
+    if (full) { inp.disabled = true; inp.placeholder = "В поле уже " + TASK_LIM.field + " задач — это предел"; }
+    const showHint = () => {
+      const v = inp.value.trim();
+      if (!v) { hint.hidden = true; return; }
+      const p = parseTask(v), parts = [];
+      if (p.due) parts.push(dueLabel(p.due, p.allday));
+      if (p.repeat) parts.push(REPEAT_TXT[p.repeat]);
+      if (p.prio) parts.push("важная");
+      hint.textContent = parts.length ? parts.join(" · ") : "";
+      hint.hidden = !parts.length;
+    };
+    inp.addEventListener("input", showHint);
+    inp.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.stopPropagation(); inp.value = ""; showHint(); inp.blur(); } });
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const v = inp.value.trim();
+      if (!v) return;
+      const p = parseTask(v);
+      inp.value = ""; showHint();
+      const minPos = all.reduce((m, x) => Math.min(m, x.position), 0);
+      const data = { due: p.due, allday: p.allday, remind: p.due && !p.allday ? 0 : null, repeat: p.repeat, prio: p.prio, subs: [], tz: TZ };
+      const r = await createItem({ type: "task", section_id: f.id, position: minPos - 1, title: p.title.slice(0, TASK_LIM.title), body: "", data, remind_at: remindAtFor(data.due, data.allday, data.remind) });
+      if (!r) { inp.value = v; showHint(); }
+    });
+    form.append(plus, inp);
+    wrap.append(form, hint);
+    // группы
+    const live = all.filter((t) => !t.done);
+    const now = new Date();
+    const byGroup = {};
+    live.forEach((t) => { const g = taskGroup(t, now); (byGroup[g] = byGroup[g] || []).push(t); });
+    TASK_GROUPS.forEach(([g, name]) => {
+      const list = (byGroup[g] || []).sort((a, b) => (!!tData(b).prio - !!tData(a).prio) || a.position - b.position);
+      if (!list.length) return;
+      const sec = document.createElement("section"); sec.className = "tk-grp"; sec.dataset.g = g;
+      const h = document.createElement("div"); h.className = "tk-gh" + (g === "over" ? " over" : "");
+      h.append(name); const c = document.createElement("span"); c.className = "tk-gc"; c.textContent = list.length; h.append(c);
+      const ol = document.createElement("ol"); ol.className = "tk-list"; ol.dataset.g = g;
+      list.forEach((t) => ol.append(taskRow(t, { drag: true })));
+      sec.append(h, ol); wrap.append(sec);
+    });
+    const done = all.filter((t) => t.done).sort((a, b) => new Date(b.done_at || b.updated_at) - new Date(a.done_at || a.updated_at));
+    if (!live.length) {
+      const e = document.createElement("div"); e.className = "tk-empty";
+      e.textContent = done.length ? "Всё сделано" : "Задач нет";
+      wrap.append(e);
+    }
+    if (done.length) {
+      const sec = document.createElement("section"); sec.className = "tk-grp tk-done";
+      const open = doneOpen(f.id);
+      const h = document.createElement("button"); h.type = "button"; h.className = "tk-gh tk-done-btn"; h.setAttribute("aria-expanded", String(open));
+      h.innerHTML = svgIco("M9 6l6 6-6 6", 14, 2); h.append("Выполнено"); const c = document.createElement("span"); c.className = "tk-gc"; c.textContent = done.length; h.append(c);
+      const ol = document.createElement("ol"); ol.className = "tk-list done-list"; ol.hidden = !open;
+      if (open) done.forEach((t) => ol.append(taskRow(t, { drag: false })));
+      h.addEventListener("click", () => { store.set("cloudesk-done-" + f.id, open ? "0" : "1"); renderBoard(); });
+      sec.append(h, ol); wrap.append(sec);
+    }
+    body.append(wrap);
+  }
+  // порядок внутри группы — перетаскиванием (между группами задачи не переносятся: группа зависит от срока)
+  async function saveTaskOrder(ol) {
+    const ops = [];
+    [...ol.querySelectorAll(":scope > .tk")].forEach((el, i) => {
+      const it = state.items.find((x) => x.id === el.dataset.id);
+      if (!it || it.position === i) return;
+      it.position = i;
+      ops.push(sb.from("items").update({ position: i }).eq("id", it.id));
+    });
+    renderBoard();
+    const res = await Promise.all(ops);
+    if (res.some((r) => r.error)) { toast("Порядок не сохранился — проверьте интернет."); loadItems(); }
+  }
+  let tkDragFrom = null;
+  $("board").addEventListener("pointerdown", (e) => { const g = e.target.closest && e.target.closest(".tk-grip"); tkDragFrom = g ? g.closest(".tk-list") : null; }, true);
+  sortable($("board"), {
+    item: ".tk:not(.is-done)", handle: ".tk-grip", list: ".tk-list:not(.done-list)",
+    onDrop: (el) => {
+      const ol = el.closest(".tk-list");
+      if (tkDragFrom && ol !== tkDragFrom) { renderBoard(); toast("Задача попадает в группу по сроку — поменяйте срок, чтобы перенести"); return; }
+      saveTaskOrder(ol);
+    },
+    onKey: (el, dir) => {
+      const sib = dir < 0 ? el.previousElementSibling : el.nextElementSibling;
+      if (!sib || !sib.matches(".tk")) return;
+      if (dir < 0) sib.before(el); else sib.after(el);
+      const id = el.dataset.id; saveTaskOrder(el.closest(".tk-list"));
+      const g = $("board").querySelector('.tk[data-id="' + id + '"] .tk-grip'); if (g) g.focus();
+    },
+  });
+  // задача сама переходит из «Сегодня» в «Просрочено» (и т. п.) — проверяем раз в минуту
+  let taskSig = "";
+  setInterval(() => {
+    if ($("desk").hidden || !state.items) return;
+    const now = new Date();
+    const sig = state.items.filter((t) => t.type === "task" && !t.done).map((t) => t.id + taskGroup(t, now)).join("|") + dayKey(now);
+    if (taskSig && sig !== taskSig) renderBoard();
+    taskSig = sig;
+  }, 30000);
 
   /* Списки дел в заметке: строка «[ ] …» (или «[] …») — пункт; «[x] …» — отмеченный */
   const CL_RE = /^(\s*)(\[\s?\]|\[[xXхХ✓]\])\s?(.*)$/;
@@ -795,6 +1141,9 @@
     const board = $("board");
     const keep = {};
     board.querySelectorAll(".fld").forEach((f) => { const b = f.querySelector(".fld-body"); if (b) keep[f.dataset.id] = b.scrollTop; });
+    // строка ввода задачи не теряет фокус и набранный текст, когда стол перерисовывается
+    const ae = document.activeElement;
+    const keepIn = ae && ae.classList && ae.classList.contains("tk-input") ? { fid: ae.closest(".fld").dataset.id, v: ae.value, a: ae.selectionStart, b: ae.selectionEnd } : null;
     board.querySelectorAll(".fld, .fld-new").forEach((n) => n.remove());
     const frag = document.createDocumentFragment();
     for (const f of orderedFields()) {
@@ -808,7 +1157,8 @@
       const tt = document.createElement("span"); tt.className = "fld-name"; tt.textContent = app ? app.name : "Поле";
       title.append(tt);
       const n = app && app.count ? app.count(f) : 0;
-      if (n) { const cnt = document.createElement("span"); cnt.className = "count"; cnt.textContent = app && app.limit && n >= app.limit * 0.8 ? n + " / " + app.limit : String(n); title.append(cnt); }
+      const tot = app && app.total ? app.total(f) : n;
+      if (n) { const cnt = document.createElement("span"); cnt.className = "count"; cnt.textContent = app && app.limit && tot >= app.limit * 0.8 ? tot + " / " + app.limit : String(n); title.append(cnt); }
       const set = document.createElement("button");
       set.type = "button"; set.className = "tool fld-set"; set.dataset.tip = "Настройки поля"; set.setAttribute("aria-label", "Настройки поля «" + tt.textContent + "»");
       set.innerHTML = svgIco(IC.set, 18);
@@ -820,7 +1170,7 @@
         add.dataset.tip = app.addTip; add.setAttribute("aria-label", app.addTip);
         add.innerHTML = svgIco(IC.plus, 18, 2.2);
         // предел записей в поле: «+» бледнеет, подсказка и нажатие объясняют почему
-        const full = app.limit && app.count && app.count(f) >= app.limit;
+        const full = app.limit && tot >= app.limit;
         if (full) { add.setAttribute("aria-disabled", "true"); add.classList.add("off"); add.dataset.tip = app.limitTip; }
         add.addEventListener("click", () => (full ? toast(app.limitTip) : app.add(f)));
         head.append(add);
@@ -838,6 +1188,10 @@
     nb.addEventListener("click", () => openField(null));
     frag.append(nb);
     board.append(frag);
+    if (keepIn) {
+      const i = board.querySelector('.fld[data-id="' + keepIn.fid + '"] .tk-input');
+      if (i) { i.value = keepIn.v; i.focus({ preventScroll: true }); try { i.setSelectionRange(keepIn.a, keepIn.b); } catch (e) {} if (keepIn.v) i.dispatchEvent(new Event("input")); }
+    }
     boardFirst = false;
     requestAnimationFrame(fitNotes);
   }
@@ -976,7 +1330,7 @@
 
   async function createItem(row) {
     const r = await sb.from("items").insert(Object.assign({ position: row.section_id ? nextPos(row.section_id) : 0 }, row)).select(ITEM_COLS).single();
-    if (r.error) { console.error(r.error); toast(String(r.error.message).includes("items_limit") ? "Слишком много записей: удалите ненужные." : "Не сохранилось — проверьте интернет."); return null; }
+    if (r.error) { console.error(r.error); const m = String(r.error.message); toast(m.includes("items_limit") ? "Слишком много записей: удалите ненужные." : m.includes("tasks_limit") ? "В поле уже 100 задач — это предел." : "Не сохранилось — проверьте интернет."); return null; }
     state.items.push(r.data);
     itemsChanged();
     return r.data;
@@ -1024,6 +1378,7 @@
     if (res.some((r) => r.error)) {
       const msg = res.map((r) => (r.error ? String(r.error.message) : "")).join(" ");
       toast(msg.includes("notes_limit") ? "Не вернуть: в поле уже 20 заметок. Освободите место."
+        : msg.includes("tasks_limit") ? "Не вернуть: в поле уже 100 задач. Освободите место."
         : msg.includes("desks_limit") ? "Не вернуть: столов уже " + DESK_MAX + ". Удалите лишний."
         : "Не получилось вернуть — проверьте интернет.");
       return false;
@@ -1035,7 +1390,7 @@
   }
 
   /* ---------- Окно записи: задача и напоминание ---------- */
-  const id_ = { id: null, type: "task", sec: null, date: "", time: "", done: false };
+  const id_ = { id: null, type: "task", sec: null, date: "", time: "", done: false, remind: null, repeat: null, prio: false, subs: [] };
   let itDpMonth = new Date(); itDpMonth.setDate(1);
   function setItDate(v) {
     id_.date = v;
@@ -1044,7 +1399,7 @@
     $("it-date-label").textContent = v === dayKey(new Date()) ? "Сегодня" : fmtDay.format(new Date(y, m - 1, d));
     itDpMonth = new Date(y, m - 1, 1);
   }
-  function setItTime(v) { id_.time = v; $("it-time-label").textContent = v || "Время"; }
+  function setItTime(v) { id_.time = v; $("it-time-label").textContent = v || (id_.type === "task" ? "Весь день" : "Время"); if (typeof renderItTask === "function") renderItTask(); }
   function renderItDP() {
     $("itdp-title").textContent = fmtMonth.format(itDpMonth).replace(" г.", "");
     const g = $("itdp-grid"); g.textContent = "";
@@ -1057,7 +1412,7 @@
       const b = document.createElement("button"); b.type = "button";
       b.className = "dp-day" + (d.getMonth() !== itDpMonth.getMonth() ? " other" : "") + (k === today ? " today" : "") + (k === id_.date ? " sel" : "");
       b.textContent = d.getDate(); b.disabled = k < today;
-      b.addEventListener("click", () => { setItDate(k); if (!id_.time) setItTime("09:00"); closeMenus(null); });
+      b.addEventListener("click", () => { setItDate(k); if (!id_.time && id_.type !== "task") setItTime("09:00"); closeMenus(null); renderItTask(); });
       g.append(b);
     }
   }
@@ -1076,8 +1431,61 @@
     mk($("ittp-mins"), Array.from({ length: 12 }, (_, i) => pad(i * 5)), m, (v) => { ensureDate(); setItTime(h + ":" + v); closeMenus(null); });
   }
   $("it-time-btn").addEventListener("click", () => setTimeout(renderItTP, 0));
-  $("it-when-clear").addEventListener("click", () => { setItDate(""); setItTime(""); });
+  $("it-when-clear").addEventListener("click", () => {
+    if (id_.type === "task" && id_.time) setItTime(""); // сначала убирается время — задача на весь день
+    else { setItDate(""); setItTime(""); }
+    renderItTask();
+  });
   $("it-done").addEventListener("click", () => { id_.done = !id_.done; $("it-done").setAttribute("aria-checked", String(id_.done)); });
+
+  // окно задачи: напоминание, повтор, важная, подпункты
+  function segBuild(box, list, cur, onPick, disabled) {
+    box.textContent = "";
+    list.forEach(([v, label]) => {
+      const b = document.createElement("button"); b.type = "button"; b.setAttribute("role", "radio"); b.textContent = label;
+      b.setAttribute("aria-checked", String(v === cur)); b.disabled = !!disabled && v !== null;
+      b.addEventListener("click", () => onPick(v));
+      box.append(b);
+    });
+  }
+  function renderItTask() {
+    if (id_.type !== "task") return;
+    const noDue = !id_.date;
+    if (noDue) { id_.remind = null; id_.repeat = null; }
+    segBuild($("it-remind"), REMINDS, id_.remind, (v) => { id_.remind = v; renderItTask(); }, noDue);
+    segBuild($("it-repeat"), REPEATS, id_.repeat, (v) => { id_.repeat = v; renderItTask(); }, noDue);
+    $("it-remind").dataset.tip = noDue ? "Сначала выберите дату" : id_.time ? "" : "Задача на весь день — напоминание в 9:00";
+    $("it-repeat").dataset.tip = noDue ? "Сначала выберите дату" : "";
+    ["it-remind", "it-repeat"].forEach((k) => { if (!$(k).dataset.tip) delete $(k).dataset.tip; });
+    $("it-prio").setAttribute("aria-checked", String(id_.prio));
+    $("it-when-clear").dataset.tip = id_.time ? "Убрать время" : "Без срока";
+    $("it-when-clear").setAttribute("aria-label", $("it-when-clear").dataset.tip);
+    $("it-when-clear").disabled = !id_.date && !id_.time;
+  }
+  $("it-prio").addEventListener("click", () => { id_.prio = !id_.prio; renderItTask(); });
+  function renderSubs(focusIdx) {
+    const ol = $("it-subs"); ol.textContent = "";
+    id_.subs.forEach((x, i) => {
+      const li = document.createElement("li"); li.className = "it-sub" + (x.done ? " done" : "");
+      const cb = document.createElement("button"); cb.type = "button"; cb.className = "cl-box"; cb.setAttribute("role", "checkbox"); cb.setAttribute("aria-checked", String(!!x.done)); cb.setAttribute("aria-label", "Сделано");
+      cb.innerHTML = '<svg viewBox="0 0 24 24" width="11" height="11" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+      cb.addEventListener("click", () => { x.done = !x.done; renderSubs(); });
+      const inp = document.createElement("input"); inp.type = "text"; inp.maxLength = TASK_LIM.sub; inp.value = x.t; inp.placeholder = "Подпункт"; inp.setAttribute("aria-label", "Подпункт " + (i + 1));
+      inp.addEventListener("input", () => { x.t = inp.value; });
+      inp.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); if (id_.subs.length < TASK_LIM.subs) { id_.subs.splice(i + 1, 0, { t: "", done: false }); renderSubs(i + 1); } }
+        else if (e.key === "Backspace" && !inp.value) { e.preventDefault(); id_.subs.splice(i, 1); renderSubs(Math.max(0, i - 1)); }
+      });
+      const del = tool(P.x, "Убрать подпункт", () => { id_.subs.splice(i, 1); renderSubs(); });
+      li.append(cb, inp, del);
+      ol.append(li);
+      if (focusIdx === i) setTimeout(() => { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }, 10);
+    });
+    const done = id_.subs.filter((x) => x.done).length;
+    $("it-subs-count").textContent = id_.subs.length ? done + "/" + id_.subs.length : "";
+    $("it-sub-add").disabled = id_.subs.length >= TASK_LIM.subs;
+  }
+  $("it-sub-add").addEventListener("click", () => { if (id_.subs.length >= TASK_LIM.subs) return; id_.subs.push({ t: "", done: false }); renderSubs(id_.subs.length - 1); });
 
   function openItem(id, type, secId) {
     closeMenus(null);
@@ -1090,6 +1498,7 @@
     $("it-h").textContent = (it ? "" : "Новое ") + (isTask ? (it ? "Задача" : "задача").replace(/^Новое з/, "Новая з") : (it ? "Напоминание" : "напоминание"));
     if (!it) $("it-h").textContent = isTask ? "Новая задача" : "Новое напоминание";
     $("it-title").placeholder = isTask ? "Задача" : "Напоминание";
+    $("it-title").maxLength = isTask ? TASK_LIM.title : 500;
     $("it-title").value = it ? it.title : "";
     $("it-body").value = it ? it.body : "";
     $("it-body").hidden = !isTask;
@@ -1097,9 +1506,16 @@
     $("it-done").setAttribute("aria-checked", String(id_.done));
     $("it-when-clear").hidden = !isTask;
     $("it-date-btn").closest(".it-when").dataset.tip = "";
-    if (it && it.remind_at) { const d = new Date(it.remind_at); setItDate(dayKey(d)); setItTime(pad(d.getHours()) + ":" + pad(d.getMinutes())); }
-    else if (!isTask) { const d = new Date(Date.now() + 3600000); setItDate(dayKey(d)); setItTime(pad(d.getHours()) + ":00"); }
-    else { setItDate(""); setItTime(""); }
+    $("it-task").hidden = !isTask; $("it-subs-box").hidden = !isTask;
+    if (isTask) {
+      const dt = it ? tData(it) : {};
+      id_.remind = dt.remind ?? null; id_.repeat = dt.repeat || null; id_.prio = !!dt.prio;
+      id_.subs = (dt.subs || []).map((x) => ({ t: x.t, done: !!x.done }));
+      if (dt.due) { const d = new Date(dt.due); setItDate(dayKey(d)); setItTime(dt.allday ? "" : pad(d.getHours()) + ":" + pad(d.getMinutes())); }
+      else { setItDate(""); setItTime(""); }
+      renderSubs(); renderItTask();
+    } else if (it && it.remind_at) { const d = new Date(it.remind_at); setItDate(dayKey(d)); setItTime(pad(d.getHours()) + ":" + pad(d.getMinutes())); }
+    else { const d = new Date(Date.now() + 3600000); setItDate(dayKey(d)); setItTime(pad(d.getHours()) + ":00"); }
     $("it-status").textContent = it && it.sent_at ? "Отправлено в Telegram" : it && it.failed_at ? "Не доставлено" : "";
     $("it-delete").hidden = !it;
     $("it-confirm").hidden = true; $("it-actions").hidden = false;
@@ -1117,6 +1533,48 @@
       const it = id_.id ? state.items.find((x) => x.id === id_.id) : null;
       const title = $("it-title").value.trim().slice(0, 500);
       const isTask = id_.type === "task";
+      if (isTask) {
+        if (!title) {
+          if (!it) { animHide($("itemsheet"), 170); lockSheets(false); return; }
+          $("it-title").classList.add("bad"); $("it-status").textContent = "Напишите название"; return;
+        }
+        const allday = !!id_.date && !id_.time;
+        const due = id_.date ? new Date(id_.date + "T" + (id_.time || "00:00")).toISOString() : null;
+        const old = it ? tData(it) : {};
+        const subs = id_.subs.map((x) => ({ t: x.t.trim().slice(0, TASK_LIM.sub), done: !!x.done })).filter((x) => x.t);
+        let data = Object.assign({}, old, { due, allday, remind: due ? id_.remind : null, repeat: due ? id_.repeat : null, prio: id_.prio, subs, tz: TZ });
+        let done = id_.done, toastMsg = "";
+        // повторяющаяся задача, отмеченная «Сделано», переезжает на следующий срок
+        if (done && !(it && it.done) && data.repeat && due) {
+          const nd = nextDue({ data }).toISOString();
+          data = Object.assign({}, data, { due: nd, subs: subs.map((x) => ({ t: x.t, done: false })) });
+          done = false; toastMsg = "Следующий раз — " + dueLabel(nd, allday);
+        }
+        let remind = remindAtFor(data.due, data.allday, data.remind);
+        // напоминание, время которого уже прошло, не отправляем задним числом
+        if (remind && new Date(remind).getTime() < Date.now() - 60000 && (!it || it.remind_at !== remind)) remind = null;
+        const row = { title, body: $("it-body").value.slice(0, TASK_LIM.body), done, data, remind_at: remind };
+        $("it-status").textContent = "Сохраняю…";
+        let ok;
+        if (it) {
+          const patch = {};
+          if (title !== it.title) patch.title = title;
+          if (row.body !== (it.body || "")) patch.body = row.body;
+          if (done !== !!it.done) patch.done = done;
+          if (JSON.stringify(data) !== JSON.stringify(it.data || {})) patch.data = data;
+          if ((remind || null) !== (it.remind_at ? new Date(it.remind_at).toISOString() : null)) patch.remind_at = remind;
+          ok = Object.keys(patch).length ? await patchItem(it.id, patch) : true;
+        } else {
+          const sib = state.items.filter((x) => x.type === "task" && x.section_id === id_.sec);
+          ok = !!(await createItem(Object.assign({ type: "task", section_id: id_.sec, position: sib.reduce((m, x) => Math.min(m, x.position), 0) - 1 }, row)));
+        }
+        if (!ok) { $("it-status").textContent = "Не сохранилось — проверьте интернет"; return; }
+        $("it-status").textContent = "";
+        animHide($("itemsheet"), 170);
+        lockSheets(false);
+        if (toastMsg) toast(toastMsg);
+        return;
+      }
       const when = id_.date && id_.time ? new Date(id_.date + "T" + id_.time) : null;
       if (!title) {
         if (!it) { animHide($("itemsheet"), 170); lockSheets(false); return; }
@@ -1146,7 +1604,7 @@
   $("itemsheet").querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", closeItem));
   $("itemsheet").querySelector("[data-cancel]").addEventListener("click", () => { closeMenus(null); animHide($("itemsheet"), 170); lockSheets(false); });
   $("it-delete").addEventListener("click", async () => {
-    if (id_.id && await removeItem(id_.id, "Напоминание удалено")) { animHide($("itemsheet"), 170); lockSheets(false); }
+    if (id_.id && await removeItem(id_.id, id_.type === "task" ? "Задача удалена" : "Напоминание удалено")) { animHide($("itemsheet"), 170); lockSheets(false); }
   });
   $("it-confirm-no").addEventListener("click", () => { $("it-confirm").hidden = true; $("it-actions").hidden = false; replay($("it-actions")); });
   $("it-confirm-yes").addEventListener("click", async () => {
@@ -1943,8 +2401,9 @@
     const first = new Date(calMonth);
     const start = new Date(first); start.setDate(1 - ((first.getDay() + 6) % 7));
     const today = dayKey(new Date());
-    const remDays = new Map();
-    dueList().filter((r) => !r.sent_at && !r.failed_at).forEach((r) => { const k = dayKey(new Date(r.remind_at)); remDays.set(k, (remDays.get(k) || 0) + 1); });
+    const remDays = new Map(), taskDays = new Map();
+    dueList().filter((r) => r.type === "reminder" && !r.sent_at && !r.failed_at).forEach((r) => { const k = dayKey(new Date(r.remind_at)); remDays.set(k, (remDays.get(k) || 0) + 1); });
+    state.items.filter((t) => t.type === "task" && !t.done && tData(t).due).forEach((t) => { const k = dayKey(new Date(tData(t).due)); taskDays.set(k, (taskDays.get(k) || 0) + 1); });
     const now = new Date();
     $("cal-today").disabled = calMonth.getFullYear() === now.getFullYear() && calMonth.getMonth() === now.getMonth();
     for (let i = 0; i < 42; i++) {
@@ -1953,8 +2412,14 @@
       b.type = "button";
       b.className = "cal-day" + (d.getMonth() !== calMonth.getMonth() ? " other" : "") + (d.getDay() % 6 === 0 ? " weekend" : "") + (dayKey(d) === today ? " today" : "");
       b.textContent = d.getDate();
-      const n = remDays.get(dayKey(d));
-      if (n) { const dot = document.createElement("i"); dot.className = "dot"; b.append(dot); b.dataset.tip = n + " " + plural(n, "напоминание", "напоминания", "напоминаний"); }
+      const n = remDays.get(dayKey(d)) || 0, nt = taskDays.get(dayKey(d)) || 0;
+      if (n || nt) {
+        const dot = document.createElement("i"); dot.className = "dot"; b.append(dot);
+        const tip = [];
+        if (n) tip.push(n + " " + plural(n, "напоминание", "напоминания", "напоминаний"));
+        if (nt) tip.push(nt + " " + plural(nt, "задача", "задачи", "задач") + " со сроком");
+        b.dataset.tip = tip.join(", ");
+      }
       b.addEventListener("click", () => { setTab("rem"); if (dayKey(d) >= dayKey(new Date())) setRemDate(dayKey(d)); $("rem-text").focus(); });
       g.append(b);
     }
@@ -2201,7 +2666,7 @@
     for (const r of dueList()) {
       if (r.sent_at || r.failed_at || shownRem.has(r.id)) continue;
       const t = new Date(r.remind_at).getTime();
-      if (t <= now && now - t < 120000) { shownRem.add(r.id); beep(); toast("Напоминание: " + r.text); }
+      if (t <= now && now - t < 120000) { shownRem.add(r.id); beep(); toast((r.type === "task" ? "Задача: " : "Напоминание: ") + r.text); }
     }
   }
 
@@ -2623,10 +3088,12 @@
   const liveDesks = () => ddesks.filter((d) => !d.removed);
   function deskStat(id) {
     const secs = state.sections.filter((f) => f.desk_id === id);
-    const notes = state.items.filter((it) => secs.some((f) => f.id === it.section_id)).length;
+    const inDesk = state.items.filter((it) => secs.some((f) => f.id === it.section_id));
+    const notes = inDesk.filter((it) => it.type === "note").length, tasks = inDesk.filter((it) => it.type === "task" && !it.done).length;
     const links = state.allLinks.filter((l) => l.desk_id === id).length;
     const parts = [secs.length + " " + plural(secs.length, "поле", "поля", "полей")];
     if (notes) parts.push(notes + " " + plural(notes, "заметка", "заметки", "заметок"));
+    if (tasks) parts.push(tasks + " " + plural(tasks, "задача", "задачи", "задач"));
     if (links) parts.push(links + " " + plural(links, "ссылка", "ссылки", "ссылок"));
     return parts.join(" · ");
   }
@@ -2830,7 +3297,7 @@
 
   /* ---------- Корзина: удалённое за 30 дней, восстановление пачкой ---------- */
   const TRASH_DAYS = 30;
-  const TRASH_ICO = { field: "M4 5h16v14H4zM4 10h16", note: "M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 16h5", reminder: "M6 10a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6zM10 20a2 2 0 0 0 4 0", link: "M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1", group: "M3 7h6l2 2h10v10H3z", desk: "M3 5h8v6H3zM13 5h8v6h-8zM3 13h8v6H3zM13 13h8v6h-8z" };
+  const TRASH_ICO = { field: "M4 5h16v14H4zM4 10h16", note: "M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 16h5", reminder: "M6 10a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6zM10 20a2 2 0 0 0 4 0", link: "M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1", group: "M3 7h6l2 2h10v10H3z", task: "M4 5h16v14H4zM8 12l3 3 5-6", desk: "M3 5h8v6H3zM13 5h8v6h-8zM3 13h8v6H3zM13 13h8v6h-8z" };
   const UNDO_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M9 14 4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3"/></svg>';
   const q_ = (s) => "«" + (s.length > 40 ? s.slice(0, 40) + "…" : s) + "»";
   async function renderTrash() {
@@ -2849,17 +3316,19 @@
     const list = [...batches.entries()].sort((a, b) => (a[1].at < b[1].at ? 1 : -1));
     for (const [batch, b] of list) {
       const by = (k) => b.rows.filter((r) => r.kind === k);
-      const f = by("field"), notes = by("note"), rems = by("reminder"), links = by("link"), groups = by("group"), desks = by("desk");
+      const f = by("field"), notes = by("note"), rems = by("reminder"), links = by("link"), groups = by("group"), desks = by("desk"), tasks = by("task");
+      const recs = () => { const p = []; if (notes.length) p.push(notes.length + " " + plural(notes.length, "заметка", "заметки", "заметок")); if (tasks.length) p.push(tasks.length + " " + plural(tasks.length, "задача", "задачи", "задач")); return p; };
       let kind, title;
       if (desks.length) {
         kind = "desk"; title = "Стол " + q_(desks[0].title || "");
         const parts = [];
         if (f.length) parts.push(f.length + " " + plural(f.length, "поле", "поля", "полей"));
-        if (notes.length) parts.push(notes.length + " " + plural(notes.length, "заметка", "заметки", "заметок"));
+        parts.push(...recs());
         if (links.length) parts.push(links.length + " " + plural(links.length, "ссылка", "ссылки", "ссылок"));
         if (parts.length) title += " · " + parts.join(", ");
-      } else if (f.length) { kind = "field"; const app = APPS[f[0].app]; title = "Поле " + q_(app ? app.name : "Поле") + (notes.length ? " и " + notes.length + " " + plural(notes.length, "заметка", "заметки", "заметок") : ""); }
+      } else if (f.length) { kind = "field"; const app = APPS[f[0].app]; title = "Поле " + q_(app ? app.name : "Поле") + (recs().length ? " и " + recs().join(", ") : ""); }
       else if (notes.length) { kind = "note"; title = notes.length === 1 ? "Заметка " + q_(noteTitle(notes[0])) : notes.length + " " + plural(notes.length, "заметка", "заметки", "заметок"); }
+      else if (tasks.length) { kind = "task"; title = tasks.length === 1 ? "Задача " + q_(tasks[0].title || "") : tasks.length + " " + plural(tasks.length, "задача", "задачи", "задач"); }
       else if (rems.length) { kind = "reminder"; title = rems.length === 1 ? "Напоминание " + q_(rems[0].title || "") : "Напоминаний: " + rems.length; }
       else if (links.length || groups.length) {
         kind = links.length ? "link" : "group";
@@ -2962,6 +3431,13 @@
       return resultEl("note", title, [fieldName(it), extra].filter(Boolean).join(" · "), q, async () => { const d = deskOf(it.section_id); if (d && d.id !== state.desk) await switchDesk(d.id); openEditor(it.id); });
     });
     if (notes.length) groups.push(["Заметки", notes]);
+    const tasks = state.items.filter((it) => it.type === "task" && norm(it.title + " " + (it.body || "") + " " + ((tData(it).subs || []).map((x) => x.t).join(" "))).includes(q))
+      .sort((a, b) => !!a.done - !!b.done).slice(0, 6).map((it) => {
+        const dt = tData(it);
+        const sub = [fieldName(it), it.done ? "выполнено" : dt.due ? dueLabel(dt.due, dt.allday) : "", norm(it.title).includes(q) ? "" : snippet(it.body || "", q)].filter(Boolean).join(" · ");
+        return resultEl("task", it.title, sub, q, async () => { const d = deskOf(it.section_id); if (d && d.id !== state.desk) await switchDesk(d.id); openItem(it.id); });
+      });
+    if (tasks.length) groups.push(["Задачи", tasks]);
     const rems = (state.reminders || []).filter((r) => norm(r.text).includes(q)).slice(0, 5).map((r) =>
       resultEl("rem", r.text, fmtRem.format(new Date(r.remind_at)) + (r.sent_at ? " · отправлено" : ""), q, () => openItem(r.id)));
     if (rems.length) groups.push(["Напоминания", rems]);
@@ -3048,18 +3524,30 @@
   /* ---------- Шапка: ближайшее напоминание сегодня ---------- */
   function renderNextRem() {
     const now = new Date(), today = now.toDateString();
-    const next = dueList()
-      .filter((r) => !r.sent_at && !r.failed_at && new Date(r.remind_at) > now && new Date(r.remind_at).toDateString() === today)
+    const tasks = state.items.filter((t) => t.type === "task" && !t.done && tData(t).due && !tData(t).allday)
+      .map((t) => ({ id: t.id, text: t.title, remind_at: tData(t).due, type: "task" }));
+    const next = dueList().filter((r) => r.type === "reminder" && !r.sent_at && !r.failed_at).concat(tasks)
+      .filter((r) => new Date(r.remind_at) > now && new Date(r.remind_at).toDateString() === today)
       .sort((a, b) => new Date(a.remind_at) - new Date(b.remind_at))[0];
+    nextRemFor = next || null;
     const el = $("next-rem");
     if (!next) { if (!el.hidden) animHide(el, 150); return; }
     const t = fmtHM.format(new Date(next.remind_at));
     if ($("next-rem-text").textContent !== next.text) $("next-rem-text").textContent = next.text;
     if ($("next-rem-time").textContent !== t) $("next-rem-time").textContent = t;
-    el.setAttribute("aria-label", "Ближайшее напоминание: " + next.text + ", " + t);
+    el.setAttribute("aria-label", (next.type === "task" ? "Ближайшая задача: " : "Ближайшее напоминание: ") + next.text + ", " + t);
+    el.dataset.tip = next.type === "task" ? "Задача на сегодня" : "Напоминание";
     if (el.hidden || el.classList.contains("is-leaving")) animShow(el);
   }
-  $("next-rem").addEventListener("click", () => openTime("rem"));
+  let nextRemFor = null;
+  $("next-rem").addEventListener("click", async () => {
+    if (nextRemFor && nextRemFor.type === "task") {
+      const it = state.items.find((x) => x.id === nextRemFor.id);
+      const f = it && state.sections.find((x) => x.id === it.section_id);
+      if (f && f.desk_id !== state.desk) await switchDesk(f.desk_id);
+      openItem(nextRemFor.id);
+    } else openTime("rem");
+  });
 
   /* ---------- Шапка: нет интернета ---------- */
   function renderOnline() {
