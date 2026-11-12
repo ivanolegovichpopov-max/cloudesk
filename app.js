@@ -600,7 +600,8 @@
     tasks: {
       name: "Задачи", icon: IC.task, spans: [1, 2, 3], addTip: "Новая задача",
       limit: 100, limitTip: "В поле уже 100 задач — это предел. Удалите ненужные или создайте ещё одно поле «Задачи»",
-      add: (f) => { const i = $("board").querySelector('.fld[data-id="' + f.id + '"] .tk-input'); if (i) { i.scrollIntoView({ block: "nearest" }); i.focus(); } },
+      // «+» — как у заметок: сразу полное окно новой задачи (быстрая строка в поле остаётся для коротких)
+      add: (f) => openItem(null, "task", f.id),
       render: (f, body) => renderTasks(f, body),
       // в заголовке — сколько осталось сделать; предел считает все задачи поля
       count: (f) => state.items.filter((it) => it.type === "task" && it.section_id === f.id && !it.done).length,
@@ -1495,6 +1496,7 @@
   }));
   function renderSubs(focusIdx) {
     const ol = $("it-subs"); ol.textContent = "";
+    $("it-subs-box").hidden = !id_.subs.length; // сначала показать список — иначе новый подпункт не получит курсор
     id_.subs.forEach((x, i) => {
       const li = document.createElement("li"); li.className = "it-sub" + (x.done ? " done" : "");
       const cb = document.createElement("button"); cb.type = "button"; cb.className = "cl-box"; cb.setAttribute("role", "checkbox"); cb.setAttribute("aria-checked", String(!!x.done)); cb.setAttribute("aria-label", "Сделано");
@@ -1509,7 +1511,7 @@
       const del = tool(P.x, "Убрать подпункт", () => { id_.subs.splice(i, 1); renderSubs(); });
       li.append(cb, inp, del);
       ol.append(li);
-      if (focusIdx === i) setTimeout(() => { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }, 10);
+      if (focusIdx === i) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
     });
     const done = id_.subs.filter((x) => x.done).length;
     $("it-subs-count").textContent = id_.subs.length ? done + "/" + id_.subs.length : "";
