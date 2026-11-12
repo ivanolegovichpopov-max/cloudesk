@@ -1065,17 +1065,30 @@ input.bad { border-color: var(--danger) !important; }
 .task-due-pop { position: fixed; z-index: 46; width: 250px; min-width: 0; right: auto; bottom: auto; display: grid; gap: 2px; }
 .task-due-pop .menu-item svg { flex: none; color: var(--ink-dim); }
 
-/* Окно задачи: напоминание, повтор, важная, подпункты */
-.it-form { overflow-y: auto; overflow-x: hidden; }
-.it-task { display: grid; gap: 8px; }
-.it-task[hidden], .it-subs-box[hidden] { display: none; }
-.it-opt { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; min-height: 38px; }
-.it-opt-l { font-size: 14px; }
-.it-opt .segmented { flex: 0 1 auto; flex-wrap: wrap; }
-.it-opt .segmented button:disabled { opacity: .35; cursor: default; }
-#itemsheet .it-body { flex: 1 0 auto; min-height: 84px; }
-.it-subs-box { flex: none; display: grid; gap: 4px; }
-.it-subs-h { display: flex; gap: 6px; padding-top: 2px; }
+/* Окно задачи — как редактор заметки: крупное название с линией, под ним срок и «чипы», описание без рамки,
+   подпункты; «Подпункт», «Важная», «Выполнена», «Удалить» — значками внизу */
+#itemsheet .it-form > .ed-head, #itemsheet .it-when { flex: none; }
+#itemsheet .it-when { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+#itemsheet .it-when > .field:not(.it-chip-f) { flex: 1 1 140px; min-width: 0; }
+#itemsheet .it-when > .tool { margin-left: auto; }
+.it-chip-f { flex: none; position: relative; }
+.it-chip-f[hidden] { display: none; }
+.it-chip { width: auto !important; gap: 6px; padding: 0 11px; }
+.it-chip > span[hidden] { display: none; }
+.it-chip.on { border-color: var(--accent); color: var(--accent); }
+.it-chip.on svg { color: var(--accent); }
+.it-chip.off { opacity: .45; }
+.it-chip.off:hover { border-color: var(--line); }
+.it-chip-f .pop { left: auto; right: 0; width: 220px; min-width: 0; }
+#itemsheet .it-body {
+  flex: 1 1 auto; min-height: 84px; padding: 6px 4px; border: 0; border-radius: 0; background: transparent;
+  font: 400 15px/1.6 var(--font); color: inherit;
+}
+#itemsheet .it-body:focus { border: 0; }
+#itemsheet .it-body::placeholder { color: inherit; opacity: .45; }
+.it-subs-box { flex: none; display: grid; gap: 4px; max-height: 45%; overflow-y: auto; overflow-x: hidden; border-top: 1px solid var(--line); padding-top: 6px; }
+.it-subs-box[hidden] { display: none; }
+.it-subs-h { display: flex; gap: 6px; padding: 0 2px; }
 .it-subs-count { font-variant-numeric: tabular-nums; }
 .it-subs { margin: 0; padding: 0; list-style: none; display: grid; gap: 2px; }
 .it-sub { display: flex; align-items: center; gap: 8px; min-width: 0; padding-left: 4px; }
@@ -1085,10 +1098,5 @@ input.bad { border-color: var(--danger) !important; }
 .it-sub .tool { width: 28px; height: 28px; opacity: .6; }
 .it-sub .tool:hover { opacity: 1; }
 .it-sub .cl-box { width: 16px; height: 16px; }
-.it-sub-add {
-  justify-self: start; display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 8px;
-  border: 0; border-radius: var(--r); background: transparent; color: var(--ink-dim); font-size: 14px; cursor: pointer;
-}
-.it-sub-add:hover:not(:disabled) { color: var(--accent); background: var(--hover); }
-.it-sub-add:disabled { opacity: .4; }
+#it-prio[aria-pressed="true"], #it-done[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
 .task-due-pop .menu-item { justify-content: flex-start; }

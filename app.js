@@ -1394,12 +1394,13 @@
   let itDpMonth = new Date(); itDpMonth.setDate(1);
   function setItDate(v) {
     id_.date = v;
+    if (!id_.time) $("it-time-label").textContent = id_.type === "task" && v ? "Весь день" : "Время";
     if (!v) { $("it-date-label").textContent = "Дата"; return; }
     const [y, m, d] = v.split("-").map(Number);
     $("it-date-label").textContent = v === dayKey(new Date()) ? "Сегодня" : fmtDay.format(new Date(y, m - 1, d));
     itDpMonth = new Date(y, m - 1, 1);
   }
-  function setItTime(v) { id_.time = v; $("it-time-label").textContent = v || (id_.type === "task" ? "Весь день" : "Время"); if (typeof renderItTask === "function") renderItTask(); }
+  function setItTime(v) { id_.time = v; $("it-time-label").textContent = v || (id_.type === "task" && id_.date ? "Весь день" : "Время"); if (typeof renderItTask === "function") renderItTask(); }
   function renderItDP() {
     $("itdp-title").textContent = fmtMonth.format(itDpMonth).replace(" г.", "");
     const g = $("itdp-grid"); g.textContent = "";
@@ -1436,33 +1437,61 @@
     else { setItDate(""); setItTime(""); }
     renderItTask();
   });
-  $("it-done").addEventListener("click", () => { id_.done = !id_.done; $("it-done").setAttribute("aria-checked", String(id_.done)); });
+  $("it-done").addEventListener("click", () => { id_.done = !id_.done; renderItTask(); });
 
   // окно задачи: напоминание, повтор, важная, подпункты
-  function segBuild(box, list, cur, onPick, disabled) {
+  // выбор из списка (свой, как в меню): строки одного вида, выбранная — с галочкой справа и жирная
+  function pickList(box, list, cur, onPick) {
     box.textContent = "";
     list.forEach(([v, label]) => {
-      const b = document.createElement("button"); b.type = "button"; b.setAttribute("role", "radio"); b.textContent = label;
-      b.setAttribute("aria-checked", String(v === cur)); b.disabled = !!disabled && v !== null;
-      b.addEventListener("click", () => onPick(v));
+      const b = document.createElement("button"); b.type = "button"; b.className = "menu-item"; b.setAttribute("role", "menuitemradio");
+      b.setAttribute("aria-checked", String(v === cur));
+      const t = document.createElement("span"); t.textContent = label;
+      b.append(t); b.insertAdjacentHTML("beforeend", '<svg class="check" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7.5"/></svg>');
+      b.addEventListener("click", (e) => { e.stopPropagation(); onPick(v); closeMenus(null); });
       box.append(b);
     });
   }
+  const REMIND_FULL = [[null, "Не напоминать"], [0, "В срок"], [15, "За 15 минут"], [60, "За час"], [1440, "За день"]];
+  const REPEAT_FULL = [[null, "Не повторять"], ["day", "Каждый день"], ["weekdays", "По будням"], ["week", "Каждую неделю"], ["month", "Каждый месяц"]];
   function renderItTask() {
     if (id_.type !== "task") return;
     const noDue = !id_.date;
     if (noDue) { id_.remind = null; id_.repeat = null; }
-    segBuild($("it-remind"), REMINDS, id_.remind, (v) => { id_.remind = v; renderItTask(); }, noDue);
-    segBuild($("it-repeat"), REPEATS, id_.repeat, (v) => { id_.repeat = v; renderItTask(); }, noDue);
-    $("it-remind").dataset.tip = noDue ? "Сначала выберите дату" : id_.time ? "" : "Задача на весь день — напоминание в 9:00";
-    $("it-repeat").dataset.tip = noDue ? "Сначала выберите дату" : "";
-    ["it-remind", "it-repeat"].forEach((k) => { if (!$(k).dataset.tip) delete $(k).dataset.tip; });
-    $("it-prio").setAttribute("aria-checked", String(id_.prio));
+    // напоминание и повтор — «чипы» рядом со сроком: выключены — только значок, включены — значение
+    const chip = (key, list, cur, onPick, tipOff) => {
+      const btn = $("it-" + key + "-btn"), lab = $("it-" + key + "-label");
+      const on = cur != null, item = list.find((x) => x[0] === cur);
+      lab.textContent = on ? item[1] : ""; lab.hidden = !on;
+      btn.classList.toggle("on", on); btn.classList.toggle("off", noDue);
+      btn.dataset.tip = noDue ? "Сначала выберите дату" : on ? tipOff : tipOff;
+      btn.setAttribute("aria-label", tipOff + (on ? ": " + item[1] : ""));
+      if (noDue) btn.setAttribute("aria-disabled", "true"); else btn.removeAttribute("aria-disabled");
+      pickList($("it-" + key + "-pop"), list, cur, onPick);
+    };
+    chip("remind", REMIND_FULL, id_.remind, (v) => { id_.remind = v; renderItTask(); }, id_.time ? "Напоминание в Telegram" : "Напоминание в Telegram (задача на весь день — в 9:00)");
+    chip("repeat", REPEAT_FULL, id_.repeat, (v) => { id_.repeat = v; renderItTask(); }, "Повтор");
+    $("it-prio").setAttribute("aria-pressed", String(id_.prio));
+    $("it-prio").dataset.tip = id_.prio ? "Важная — снять отметку" : "Сделать важной — будет выше в своей группе";
+    $("it-done").setAttribute("aria-pressed", String(id_.done));
+    $("it-done").dataset.tip = id_.done ? "Вернуть в работу" : "Отметить выполненной";
     $("it-when-clear").dataset.tip = id_.time ? "Убрать время" : "Без срока";
     $("it-when-clear").setAttribute("aria-label", $("it-when-clear").dataset.tip);
     $("it-when-clear").disabled = !id_.date && !id_.time;
   }
+  // без даты напоминание и повтор не открываются — подсказка объясняет почему
+  ["it-remind-btn", "it-repeat-btn"].forEach((k) => $(k).addEventListener("click", (e) => {
+    if (id_.date) return;
+    e.stopImmediatePropagation(); closeMenus(null); toast("Сначала выберите дату");
+  }, true));
   $("it-prio").addEventListener("click", () => { id_.prio = !id_.prio; renderItTask(); });
+  // список открывается под чипом и не выходит за край окна: прижимается к той стороне, где есть место
+  ["it-remind", "it-repeat"].forEach((k) => $(k + "-btn").addEventListener("click", () => {
+    const pop = $(k + "-pop"); if (pop.hidden) return;
+    pop.style.left = ""; pop.style.right = "";
+    const sheet = pop.closest(".sheet").getBoundingClientRect(), r = pop.getBoundingClientRect();
+    if (r.left < sheet.left + 8) { pop.style.left = "0"; pop.style.right = "auto"; }
+  }));
   function renderSubs(focusIdx) {
     const ol = $("it-subs"); ol.textContent = "";
     id_.subs.forEach((x, i) => {
@@ -1483,6 +1512,7 @@
     });
     const done = id_.subs.filter((x) => x.done).length;
     $("it-subs-count").textContent = id_.subs.length ? done + "/" + id_.subs.length : "";
+    $("it-subs-box").hidden = !id_.subs.length;
     $("it-sub-add").disabled = id_.subs.length >= TASK_LIM.subs;
   }
   $("it-sub-add").addEventListener("click", () => { if (id_.subs.length >= TASK_LIM.subs) return; id_.subs.push({ t: "", done: false }); renderSubs(id_.subs.length - 1); });
@@ -1502,11 +1532,11 @@
     $("it-title").value = it ? it.title : "";
     $("it-body").value = it ? it.body : "";
     $("it-body").hidden = !isTask;
+    document.querySelectorAll("#itemsheet .it-ttool").forEach((b) => (b.hidden = !isTask));
     $("it-done").hidden = !isTask || !it;
-    $("it-done").setAttribute("aria-checked", String(id_.done));
     $("it-when-clear").hidden = !isTask;
     $("it-date-btn").closest(".it-when").dataset.tip = "";
-    $("it-task").hidden = !isTask; $("it-subs-box").hidden = !isTask;
+    $("it-remind-f").hidden = !isTask; $("it-repeat-f").hidden = !isTask; $("it-subs-box").hidden = true;
     if (isTask) {
       const dt = it ? tData(it) : {};
       id_.remind = dt.remind ?? null; id_.repeat = dt.repeat || null; id_.prio = !!dt.prio;
