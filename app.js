@@ -213,9 +213,15 @@
       btn.setAttribute("aria-expanded", String(!m.hidden));
     }));
   document.addEventListener("click", (e) => {
-    if (!e.target.closest || !e.target.closest(".menu")) closeMenus(null);
+    // путь события запоминается в момент клика — работает, даже если кнопку внутри списка уже перерисовали
+    const inside = e.composedPath().some((n) => n.classList && (n.classList.contains("menu") || n.classList.contains("pop")));
+    if (!inside) closeMenus(null);
   });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenus(null); });
+  // Esc сначала закрывает открытый список/выбор, и только следующее нажатие — окно
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (document.querySelector('[data-menu][aria-expanded="true"]')) { closeMenus(null); e.stopImmediatePropagation(); }
+  });
   $("btn-logout").addEventListener("click", async () => {
     closeMenus(null);
     await sb.auth.signOut();
@@ -649,8 +655,8 @@
       b.type = "button";
       b.className = "cal-day" + (d.getMonth() !== calMonth.getMonth() ? " other" : "") + (d.getDay() % 6 === 0 ? " weekend" : "") + (dayKey(d) === today ? " today" : "");
       b.textContent = d.getDate();
-      if (remDays.has(dayKey(d))) { const dot = document.createElement("i"); dot.className = "dot"; dot.title = "Есть напоминание"; b.append(dot); }
-      b.addEventListener("click", () => { setTab("rem"); $("rem-date").value = dayKey(d); $("rem-text").focus(); });
+      if (remDays.has(dayKey(d))) { const dot = document.createElement("i"); dot.className = "dot";  b.append(dot); }
+      b.addEventListener("click", () => { setTab("rem"); if (dayKey(d) >= dayKey(new Date())) setRemDate(dayKey(d)); $("rem-text").focus(); });
       g.append(b);
     }
   }
@@ -781,7 +787,7 @@
       }
       main.append(t, m);
       const del = document.createElement("button");
-      del.type = "button"; del.className = "tool"; del.title = "Удалить";
+      del.type = "button"; del.className = "tool"; del.dataset.tip = "Удалить"; del.setAttribute("aria-label", "Удалить");
       del.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M6 6l12 12M18 6 6 18"/></svg>';
       del.addEventListener("click", () => trackTime(async () => {
         const { error } = await sb.from("reminders").delete().eq("id", r.id);
@@ -794,11 +800,61 @@
     }
     $("rem-empty").hidden = list.length > 0;
   }
+  /* Свои поля даты и времени вместо системных */
+  const fmtDay = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", weekday: "short" });
+  function setRemDate(v) {
+    $("rem-date").value = v;
+    const [y, m, d] = v.split("-").map(Number);
+    const dt = new Date(y, m - 1, d);
+    $("rem-date-label").textContent = v === dayKey(new Date()) ? "Сегодня" : fmtDay.format(dt);
+    dpMonth = new Date(y, m - 1, 1);
+  }
+  function setRemTime(v) { $("rem-time").value = v; $("rem-time-label").textContent = v; }
+  let dpMonth = new Date(); dpMonth.setDate(1);
+  function renderDP() {
+    $("dp-title").textContent = fmtMonth.format(dpMonth).replace(" г.", "");
+    const g = $("dp-grid");
+    g.textContent = "";
+    ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].forEach((d) => { const el = document.createElement("div"); el.className = "cal-dow"; el.textContent = d; g.append(el); });
+    const start = new Date(dpMonth); start.setDate(1 - ((dpMonth.getDay() + 6) % 7));
+    const today = dayKey(new Date());
+    for (let i = 0; i < 42; i++) {
+      const d = new Date(start); d.setDate(start.getDate() + i);
+      const k = dayKey(d);
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "dp-day" + (d.getMonth() !== dpMonth.getMonth() ? " other" : "") + (k === today ? " today" : "") + (k === $("rem-date").value ? " sel" : "");
+      b.textContent = d.getDate();
+      b.disabled = k < today;
+      b.addEventListener("click", () => { setRemDate(k); closeMenus(null); });
+      g.append(b);
+    }
+  }
+  $("dp-prev").addEventListener("click", () => { dpMonth.setMonth(dpMonth.getMonth() - 1); renderDP(); });
+  $("dp-next").addEventListener("click", () => { dpMonth.setMonth(dpMonth.getMonth() + 1); renderDP(); });
+  $("rem-date-btn").addEventListener("click", renderDP);
+  function renderTP() {
+    const [h, m] = ($("rem-time").value || "09:00").split(":");
+    const mk = (box, vals, cur, onPick) => {
+      box.textContent = "";
+      vals.forEach((v) => {
+        const b = document.createElement("button");
+        b.type = "button"; b.className = "tp-item" + (v === cur ? " sel" : ""); b.textContent = v;
+        b.addEventListener("click", () => onPick(v));
+        box.append(b);
+      });
+      const sel = box.querySelector(".sel"); if (sel) box.scrollTop = sel.offsetTop - box.clientHeight / 2 + sel.clientHeight / 2;
+    };
+    mk($("tp-hours"), Array.from({ length: 24 }, (_, i) => pad(i)), h, (v) => { setRemTime(v + ":" + m); renderTP(); });
+    mk($("tp-mins"), Array.from({ length: 12 }, (_, i) => pad(i * 5)), m, (v) => { setRemTime(h + ":" + v); closeMenus(null); });
+  }
+  $("rem-time-btn").addEventListener("click", () => setTimeout(renderTP, 0));
+
   function resetRemForm() {
     $("rem-text").value = "";
     const d = new Date(Date.now() + 60 * 60000);
-    $("rem-date").value = dayKey(d);
-    $("rem-time").value = pad(d.getHours()) + ":00";
+    setRemDate(dayKey(d));
+    setRemTime(pad(d.getHours()) + ":00");
   }
   async function addReminder() {
     const text = $("rem-text").value.trim();
@@ -863,18 +919,24 @@
       li.append(name, time);
       if (!local) {
         const del = document.createElement("button");
-        del.type = "button"; del.className = "tool"; del.title = "Убрать город";
+        del.type = "button"; del.className = "tool"; del.dataset.tip = "Убрать город"; del.setAttribute("aria-label", "Убрать город");
         del.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M6 6l12 12M18 6 6 18"/></svg>';
         del.addEventListener("click", () => saveCities(cities().filter((c) => c !== tz)));
         li.append(del);
       }
       ul.append(li);
     }
-    const pick = $("city-pick");
-    pick.textContent = "";
+    const pop = $("city-pop");
+    pop.textContent = "";
     const chosen = new Set(cities().concat(localTz));
-    CITY_LIST.filter((c) => !chosen.has(c[0])).forEach(([tz, n]) => { const o = document.createElement("option"); o.value = tz; o.textContent = n; pick.append(o); });
-    $("city-add").disabled = cities().length >= 8 || !pick.options.length;
+    const left = CITY_LIST.filter((c) => !chosen.has(c[0]));
+    left.forEach(([tz, n]) => {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "menu-item"; b.setAttribute("role", "option"); b.textContent = n;
+      b.addEventListener("click", () => { closeMenus(null); if (cities().length < 8) saveCities(cities().concat(tz)); });
+      pop.append(b);
+    });
+    $("city-add").disabled = cities().length >= 8 || !left.length;
     renderCityTimes();
   }
   function renderCityTimes() {
@@ -898,7 +960,6 @@
       catch (e) { state.settings.cities = prev; renderCities(); toast("Город не сохранился. Попробуйте ещё раз."); throw e; }
     });
   }
-  $("city-add").addEventListener("click", () => { const v = $("city-pick").value; if (v && cities().length < 8) saveCities(cities().concat(v)); });
 
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;

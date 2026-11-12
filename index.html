@@ -38,7 +38,7 @@
 <!-- Рабочий стол -->
 <div id="desk" class="desk" hidden>
   <header class="top">
-    <button id="btn-clock" class="clock" type="button" title="Календарь, таймер, секундомер, напоминания, города">
+    <button id="btn-clock" class="clock" type="button" data-tip="Календарь, таймер, секундомер, напоминания, города" aria-label="Календарь, таймер, секундомер, напоминания, города">
       <span id="clock-time" class="clock-time">--:--</span>
       <span id="clock-date" class="clock-date"></span>
       <span id="clock-run" class="clock-run" hidden></span>
@@ -65,7 +65,7 @@
             <div class="menu-row">
               <span class="menu-ico"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 3a9 9 0 1 0 0 18zM12 3a9 9 0 0 1 0 18"/></svg>Тема</span>
               <div class="segmented" role="radiogroup" aria-label="Тема оформления">
-                <button type="button" role="radio" data-theme-set="auto" title="Как на устройстве">Авто</button>
+                <button type="button" role="radio" data-theme-set="auto" data-tip="Как на устройстве" aria-label="Как на устройстве">Авто</button>
                 <button type="button" role="radio" data-theme-set="light">Светлая</button>
                 <button type="button" role="radio" data-theme-set="dark">Тёмная</button>
               </div>
@@ -110,7 +110,7 @@
       <h3 id="ed-title">Заметка</h3>
       <div class="sheet-tools">
         <span id="ed-status" class="ed-status" role="status"></span>
-        <button type="button" class="tool" data-close title="Закрыть">
+        <button type="button" class="tool" data-close data-tip="Закрыть" aria-label="Закрыть">
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M6 6l12 12M18 6 6 18"/></svg>
       </button>
       </div>
@@ -127,10 +127,10 @@
         <button type="button" class="dot" data-color="ink" aria-label="Тёмный"></button>
       </div>
       <div id="ed-actions" class="foot-actions">
-        <button id="ed-pin" type="button" class="tool" aria-pressed="false" title="Закрепить сверху">
+        <button id="ed-pin" type="button" class="tool" aria-pressed="false" data-tip="Закрепить сверху" aria-label="Закрепить сверху">
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M9 3h6l-1 6 4 4H6l4-4zM12 13v8"/></svg>
         </button>
-        <button id="ed-delete" type="button" class="tool" title="Удалить">
+        <button id="ed-delete" type="button" class="tool" data-tip="Удалить" aria-label="Удалить">
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>
         </button>
         <button type="button" class="btn-primary" data-close>Готово</button>
@@ -150,7 +150,7 @@
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="wall-h">
     <div class="sheet-bar">
       <h3 id="wall-h">Заставка</h3>
-      <button type="button" class="tool" data-close title="Закрыть">
+      <button type="button" class="tool" data-close data-tip="Закрыть" aria-label="Закрыть">
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M6 6l12 12M18 6 6 18"/></svg>
       </button>
     </div>
@@ -176,7 +176,7 @@
       <h3 id="time-h">Время</h3>
       <div class="sheet-tools">
         <span id="time-status" class="ed-status" role="status"></span>
-        <button type="button" class="tool" data-close title="Закрыть">
+        <button type="button" class="tool" data-close data-tip="Закрыть" aria-label="Закрыть">
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M6 6l12 12M18 6 6 18"/></svg>
       </button>
       </div>
@@ -191,9 +191,9 @@
 
     <section class="tab-panel cal" data-panel="cal" role="tabpanel">
       <div class="cal-head">
-        <button type="button" class="tool" id="cal-prev" title="Предыдущий месяц"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M15 6l-6 6 6 6"/></svg></button>
+        <button type="button" class="tool" id="cal-prev" data-tip="Предыдущий месяц" aria-label="Предыдущий месяц"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M15 6l-6 6 6 6"/></svg></button>
         <div id="cal-title" class="cal-title"></div>
-        <button type="button" class="tool" id="cal-next" title="Следующий месяц"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 6l6 6-6 6"/></svg></button>
+        <button type="button" class="tool" id="cal-next" data-tip="Следующий месяц" aria-label="Следующий месяц"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 6l6 6-6 6"/></svg></button>
         <button type="button" class="btn-ghost" id="cal-today">Сегодня</button>
       </div>
       <div class="cal-grid" id="cal-grid"></div>
@@ -227,10 +227,32 @@
         <label class="sr" for="rem-text">Текст напоминания</label>
         <input id="rem-text" type="text" maxlength="500" placeholder="О чём напомнить?" autocomplete="off">
         <div class="rem-when">
-          <label class="sr" for="rem-date">Дата</label>
-          <input id="rem-date" type="date">
-          <label class="sr" for="rem-time">Время</label>
-          <input id="rem-time" type="time">
+          <input id="rem-date" type="hidden">
+          <input id="rem-time" type="hidden">
+          <div class="field">
+            <button type="button" id="rem-date-btn" class="pick-btn" aria-haspopup="dialog" aria-expanded="false" data-menu="rem-date-pop">
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M4 6h16v14H4zM4 10h16M8 3v4M16 3v4"/></svg>
+              <span id="rem-date-label">Дата</span>
+            </button>
+            <div id="rem-date-pop" class="pop pop-cal" hidden>
+              <div class="cal-head">
+                <button type="button" class="tool" id="dp-prev" data-tip="Предыдущий месяц" aria-label="Предыдущий месяц"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M15 6l-6 6 6 6"/></svg></button>
+                <div id="dp-title" class="cal-title"></div>
+                <button type="button" class="tool" id="dp-next" data-tip="Следующий месяц" aria-label="Следующий месяц"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 6l6 6-6 6"/></svg></button>
+              </div>
+              <div id="dp-grid" class="dp-grid"></div>
+            </div>
+          </div>
+          <div class="field">
+            <button type="button" id="rem-time-btn" class="pick-btn" aria-haspopup="dialog" aria-expanded="false" data-menu="rem-time-pop">
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7v5l3 2"/></svg>
+              <span id="rem-time-label">Время</span>
+            </button>
+            <div id="rem-time-pop" class="pop pop-time" hidden>
+              <div class="tp-col"><div class="tp-head">Часы</div><div id="tp-hours" class="tp-list"></div></div>
+              <div class="tp-col"><div class="tp-head">Минуты</div><div id="tp-mins" class="tp-list"></div></div>
+            </div>
+          </div>
           <button type="submit" class="btn-primary">Добавить</button>
         </div>
       </form>
@@ -240,10 +262,13 @@
 
     <section class="tab-panel" data-panel="cities" role="tabpanel" hidden>
       <ul id="city-list" class="city-list"></ul>
-      <div class="city-add">
-        <label class="sr" for="city-pick">Добавить город</label>
-        <select id="city-pick"></select>
-        <button type="button" class="btn-primary" id="city-add">Добавить</button>
+      <div class="city-add field">
+        <button type="button" id="city-add" class="pick-btn" aria-haspopup="listbox" aria-expanded="false" data-menu="city-pop">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
+          <span>Добавить город</span>
+          <svg class="chev" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M6 15l6-6 6 6"/></svg>
+        </button>
+        <div id="city-pop" class="pop pop-up" role="listbox" hidden></div>
       </div>
     </section>
 

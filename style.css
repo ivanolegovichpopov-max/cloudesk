@@ -337,17 +337,17 @@ body[data-wall="custom"] .wall  { background-color: #111; }
 .laps li { display: flex; justify-content: space-between; padding: 6px 4px; border-bottom: 1px solid var(--line); }
 .laps li span:first-child { color: var(--ink-dim); }
 
-input[type="text"], input[type="number"], input[type="date"], input[type="time"], select {
+input[type="text"], input[type="number"] {
   height: 38px; padding: 0 10px; min-width: 0;
   border: 1px solid var(--line); border-radius: var(--r); background: transparent; color: var(--ink); font-size: 14px;
 }
-input:focus, select:focus { outline: none; border-color: var(--accent); }
-select option { background: var(--sheet); color: var(--ink); }
+input:focus { outline: none; border-color: var(--accent); }
 #timer-min { width: 140px; }
 
 .rem-form { flex: none; display: grid; gap: 8px; }
 .rem-when { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; }
-.rem-list, .city-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; align-content: start; }
+.tab-panel[data-panel="rem"], .tab-panel[data-panel="cities"] { overflow: visible; }
+.rem-list, .city-list { flex: 1; min-height: 0; overflow: auto; margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; align-content: start; }
 .rem-item, .city-item {
   display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 8px 6px 8px 12px;
   border: 1px solid var(--line); border-radius: var(--r);
@@ -361,9 +361,75 @@ select option { background: var(--sheet); color: var(--ink); }
 .city-diff { font-size: 12px; color: var(--ink-dim); }
 .city-time { font-size: 20px; font-weight: 500; font-variant-numeric: tabular-nums; }
 .city-item.local { background: var(--hover); }
-.city-add { flex: none; display: flex; gap: 8px; }
-.city-add select { flex: 1; }
+.city-add { flex: none; }
+.city-add .pick-btn { width: 100%; }
 .btn-ghost { display: inline-flex; align-items: center; }
+
+/* ---------- Всё системное — в стиле стола ---------- */
+html { -webkit-tap-highlight-color: transparent; }
+::selection { background: var(--accent); color: var(--accent-ink); }
+input, textarea { caret-color: var(--accent); }
+::placeholder { color: var(--ink-dim); opacity: 1; }
+/* полосы прокрутки */
+* { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background-color: var(--ink-dim); }
+::-webkit-scrollbar-corner { background: transparent; }
+/* автозаполнение браузера не перекрашивает поля */
+input:-webkit-autofill, textarea:-webkit-autofill {
+  -webkit-text-fill-color: var(--ink); caret-color: var(--accent);
+  -webkit-box-shadow: 0 0 0 40px var(--sheet) inset; transition: background-color 9999s;
+}
+/* стрелки числового поля */
+input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+button:disabled { cursor: default; opacity: .45; }
+
+/* свои подсказки вместо системных (только там, где есть наведение мышью) */
+@media (hover: hover) {
+  [data-tip] { position: relative; }
+  [data-tip]:hover::after {
+    content: attr(data-tip); position: absolute; z-index: 60; top: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+    padding: 5px 8px; border-radius: 4px; white-space: nowrap; pointer-events: none;
+    background: var(--ink); color: var(--sheet); font: 500 12px/1.2 var(--font); text-shadow: none; letter-spacing: 0; text-transform: none;
+  }
+  .sheet-bar [data-tip]:hover::after, .foot-actions [data-tip]:hover::after { left: auto; right: 0; transform: none; }
+  .rem-item [data-tip]:hover::after, .city-item [data-tip]:hover::after { top: 50%; left: auto; right: calc(100% + 6px); transform: translateY(-50%); }
+  .foot-actions [data-tip]:hover::after { top: auto; bottom: calc(100% + 6px); }
+}
+
+/* выпадающие выборы (дата, время, город) */
+.field { position: relative; min-width: 0; }
+.pick-btn {
+  display: inline-flex; align-items: center; gap: 8px; width: 100%; height: 38px; padding: 0 10px;
+  border: 1px solid var(--line); border-radius: var(--r); background: transparent; color: var(--ink); font-size: 14px; text-align: left;
+}
+.pick-btn > span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pick-btn svg { color: var(--ink-dim); flex: none; }
+.pick-btn:hover, .pick-btn[aria-expanded="true"] { border-color: var(--accent); }
+.pop {
+  position: absolute; z-index: 30; left: 0; top: calc(100% + 4px); min-width: 100%; padding: 6px;
+  background: var(--sheet); border: 1px solid var(--line); border-radius: var(--r-lg);
+  box-shadow: 0 8px 24px rgba(0,0,0,.18);
+}
+.pop-up { top: auto; bottom: calc(100% + 4px); max-height: 260px; overflow: auto; }
+.pop-cal { width: 280px; display: grid; gap: 6px; }
+.dp-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.dp-grid .cal-dow { min-height: 22px; font-size: 10px; }
+.dp-day { height: 32px; border: 0; border-radius: 4px; background: transparent; font-size: 13px; font-variant-numeric: tabular-nums; }
+.dp-day:hover:not(:disabled) { background: var(--hover); }
+.dp-day.other { color: var(--ink-dim); }
+.dp-day.today { box-shadow: inset 0 0 0 1px var(--accent); }
+.dp-day.sel { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.pop-time { display: flex; gap: 6px; width: 180px; }
+.tp-col { flex: 1; min-width: 0; }
+.tp-head { padding: 2px 6px 6px; font-size: 11px; font-weight: 600; color: var(--ink-dim); text-transform: uppercase; letter-spacing: .06em; }
+.tp-list { height: 200px; overflow: auto; display: grid; gap: 2px; align-content: start; }
+.tp-item { height: 30px; border: 0; border-radius: 4px; background: transparent; font-size: 14px; font-variant-numeric: tabular-nums; }
+.tp-item:hover { background: var(--hover); }
+.tp-item.sel { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
 
 .toast {
   position: fixed; left: 50%; transform: translateX(-50%);
