@@ -880,7 +880,7 @@
   }
 
   /* Счётчик символов: символы, без пробелов, слова; пределы объявлений Яндекс Директа */
-  const DIRECT_LIM = [["Заголовок", 56], ["Доп. заголовок", 30], ["Текст", 81]];
+  const DIRECT_LIM = [["Заголовок", 56, "Заг."], ["Доп. заголовок", 30, "Доп."], ["Текст", 81, "Текст"]];
   function renderText(f, box) {
     const st = toolsOf(f.id);
     const ta = document.createElement("textarea"); ta.className = "tl-text"; ta.placeholder = "Вставьте или напишите текст";
@@ -891,13 +891,13 @@
       st.text = ta.value; saveTools(f.id);
       const t = ta.value, n = t.length, ns = t.replace(/\s/g, "").length, w = (t.match(/[^\s]+/g) || []).length;
       stats.textContent = "";
-      [["Символов", n], ["Без пробелов", ns], ["Слов", w]].forEach(([l, v]) => {
-        const s = document.createElement("span"); const b = document.createElement("b"); b.textContent = fmtNum(v, 0); s.append(b, " " + l.toLowerCase()); stats.append(s);
+      [["симв.", n, "Символов"], ["без пробелов", ns, "Символов без пробелов"], ["слов", w, "Слов"]].forEach(([l, v, tip]) => {
+        const s = document.createElement("span"); s.dataset.tip = tip; const b = document.createElement("b"); b.textContent = fmtNum(v, 0); s.append(b, " " + l); stats.append(s);
       });
       lims.textContent = "";
-      DIRECT_LIM.forEach(([l, m]) => {
+      DIRECT_LIM.forEach(([l, m, short]) => {
         const s = document.createElement("span"); s.className = "tl-lim" + (n > m ? " over" : n ? " ok" : "");
-        s.textContent = l + " " + n + "/" + m; s.dataset.tip = "Яндекс Директ: " + l.toLowerCase() + " — до " + m + " символов";
+        s.textContent = short + " " + n + "/" + m; s.dataset.tip = "Яндекс Директ: " + l.toLowerCase() + " — до " + m + " символов";
         lims.append(s);
       });
     };
@@ -913,7 +913,15 @@
     TOOL_TABS.forEach(([key, name, path]) => {
       const b = document.createElement("button"); b.type = "button"; b.setAttribute("role", "tab"); b.setAttribute("aria-selected", String(st.tab === key));
       b.dataset.tip = name; b.setAttribute("aria-label", name); b.innerHTML = svgIco(path, 18);
-      b.addEventListener("click", () => { if (st.tab === key) return; st.tab = key; saveTools(f.id); body.textContent = ""; renderTools(f, body); const p = body.querySelector(".tl-panel"); if (p) replay(p); });
+      // как в окне «Время»: вкладки остаются на месте (подсветка переезжает плавно), меняется и проявляется только содержимое
+      b.addEventListener("click", () => {
+        if (st.tab === key) return;
+        st.tab = key; saveTools(f.id);
+        tabs.querySelectorAll("[role=tab]").forEach((x) => x.setAttribute("aria-selected", String(x === b)));
+        const panel = wrap.querySelector(".tl-panel"); panel.textContent = ""; panel.dataset.tab = key;
+        ({ calc: renderCalc, pct: renderPct, fx: renderFx, dates: renderDates, text: renderText }[key] || renderCalc)(f, panel);
+        replay(panel);
+      });
       tabs.append(b);
     });
     const panel = document.createElement("div"); panel.className = "tl-panel"; panel.dataset.tab = st.tab;
