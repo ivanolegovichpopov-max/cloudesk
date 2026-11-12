@@ -305,6 +305,7 @@
     $("clock-time").textContent = fmtTime.format(now);
     const d = fmtDate.format(now);
     $("clock-date").textContent = d.charAt(0).toUpperCase() + d.slice(1);
+    if (typeof renderNextRem === "function" && state.reminders) renderNextRem();
   }
 
   function lockSheets(open) { document.documentElement.style.overflow = open ? "hidden" : ""; }
@@ -393,6 +394,9 @@
       animHide($(btn.dataset.menu), 120);
       btn.setAttribute("aria-expanded", "false");
     });
+    // список городов погоды открывается от поля ввода, а не от кнопки
+    const wp = document.getElementById("weather-pop");
+    if (wp && !wp.hidden) { animHide(wp, 120); document.getElementById("weather-city").setAttribute("aria-expanded", "false"); }
   }
   document.querySelectorAll("[data-menu]").forEach((btn) =>
     btn.addEventListener("click", (e) => {
@@ -432,7 +436,7 @@
     const [prof, notes, sets] = await Promise.all([
       sb.from("profiles").select("first_name,last_name,username,photo_url").eq("id", user.id).maybeSingle(),
       sb.from("notes").select("id,body,color,pinned,updated_at").order("pinned", { ascending: false }).order("updated_at", { ascending: false }),
-      sb.from("settings").select("wallpaper_preset,wallpaper_path,wallpaper_weekly,wallpaper_week_from,theme,cities").eq("user_id", user.id).maybeSingle(),
+      sb.from("settings").select("wallpaper_preset,wallpaper_path,wallpaper_weekly,wallpaper_week_from,theme,cities,weather_on,weather_city,weather_lat,weather_lon").eq("user_id", user.id).maybeSingle(),
     ]);
     $("notes-loading").hidden = true;
 
@@ -452,6 +456,9 @@
     loadReminders();
     loadLinks();
     await applyWallFromSettings();
+    if (wLast) renderWeather(wLast);
+    loadWeather();
+    renderOnline();
   }
 
   /* ---------- Заметки ---------- */
@@ -698,7 +705,7 @@
   async function saveSettings(patch) {
     const row = Object.assign({ user_id: state.user.id }, state.settings || {}, patch);
     const { data, error } = await sb.from("settings").upsert(row, { onConflict: "user_id" })
-      .select("wallpaper_preset,wallpaper_path,wallpaper_weekly,wallpaper_week_from,theme,cities").single();
+      .select("wallpaper_preset,wallpaper_path,wallpaper_weekly,wallpaper_week_from,theme,cities,weather_on,weather_city,weather_lat,weather_lon").single();
     if (error) throw error;
     state.settings = data;
   }
@@ -1070,6 +1077,7 @@
     next.forEach((r) => ul.append(row(r)));
     if (past.length) { if (next.length) ul.append(tHead("Прошедшие")); past.forEach((r) => ul.append(row(r))); }
     $("rem-empty").hidden = state.reminders.length > 0;
+    renderNextRem();
   }
   /* Свои поля даты и времени вместо системных */
   const fmtDay = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", weekday: "short" });
@@ -1571,6 +1579,7 @@
     $("set-status").textContent = "";
     prepareLinks();
     renderWeekly();
+    renderWeatherSettings();
     setSetTab(tab || setTabNow);
     animShow($("setsheet"));
     lockSheets(true);
@@ -1732,6 +1741,169 @@
   document.querySelectorAll(".sheet-backdrop").forEach((bd) =>
     ["pointerdown", "mousedown", "touchstart"].forEach((t) => bd.addEventListener(t, (e) => e.stopPropagation(), { passive: true })));
   document.querySelectorAll(".sheet-backdrop").forEach((bd) => bd.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); }));
+
+  /* ---------- Шапка: ближайшее напоминание сегодня ---------- */
+  function renderNextRem() {
+    const now = new Date(), today = now.toDateString();
+    const next = (state.reminders || [])
+      .filter((r) => !r.sent_at && !r.failed_at && new Date(r.remind_at) > now && new Date(r.remind_at).toDateString() === today)
+      .sort((a, b) => new Date(a.remind_at) - new Date(b.remind_at))[0];
+    const el = $("next-rem");
+    if (!next) { if (!el.hidden) animHide(el, 150); return; }
+    const t = fmtHM.format(new Date(next.remind_at));
+    if ($("next-rem-text").textContent !== next.text) $("next-rem-text").textContent = next.text;
+    if ($("next-rem-time").textContent !== t) $("next-rem-time").textContent = t;
+    el.setAttribute("aria-label", "Ближайшее напоминание: " + next.text + ", " + t);
+    if (el.hidden || el.classList.contains("is-leaving")) animShow(el);
+  }
+  $("next-rem").addEventListener("click", () => openTime("rem"));
+
+  /* ---------- Шапка: нет интернета ---------- */
+  function renderOnline() {
+    const el = $("offline");
+    if (navigator.onLine) { if (!el.hidden) animHide(el, 150); }
+    else if (el.hidden || el.classList.contains("is-leaving")) animShow(el);
+  }
+  window.addEventListener("offline", renderOnline);
+  window.addEventListener("online", () => { renderOnline(); loadWeather(true); if (state.user) loadReminders(); });
+
+  /* ---------- Шапка: погода (Open-Meteo, без ключей и без данных о вас — только координаты города) ---------- */
+  const W_ICO = {
+    sun: "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4",
+    moon: "M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z",
+    part: "M8 2.5v1.5M3 7.5h1.5M4.5 4l1 1M11.5 5a4 4 0 0 0-6.6 4M9 20h8a3.5 3.5 0 0 0 .5-7 5 5 0 0 0-9.6 1.2A3 3 0 0 0 9 20z",
+    cloud: "M7 18h10a4 4 0 0 0 .6-8A6 6 0 0 0 6 9.5 4.3 4.3 0 0 0 7 18z",
+    fog: "M4 9h16M6 13h12M4 17h16M8 5h8",
+    rain: "M7 15h10a4 4 0 0 0 .6-8A6 6 0 0 0 6 6.5 4.3 4.3 0 0 0 7 15zM8 18l-1 3M12 18l-1 3M16 18l-1 3",
+    snow: "M7 15h10a4 4 0 0 0 .6-8A6 6 0 0 0 6 6.5 4.3 4.3 0 0 0 7 15zM8 19h.01M12 19h.01M16 19h.01M10 21.5h.01M14 21.5h.01",
+    storm: "M7 15h10a4 4 0 0 0 .6-8A6 6 0 0 0 6 6.5 4.3 4.3 0 0 0 7 15zM13 14l-2 4h3l-2 4",
+  };
+  function wmo(code, day) {
+    if (code === 0) return [day ? "sun" : "moon", "ясно"];
+    if (code === 1 || code === 2) return [day ? "part" : "moon", code === 1 ? "малооблачно" : "переменная облачность"];
+    if (code === 3) return ["cloud", "пасмурно"];
+    if (code === 45 || code === 48) return ["fog", "туман"];
+    if (code >= 51 && code <= 57) return ["rain", "морось"];
+    if ((code >= 61 && code <= 67) || (code >= 80 && code <= 82)) return ["rain", code >= 80 ? "ливень" : "дождь"];
+    if ((code >= 71 && code <= 77) || code === 85 || code === 86) return ["snow", "снег"];
+    if (code >= 95) return ["storm", "гроза"];
+    return ["cloud", "облачно"];
+  }
+  const wIco = (k, size) => '<svg viewBox="0 0 24 24" width="' + size + '" height="' + size + '" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="' + W_ICO[k] + '"/></svg>';
+  const fmtTemp = (t) => { const v = Math.round(t); return (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v) + "°"; };
+  const weatherOn = () => !(state.settings && state.settings.weather_on === false);
+  // город по умолчанию — по часовому поясу устройства
+  const autoCity = () => cityName(Intl.DateTimeFormat().resolvedOptions().timeZone);
+  let wLast = null;
+  function renderWeather(w) {
+    const el = $("weather");
+    if (!w || !weatherOn()) { el.hidden = true; renderWeatherNow(); return; }
+    wLast = w;
+    const [k, label] = wmo(w.code, w.day);
+    $("weather-ico").innerHTML = wIco(k, 16);
+    $("weather-t").textContent = fmtTemp(w.t);
+    el.dataset.tip = w.city + ": " + label + " · ощущается " + fmtTemp(w.feels);
+    el.setAttribute("aria-label", "Погода: " + w.city + ", " + fmtTemp(w.t) + ", " + label);
+    if (el.hidden) animShow(el);
+    renderWeatherNow();
+  }
+  function renderWeatherNow() {
+    const box = $("weather-now");
+    box.textContent = "";
+    if (!wLast || !weatherOn()) return;
+    const [k, label] = wmo(wLast.code, wLast.day);
+    box.innerHTML = '<span class="wn-ico">' + wIco(k, 40) + '</span><span class="wn-t"></span><span class="wn-d"><b></b><span></span></span>';
+    box.querySelector(".wn-t").textContent = fmtTemp(wLast.t);
+    box.querySelector(".wn-d b").textContent = wLast.city;
+    box.querySelector(".wn-d span").textContent = label.charAt(0).toUpperCase() + label.slice(1) + " · ощущается " + fmtTemp(wLast.feels);
+  }
+  async function geocode(name, count) {
+    const r = await fetch("https://geocoding-api.open-meteo.com/v1/search?count=" + count + "&language=ru&format=json&name=" + encodeURIComponent(name));
+    if (!r.ok) throw new Error("geo " + r.status);
+    return ((await r.json()).results || []).map((g) => ({ name: g.name, lat: g.latitude, lon: g.longitude, sub: [g.admin1, g.country].filter(Boolean).join(", ") }));
+  }
+  let wTimer = 0;
+  async function loadWeather(force) {
+    clearTimeout(wTimer);
+    wTimer = setTimeout(() => loadWeather(true), 30 * 60000);
+    if (!weatherOn()) { renderWeather(null); return; }
+    const s = state.settings || {};
+    let place = s.weather_lat != null && s.weather_lon != null ? { name: s.weather_city || autoCity(), lat: s.weather_lat, lon: s.weather_lon } : null;
+    try {
+      if (!place) {
+        const want = autoCity();
+        let cached = null; try { cached = JSON.parse(store.get("cloudesk-wgeo")); } catch (e) {}
+        if (cached && cached.q === want) place = cached;
+        else { const g = (await geocode(want, 1))[0]; if (!g) return; place = { q: want, name: g.name, lat: g.lat, lon: g.lon }; store.set("cloudesk-wgeo", JSON.stringify(place)); }
+      }
+      let c = null; try { c = JSON.parse(store.get("cloudesk-weather")); } catch (e) {}
+      if (!force && c && c.lat === place.lat && c.lon === place.lon && Date.now() - c.at < 30 * 60000) { renderWeather(c); return; }
+      const r = await fetch("https://api.open-meteo.com/v1/forecast?current=temperature_2m,apparent_temperature,weather_code,is_day&timezone=auto&latitude=" + place.lat + "&longitude=" + place.lon);
+      if (!r.ok) throw new Error("weather " + r.status);
+      const cur = (await r.json()).current;
+      const w = { city: place.name, lat: place.lat, lon: place.lon, t: cur.temperature_2m, feels: cur.apparent_temperature, code: cur.weather_code, day: !!cur.is_day, at: Date.now() };
+      store.set("cloudesk-weather", JSON.stringify(w));
+      renderWeather(w);
+    } catch (e) { console.error(e); }
+  }
+  // сразу показываем погоду из прошлого раза (если свежая — до 3 часов), потом обновляем
+  (() => { try { const c = JSON.parse(store.get("cloudesk-weather")); if (c && Date.now() - c.at < 3 * 3600000) wLast = c; } catch (e) {} })();
+  $("weather").addEventListener("click", () => openSettings("weather"));
+
+  /* Настройки → Погода */
+  function renderWeatherSettings() {
+    const s = state.settings || {};
+    $("weather-on").setAttribute("aria-checked", String(weatherOn()));
+    $("weather-city").value = s.weather_city || "";
+    $("weather-city").placeholder = autoCity() + " — по часовому поясу";
+    $("weather-city").disabled = !weatherOn();
+    renderWeatherNow();
+  }
+  async function saveWeather(patch) {
+    const prev = state.settings;
+    state.settings = Object.assign({}, prev || {}, patch);
+    renderWeatherSettings();
+    loadWeather(true);
+    try { await saveSettings(patch); }
+    catch (e) { console.error(e); state.settings = prev; renderWeatherSettings(); loadWeather(true); toast("Настройка погоды не сохранилась. Попробуйте ещё раз."); }
+  }
+  $("weather-on").addEventListener("click", () => saveWeather({ weather_on: !weatherOn() }));
+  $("weather-refresh").addEventListener("click", () => loadWeather(true));
+  let wq = 0;
+  $("weather-city").addEventListener("input", () => {
+    clearTimeout(wq);
+    const q = $("weather-city").value.trim();
+    if (q.length < 2) { closeMenus(null); return; }
+    wq = setTimeout(async () => {
+      let list = [];
+      try { list = await geocode(q, 8); } catch (e) { console.error(e); }
+      if ($("weather-city").value.trim() !== q) return;
+      const box = $("weather-list");
+      box.textContent = "";
+      if (!list.length) { const e = document.createElement("div"); e.className = "menu-empty"; e.textContent = "Ничего не найдено"; box.append(e); }
+      list.forEach((g) => {
+        const b = document.createElement("button");
+        b.type = "button"; b.className = "menu-item search-item"; b.setAttribute("role", "option");
+        const tx = document.createElement("span"); tx.className = "search-text";
+        const t1 = document.createElement("span"); t1.className = "search-title"; t1.textContent = g.name;
+        const t2 = document.createElement("span"); t2.className = "search-sub"; t2.textContent = g.sub;
+        tx.append(t1, t2); b.append(tx);
+        b.addEventListener("click", () => {
+          closeMenus(null);
+          $("weather-city").value = g.name;
+          saveWeather({ weather_city: g.name.slice(0, 80), weather_lat: g.lat, weather_lon: g.lon });
+        });
+        box.append(b);
+      });
+      const pop = $("weather-pop");
+      if (pop.hidden) { closeMenus(null); animShow(pop); $("weather-city").setAttribute("aria-expanded", "true"); }
+    }, 300);
+  });
+  // поле очистили — снова город по часовому поясу
+  $("weather-city").addEventListener("change", () => {
+    if (!$("weather-city").value.trim() && (state.settings || {}).weather_city) saveWeather({ weather_city: null, weather_lat: null, weather_lon: null });
+  });
+  $("weather-city").addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("weather-pop").hidden) { e.stopPropagation(); closeMenus(null); } });
 
   /* ---------- Старт ---------- */
   buildPresets();

@@ -608,10 +608,12 @@ button:disabled { cursor: default; opacity: .45; }
   .presets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   /* телефон: вместо строки поиска — лупа; по нажатию поле занимает всю шапку */
   .top { gap: 8px; }
-  .clock { flex: 1 1 auto; }
+  .top-left { flex: 1 1 auto; }
+  .top:not(.searching) .top-actions { flex: none; }
+  .next-rem { display: none !important; }
   .search-kbd { display: none; }
   .top-chev { display: none; }
-  .top.searching .clock, .top.searching .top-item { display: none; }
+  .top.searching .top-left, .top.searching .top-item { display: none; }
   .top.searching .top-actions, .top.searching .search { flex: 1; }
   .top.searching .search-inner { flex: 1; width: auto; }
   .top.searching .search-cancel { display: inline-flex; align-items: center; }
@@ -726,3 +728,56 @@ html:has(.dragging) .fade-scroll { -webkit-mask-image: none; mask-image: none; }
 }
 .switch-row[aria-checked="true"] .switch { background: var(--accent); }
 .switch-row[aria-checked="true"] .switch::after { transform: translateX(16px); }
+
+/* ---------- Шапка: слева часы, погода, «нет связи»; в середине ближайшее напоминание ---------- */
+.top-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.top-left .clock { min-width: 0; }
+@media (min-width: 561px) {
+  .top { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+  .top-actions { justify-self: end; }
+}
+@media (max-width: 900px) { .top.searching .next-rem { display: none; } }
+
+/* погода — как дата: белым по заставке, через точку */
+.weather {
+  flex: none; display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0; border: 0; background: transparent;
+  color: var(--on-wall); text-shadow: 0 1px 8px rgba(0,0,0,.35); font-size: 14px; font-weight: 500; font-variant-numeric: tabular-nums;
+  opacity: .82; white-space: nowrap;
+}
+.weather { margin-left: -8px; }
+.weather::before { content: "·"; margin-right: 4px; opacity: .7; }
+.weather:hover, .weather:focus-visible { opacity: 1; }
+.weather-ico { display: inline-grid; place-items: center; filter: drop-shadow(0 1px 4px rgba(0,0,0,.35)); }
+.weather:active:not(:disabled) { transform: none; }
+
+/* нет интернета — маленькая красная метка */
+.offline {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px;
+  border-radius: 4px; background: var(--danger); color: #fff;
+}
+.offline:not([hidden]) { animation: fade-in .18s ease-out; }
+.offline.is-leaving { animation: fade-out .15s ease-in forwards; }
+
+/* ближайшее напоминание — плашка в середине */
+.next-rem {
+  display: inline-flex; align-items: center; gap: 8px; height: 32px; max-width: min(380px, 34vw); padding: 0 12px;
+  border: 1px solid var(--line); border-radius: var(--r); background: var(--glass-strong); color: var(--ink); font-size: 13px; font-weight: 500;
+}
+.next-rem svg { flex: none; color: var(--accent); }
+.next-rem:hover { border-color: var(--accent); }
+.next-rem-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.next-rem-time { flex: none; color: var(--accent); font-weight: 600; font-variant-numeric: tabular-nums; }
+.next-rem:not([hidden]) { animation: fade-in .18s ease-out; }
+.next-rem.is-leaving { animation: fade-out .15s ease-in forwards; }
+
+/* Настройки → Погода */
+.weather-panel { gap: 8px; overflow: visible; }
+.weather-panel .field input { width: 100%; }
+.weather-panel .pop { right: 0; }
+.weather-panel .pop-scroll { max-height: 240px; overflow: auto; }
+.weather-now { display: flex; align-items: center; gap: 14px; padding: 18px 4px 0; color: var(--ink); }
+.weather-now:empty { display: none; }
+.weather-now .wn-ico svg { width: 40px; height: 40px; color: var(--accent); }
+.weather-now .wn-t { font-size: 34px; font-weight: 300; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.weather-now .wn-d { font-size: 13px; color: var(--ink-dim); }
+.weather-now .wn-d b { display: block; font-size: 14px; font-weight: 500; color: var(--ink); }

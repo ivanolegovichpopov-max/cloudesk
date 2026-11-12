@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://telegram.org; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src https://kgfhwjiexhwtxczjkgic.supabase.co wss://kgfhwjiexhwtxczjkgic.supabase.co; img-src 'self' data: blob: https://t.me https://*.telegram.org https://*.telesco.pe https://kgfhwjiexhwtxczjkgic.supabase.co; frame-src https://oauth.telegram.org; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://telegram.org; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src https://kgfhwjiexhwtxczjkgic.supabase.co wss://kgfhwjiexhwtxczjkgic.supabase.co https://api.open-meteo.com https://geocoding-api.open-meteo.com; img-src 'self' data: blob: https://t.me https://*.telegram.org https://*.telesco.pe https://kgfhwjiexhwtxczjkgic.supabase.co; frame-src https://oauth.telegram.org; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="robots" content="noindex, nofollow">
 <meta name="color-scheme" content="light dark">
@@ -36,11 +36,17 @@
 <!-- Рабочий стол -->
 <div id="desk" class="desk" hidden>
   <header class="top">
-    <button id="btn-clock" class="clock" type="button" data-tip="Календарь, таймер, секундомер, напоминания, города" aria-label="Календарь, таймер, секундомер, напоминания, города">
-      <span id="clock-time" class="clock-time">--:--</span>
-      <span id="clock-date" class="clock-date"></span>
-      <span id="clock-run" class="clock-run" hidden></span>
-    </button>
+    <div class="top-left">
+      <button id="btn-clock" class="clock" type="button" data-tip="Календарь, таймер, секундомер, напоминания, города" aria-label="Календарь, таймер, секундомер, напоминания, города">
+        <span id="clock-time" class="clock-time">--:--</span>
+        <span id="clock-date" class="clock-date"></span>
+        <span id="clock-run" class="clock-run" hidden></span>
+      </button>
+      <button id="weather" class="weather" type="button" hidden aria-label="Погода"><span id="weather-ico" class="weather-ico"></span><span id="weather-t"></span></button>
+      <span id="offline" class="offline" role="status" hidden data-tip="Нет интернета — изменения не сохранятся, пока связь не вернётся" aria-label="Нет интернета"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3 3l18 18M8.5 16.4a5 5 0 0 1 7 0M5 12.9a10 10 0 0 1 4.2-2.4M19 12.9a10 10 0 0 0-2.2-1.6M2 9a15 15 0 0 1 4.3-2.7M22 9a15 15 0 0 0-10-3.9M12 20h.01"/></svg></span>
+    </div>
+    <!-- Середина шапки: ближайшее напоминание на сегодня (если есть) -->
+    <button id="next-rem" class="next-rem" type="button" hidden data-tip="Ближайшее напоминание сегодня"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M6 10a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6zM10 20a2 2 0 0 0 4 0"/></svg><span id="next-rem-text" class="next-rem-text"></span><span id="next-rem-time" class="next-rem-time"></span></button>
     <!-- Меню: одна кнопка, внутри группы с заголовками. Новые разделы добавляются отдельной группой -->
     <nav class="top-actions" aria-label="Меню">
       <!-- Поиск по столу: заметки, напоминания, ссылки -->
@@ -274,6 +280,7 @@
     <div class="tabs" role="tablist" aria-label="Разделы настроек">
       <button type="button" role="tab" data-tab="look" data-tip="Оформление" aria-label="Оформление"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 3a9 9 0 1 0 0 18c1 0 1.6-.7 1.6-1.5 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.8.7-1.4 1.5-1.4H16a5 5 0 0 0 5-5c0-4.3-4-7.9-9-7.9zM7.5 12h.01M9.5 7.5h.01M14.5 7.5h.01"/></svg></button>
       <button type="button" role="tab" data-tab="links" data-tip="Быстрые ссылки" aria-label="Быстрые ссылки"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg></button>
+      <button type="button" role="tab" data-tab="weather" data-tip="Погода" aria-label="Погода"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M7 18h10a4 4 0 0 0 .6-8A6 6 0 0 0 6 9.5 4.3 4.3 0 0 0 7 18z"/></svg></button>
     </div>
 
     <section class="tab-panel look" data-panel="look" role="tabpanel">
@@ -295,12 +302,25 @@
       <div id="links-list" class="links-list"></div>
     </section>
 
+    <section class="tab-panel weather-panel" data-panel="weather" role="tabpanel" hidden>
+      <button type="button" id="weather-on" class="switch-row" role="switch" aria-checked="true">
+        <span>Показывать погоду</span><span class="switch" aria-hidden="true"></span>
+      </button>
+      <div class="t-head">Город</div>
+      <div class="field">
+        <input id="weather-city" type="text" maxlength="80" autocomplete="off" spellcheck="false" placeholder="Город" aria-label="Город для погоды" role="combobox" aria-expanded="false" aria-controls="weather-pop">
+        <div id="weather-pop" class="pop" hidden><div id="weather-list" class="pop-scroll" role="listbox"></div></div>
+      </div>
+      <div id="weather-now" class="weather-now"></div>
+    </section>
+
     <div class="sheet-foot">
       <span class="foot-spacer"></span>
       <div class="foot-actions">
         <span class="foot-tools" data-for="look"><label class="tool accent" for="wall-file" data-tip="Загрузить своё фото" aria-label="Загрузить своё фото"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg></label></span>
         <span class="foot-tools" data-for="links" hidden><button type="button" id="groups-new" class="tool" data-tip="Добавить группу" aria-label="Добавить группу"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M3 7h6l2 2h10v10H3zM12 12v5M9.5 14.5h5"/></svg></button>
         <button type="button" id="links-new" class="tool accent" data-tip="Добавить ссылку" aria-label="Добавить ссылку"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14"/></svg></button></span>
+        <span class="foot-tools" data-for="weather" hidden><button type="button" id="weather-refresh" class="tool accent" data-tip="Обновить погоду" aria-label="Обновить погоду"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6"/></svg></button></span>
       </div>
     </div>
   </div>
