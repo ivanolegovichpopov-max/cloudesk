@@ -1117,3 +1117,41 @@ input.bad { border-color: var(--danger) !important; }
 .it-sub .cl-box { width: 16px; height: 16px; }
 #it-prio[aria-pressed="true"], #it-done[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
 .task-due-pop .menu-item { justify-content: flex-start; }
+
+/* ---------- Задачи в широком поле: две половины (2 кол.), доска и неделя (3 кол.), серии, итог дня ---------- */
+.tk-board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: start; min-width: 0; }
+.tk-board.halves { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.tk-board.week { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+.tk-col, .tk-board.week > .tk-grp { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.tk-board .tk-list { min-height: 44px; border-radius: var(--r); }
+/* пустая колонка — пунктирное место, куда можно перетащить задачу */
+.tk-board .tk-list:empty, .tk-board .tk-list:has(> .drag-ph:only-child) { border: 1px dashed var(--line); }
+/* узкие колонки недели: без значков при наведении, название в одну строку с многоточием */
+.tk-board.week .tk { padding-right: 6px; gap: 6px; }
+.tk-board.week .tk-acts { display: none; }
+.tk-board.week .tk-grip { display: none; }
+.tk-board.week .tk-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tk-board.week .tk-meta { flex-wrap: nowrap; overflow: hidden; }
+.tk-rest { margin-top: 4px; }
+/* в широком поле вторая строка тоже в одну строку: срок, значки, серия, начало описания */
+.tk-board .tk-meta { flex-wrap: nowrap; overflow: hidden; white-space: nowrap; }
+.tk-desc { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .85; }
+.tk-streak { display: inline-flex; align-items: center; gap: 2px; color: var(--accent); font-weight: 600; }
+.tk-hist { display: inline-flex; align-items: center; gap: 2px; flex: none; }
+.tk-hist i { width: 5px; height: 5px; border-radius: 1px; background: rgba(127,127,127,.32); }
+.tk-hist i.on { background: var(--accent); }
+.tk-subs.wide { display: inline-flex; align-items: center; gap: 5px; padding: 0; background: transparent; }
+.tk-subs.wide.full { color: var(--accent); background: transparent; }
+.tk-bar, .fld-sub i {
+  display: inline-block; width: 28px; height: 4px; border-radius: 2px;
+  background: linear-gradient(var(--accent), var(--accent)) 0 0 / var(--p, 0%) 100% no-repeat, rgba(127,127,127,.3);
+}
+/* итог дня в заголовке поля: «3 из 5» и тонкая полоска */
+.fld-sub { display: inline-flex; align-items: center; gap: 6px; margin-left: 12px; font-size: 12px; font-weight: 500; color: var(--ink-dim); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.fld-sub i { width: 36px; }
+.fld-sub.full { color: var(--accent); }
+@media (max-width: 760px) {
+  .tk-board, .tk-board.halves { grid-template-columns: minmax(0, 1fr); }
+  .tk-board.week { grid-template-columns: minmax(0, 1fr); }
+  .tk-board.week .tk-grp { gap: 4px; }
+}

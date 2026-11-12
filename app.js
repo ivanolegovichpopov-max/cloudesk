@@ -610,6 +610,9 @@
       // в заголовке — сколько осталось сделать; предел считает все задачи поля
       count: (f) => state.items.filter((it) => it.type === "task" && it.section_id === f.id && !it.done).length,
       total: (f) => state.items.filter((it) => it.type === "task" && it.section_id === f.id).length,
+      // итог дня в заголовке: «3 из 5» и тонкая полоска
+      sub: (f) => { const d = daySummary(f); return d.total ? { text: d.done + " из " + d.total, p: Math.round((d.done / d.total) * 100), full: d.done === d.total, tip: "Сегодня сделано " + d.done + " из " + d.total } : null; },
+      opts: [{ key: "week", label: "В 3 колонки — неделя по дням вместо доски" }],
     },
   };
   const APP_ORDER = ["notes", "tasks"];
@@ -638,6 +641,50 @@
     if (rep === "weekdays") { let x = addDays(d, 1); while (x.getDay() === 0 || x.getDay() === 6) x = addDays(x, 1); return x; }
     if (rep === "month") { const x = new Date(d), day = x.getDate(); x.setDate(1); x.setMonth(x.getMonth() + 1); x.setDate(Math.min(day, new Date(x.getFullYear(), x.getMonth() + 1, 0).getDate())); return x; }
     return null;
+  }
+  // предыдущий срок повторяющейся задачи (для серии)
+  function prevOcc(d, rep) {
+    if (rep === "day") return addDays(d, -1);
+    if (rep === "week") return addDays(d, -7);
+    if (rep === "weekdays") { let x = addDays(d, -1); while (x.getDay() === 0 || x.getDay() === 6) x = addDays(x, -1); return x; }
+    if (rep === "month") { const x = new Date(d), day = x.getDate(); x.setDate(1); x.setMonth(x.getMonth() - 1); x.setDate(Math.min(day, new Date(x.getFullYear(), x.getMonth() + 1, 0).getDate())); return x; }
+    return addDays(d, -1);
+  }
+  // серия: сколько раз подряд (по расписанию повтора) задача была выполнена; пропуск обнуляет
+  function taskStreak(t) {
+    const dt = tData(t);
+    if (!dt.repeat || !dt.due || taskGroup(t) === "over") return 0;
+    const log = new Set(dt.log || []);
+    let d = new Date(dt.due), n = 0;
+    for (let i = 0; i < 400; i++) { d = prevOcc(d, dt.repeat); if (log.has(dayKey(d))) n++; else break; }
+    return n;
+  }
+  // последние n сроков до текущего: [{ key, done }] — для полоски «как шла серия»
+  function taskHistory(t, n) {
+    const dt = tData(t), log = new Set(dt.log || []), out = [];
+    let d = new Date(dt.due);
+    for (let i = 0; i < n; i++) { d = prevOcc(d, dt.repeat); out.unshift({ key: dayKey(d), done: log.has(dayKey(d)) }); }
+    return out;
+  }
+  // выполнение повторяющейся задачи: отметка в историю, срок — на следующий раз, подпункты — снова пустые
+  function completeRepeat(t, dt) {
+    const old = new Date(dt.due), nd = nextDue({ data: dt }).toISOString();
+    const log = [...new Set((dt.log || []).concat(dayKey(old)))].sort().slice(-120);
+    const data = Object.assign({}, dt, { due: nd, subs: (dt.subs || []).map((x) => ({ t: x.t, done: false })), log });
+    return { data, remind_at: remindAtFor(nd, dt.allday, dt.remind) };
+  }
+  // итог дня поля: сколько задач на сегодня (с просроченными) и сколько из них уже сделано
+  function daySummary(f) {
+    const today = dayKey(new Date());
+    let total = 0, done = 0;
+    state.items.forEach((t) => {
+      if (t.type !== "task" || t.section_id !== f.id) return;
+      const dt = tData(t);
+      if (t.done) { if (t.done_at && dayKey(new Date(t.done_at)) === today) { total++; done++; } return; }
+      if ((dt.log || []).includes(today)) { total++; done++; } // повторяющаяся, отмеченная сегодня (её срок уже на следующий раз)
+      else if (dt.due && dayKey(new Date(dt.due)) <= today) total++;
+    });
+    return { total, done };
   }
   // следующий раз для повторяющейся задачи: от срока вперёд, но не в прошлое
   function nextDue(t) {
@@ -759,9 +806,26 @@
     if (t.done && t.done_at) { const d = document.createElement("span"); d.className = "tk-due"; d.textContent = "выполнено " + dueLabel(t.done_at, true); meta.append(d); }
     if (!t.done && dt.remind != null && dt.due) meta.append(ic("M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4", "Напоминание в Telegram"));
     if (dt.repeat) meta.append(ic("M17 2l4 4-4 4M3 11v-1a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v1a4 4 0 0 1-4 4H3", "Повтор: " + REPEAT_TXT[dt.repeat]));
+    const st = !t.done ? taskStreak(t) : 0;
+    if (st > 0) { const s = document.createElement("span"); s.className = "tk-streak"; s.dataset.tip = st + " " + plural(st, "раз", "раза", "раз") + " подряд"; s.innerHTML = svgIco("M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2.2 1-3.6 2-4.6.3 1.6 1 2.6 2 3.1C11 9 11 6 12 3z", 12, 2); s.append(String(st)); meta.append(s); }
     const subs = dt.subs || [];
-    if (subs.length) { const s = document.createElement("span"); s.className = "tk-subs" + (subs.every((x) => x.done) ? " full" : ""); s.textContent = subs.filter((x) => x.done).length + "/" + subs.length; s.dataset.tip = "Подпункты"; meta.append(s); }
-    if ((t.body || "").trim()) meta.append(ic("M5 7h14M5 12h14M5 17h9", "Есть описание"));
+    if (subs.length) {
+      const dn = subs.filter((x) => x.done).length;
+      const s = document.createElement("span"); s.className = "tk-subs" + (dn === subs.length ? " full" : ""); s.dataset.tip = "Подпункты";
+      if (opts.wide) { const bar = document.createElement("i"); bar.className = "tk-bar"; bar.style.setProperty("--p", Math.round((dn / subs.length) * 100) + "%"); s.classList.add("wide"); s.append(bar); }
+      s.append(dn + "/" + subs.length); meta.append(s);
+    }
+    // в широком поле: полоска последних 14 раз у повторяющейся задачи и начало описания
+    const showHist = opts.wide && dt.repeat && dt.due && !t.done && (dt.log || []).length > 0;
+    if (showHist) {
+      const strip = document.createElement("span"); strip.className = "tk-hist";
+      const h = taskHistory(t, opts.wide === 3 ? 14 : 7); strip.dataset.tip = "Последние " + h.length + " раз: сделано " + h.filter((x) => x.done).length;
+      h.forEach((x) => { const i = document.createElement("i"); if (x.done) i.className = "on"; strip.append(i); });
+      meta.append(strip);
+    }
+    const desc = (t.body || "").trim();
+    if (desc && opts.wide && !showHist) { const d = document.createElement("span"); d.className = "tk-desc"; d.textContent = desc.split("\n")[0]; meta.append(d); }
+    else if (desc) meta.append(ic("M5 7h14M5 12h14M5 17h9", "Есть описание"));
     main.append(meta); // у всех задач две строки: название и под ним срок — строки одной высоты
     li.append(cb, main);
     // при наведении: срок и удалить
@@ -779,12 +843,13 @@
   async function toggleTask(t, li) {
     const dt = tData(t);
     if (!t.done && dt.repeat && dt.due) {
-      const nd = nextDue(t), iso = nd.toISOString();
       if (li) li.classList.add("checking");
-      const subs = (dt.subs || []).map((x) => ({ t: x.t, done: false })); // подпункты на новый круг — снова пустые
-      const data = Object.assign({}, dt, { due: iso, subs });
+      const patch = completeRepeat(t, dt), prev = { data: dt, remind_at: t.remind_at };
       setTimeout(async () => {
-        if (await patchItem(t.id, { data, remind_at: remindAtFor(iso, dt.allday, dt.remind) })) toast("Следующий раз — " + dueLabel(iso, dt.allday));
+        if (await patchItem(t.id, patch)) {
+          const n = taskStreak(state.items.find((x) => x.id === t.id) || t);
+          toast((n > 1 ? "Серия: " + n + " · " : "") + "следующий раз — " + dueLabel(patch.data.due, dt.allday), "Вернуть", () => patchItem(t.id, prev));
+        }
       }, li ? 260 : 0);
       return;
     }
@@ -902,20 +967,60 @@
     // группы
     const live = all.filter((t) => !t.done);
     const now = new Date();
-    const byGroup = {};
-    live.forEach((t) => { const g = taskGroup(t, now); (byGroup[g] = byGroup[g] || []).push(t); });
-    TASK_GROUPS.forEach(([g, name]) => {
-      const list = (byGroup[g] || []).sort((a, b) => (!!tData(b).prio - !!tData(a).prio) || a.position - b.position);
-      if (!list.length) return;
-      const sec = document.createElement("section"); sec.className = "tk-grp"; sec.dataset.g = g;
-      const h = document.createElement("div"); h.className = "tk-gh" + (g === "over" ? " over" : "");
-      h.append(name); const c = document.createElement("span"); c.className = "tk-gc"; c.textContent = list.length; h.append(c);
-      const ol = document.createElement("ol"); ol.className = "tk-list"; ol.dataset.g = g;
-      list.forEach((t) => ol.append(taskRow(t, { drag: true })));
-      sec.append(h, ol); wrap.append(sec);
-    });
+    const sortT = (list) => list.sort((a, b) => (!!tData(b).prio - !!tData(a).prio) || a.position - b.position);
+    const wide = f.span >= 2 ? f.span : 0;
+    const mkGroup = (key, name, list, cls, drop) => {
+      const sec = document.createElement("section"); sec.className = "tk-grp" + (cls ? " " + cls : ""); sec.dataset.g = key;
+      const h = document.createElement("div"); h.className = "tk-gh" + (key === "over" ? " over" : "");
+      h.append(name); if (list.length) { const c = document.createElement("span"); c.className = "tk-gc"; c.textContent = list.length; h.append(c); }
+      const ol = document.createElement("ol"); ol.className = "tk-list"; ol.dataset.g = key; ol.dataset.drop = drop || key;
+      sortT(list).forEach((t) => ol.append(taskRow(t, { drag: true, wide })));
+      sec.append(h, ol);
+      return sec;
+    };
+    const byGroup = { over: [], today: [], tomorrow: [], later: [], none: [] };
+    live.forEach((t) => byGroup[taskGroup(t, now)].push(t));
+    const NAME = Object.fromEntries(TASK_GROUPS);
+    if (f.span === 3 && f.settings && f.settings.week) {
+      // неделя: 7 колонок с сегодняшнего дня; просроченные — в «Сегодня»; дальше недели и без срока — строкой ниже
+      const board = document.createElement("div"); board.className = "tk-board week";
+      const days = Array.from({ length: 7 }, (_, i) => addDays(now, i));
+      const keyOf = (t) => dayKey(new Date(tData(t).due));
+      days.forEach((d, i) => {
+        const k = dayKey(d);
+        let list = live.filter((t) => tData(t).due && keyOf(t) === k && taskGroup(t, now) !== "over");
+        if (i === 0) list = byGroup.over.concat(list);
+        const name = i === 0 ? "Сегодня" : i === 1 ? "Завтра" : fmtWdDate.format(d).replace(/\.$/, "");
+        board.append(mkGroup(i === 0 ? "today" : "d" + i, name, list, "tk-col" + (d.getDay() % 6 === 0 ? " weekend" : ""), "d:" + k));
+      });
+      wrap.append(board);
+      const lastKey = dayKey(days[6]);
+      const rest = live.filter((t) => !tData(t).due || keyOf(t) > lastKey);
+      if (rest.length) wrap.append(mkGroup("rest", "Позже и без срока", rest, "tk-rest", "none"));
+    } else if (f.span === 3) {
+      // доска: «Сегодня» (с просроченными) · «Завтра» · «Позже» (и «Без срока»); перенос между колонками меняет срок
+      const board = document.createElement("div"); board.className = "tk-board";
+      const c1 = document.createElement("div"); c1.className = "tk-col";
+      if (byGroup.over.length) c1.append(mkGroup("over", NAME.over, byGroup.over, "", "over"));
+      c1.append(mkGroup("today", NAME.today, byGroup.today));
+      const c2 = document.createElement("div"); c2.className = "tk-col"; c2.append(mkGroup("tomorrow", NAME.tomorrow, byGroup.tomorrow));
+      const c3 = document.createElement("div"); c3.className = "tk-col"; c3.append(mkGroup("later", NAME.later, byGroup.later), mkGroup("none", NAME.none, byGroup.none));
+      board.append(c1, c2, c3); wrap.append(board);
+    } else if (f.span === 2) {
+      // две половины: слева «сегодня» (просроченные и сегодня), справа — всё дальше
+      const board = document.createElement("div"); board.className = "tk-board halves";
+      const c1 = document.createElement("div"); c1.className = "tk-col";
+      if (byGroup.over.length) c1.append(mkGroup("over", NAME.over, byGroup.over, "", "over"));
+      c1.append(mkGroup("today", NAME.today, byGroup.today));
+      const c2 = document.createElement("div"); c2.className = "tk-col";
+      ["tomorrow", "later", "none"].forEach((g) => { if (byGroup[g].length) c2.append(mkGroup(g, NAME[g], byGroup[g])); });
+      if (!c2.children.length) c2.append(mkGroup("tomorrow", NAME.tomorrow, []));
+      board.append(c1, c2); wrap.append(board);
+    } else {
+      TASK_GROUPS.forEach(([g, name]) => { if (byGroup[g].length) wrap.append(mkGroup(g, name, byGroup[g])); });
+    }
     const done = all.filter((t) => t.done).sort((a, b) => new Date(b.done_at || b.updated_at) - new Date(a.done_at || a.updated_at));
-    if (!live.length) {
+    if (!live.length && f.span === 1) {
       const e = document.createElement("div"); e.className = "tk-empty";
       e.textContent = done.length ? "Всё сделано" : "Задач нет";
       wrap.append(e);
@@ -926,7 +1031,7 @@
       const h = document.createElement("button"); h.type = "button"; h.className = "tk-gh tk-done-btn"; h.setAttribute("aria-expanded", String(open));
       h.innerHTML = svgIco("M9 6l6 6-6 6", 14, 2); h.append("Выполнено"); const c = document.createElement("span"); c.className = "tk-gc"; c.textContent = done.length; h.append(c);
       const ol = document.createElement("ol"); ol.className = "tk-list done-list"; ol.hidden = !open;
-      if (open) done.forEach((t) => ol.append(taskRow(t, { drag: false })));
+      if (open) done.forEach((t) => ol.append(taskRow(t, { drag: false, wide })));
       h.addEventListener("click", () => { store.set("cloudesk-done-" + f.id, open ? "0" : "1"); renderBoard(); });
       sec.append(h, ol); wrap.append(sec);
     }
@@ -945,14 +1050,37 @@
     const res = await Promise.all(ops);
     if (res.some((r) => r.error)) { toast("Порядок не сохранился — проверьте интернет."); loadItems(); }
   }
+  // перенос задачи в другую группу (колонку, день) меняет её срок: время, если было, остаётся
+  async function moveTaskTo(id, ol) {
+    const t = state.items.find((x) => x.id === id);
+    const drop = ol.dataset.drop;
+    if (!t || drop === "over") { renderBoard(); if (drop === "over") toast("В «Просрочено» задачи попадают сами"); return; }
+    const dt = tData(t), now = new Date();
+    let day = null;
+    if (drop === "today") day = now;
+    else if (drop === "tomorrow") day = addDays(now, 1);
+    else if (drop === "later") day = addDays(now, 2);
+    else if (drop.startsWith("d:")) { const [y, m, d] = drop.slice(2).split("-").map(Number); day = new Date(y, m - 1, d); }
+    let data;
+    if (!day) data = Object.assign({}, dt, { due: null, allday: false, repeat: null });
+    else {
+      const x = new Date(day);
+      if (dt.due && !dt.allday) { const o = new Date(dt.due); x.setHours(o.getHours(), o.getMinutes(), 0, 0); }
+      else x.setHours(0, 0, 0, 0);
+      data = Object.assign({}, dt, { due: x.toISOString(), allday: !(dt.due && !dt.allday) });
+    }
+    const idx = [...ol.querySelectorAll(":scope > .tk")].findIndex((e) => e.dataset.id === id);
+    const ok = await patchItem(id, { data, remind_at: remindAtFor(data.due, data.allday, data.remind), position: idx });
+    if (ok) toast(data.due ? "Срок — " + dueLabel(data.due, data.allday) : "Без срока");
+  }
   let tkDragFrom = null;
   $("board").addEventListener("pointerdown", (e) => { const g = e.target.closest && e.target.closest(".tk-grip"); tkDragFrom = g ? g.closest(".tk-list") : null; }, true);
   sortable($("board"), {
     item: ".tk:not(.is-done)", handle: ".tk-grip", list: ".tk-list:not(.done-list)",
     onDrop: (el) => {
       const ol = el.closest(".tk-list");
-      if (tkDragFrom && ol !== tkDragFrom) { renderBoard(); toast("Задача попадает в группу по сроку — поменяйте срок, чтобы перенести"); return; }
-      saveTaskOrder(ol);
+      if (!tkDragFrom || ol === tkDragFrom || ol.dataset.drop === tkDragFrom.dataset.drop) { saveTaskOrder(ol); return; }
+      moveTaskTo(el.dataset.id, ol);
     },
     onKey: (el, dir) => {
       const sib = dir < 0 ? el.previousElementSibling : el.nextElementSibling;
@@ -1187,6 +1315,9 @@
       const n = app && app.count ? app.count(f) : 0;
       const tot = app && app.total ? app.total(f) : n;
       if (n) { const cnt = document.createElement("span"); cnt.className = "count"; cnt.textContent = app && app.limit && tot >= app.limit * 0.8 ? tot + " / " + app.limit : String(n); title.append(cnt); }
+      const sub = app && app.sub ? app.sub(f) : null;
+      if (sub) { const sp = document.createElement("span"); sp.className = "fld-sub" + (sub.full ? " full" : ""); sp.dataset.tip = sub.tip; const bar = document.createElement("i"); bar.style.setProperty("--p", sub.p + "%"); sp.append(bar, sub.text); title.append(sp); }
+
       const set = document.createElement("button");
       set.type = "button"; set.className = "tool fld-set"; set.dataset.tip = "Настройки поля"; set.setAttribute("aria-label", "Настройки поля «" + tt.textContent + "»");
       set.innerHTML = svgIco(IC.set, 18);
@@ -1606,9 +1737,8 @@
         let done = id_.done, toastMsg = "";
         // повторяющаяся задача, отмеченная «Сделано», переезжает на следующий срок
         if (done && !(it && it.done) && data.repeat && due) {
-          const nd = nextDue({ data }).toISOString();
-          data = Object.assign({}, data, { due: nd, subs: subs.map((x) => ({ t: x.t, done: false })) });
-          done = false; toastMsg = "Следующий раз — " + dueLabel(nd, allday);
+          data = completeRepeat({ data }, data).data;
+          done = false; toastMsg = "Следующий раз — " + dueLabel(data.due, allday);
         }
         let remind = remindAtFor(data.due, data.allday, data.remind);
         // напоминание, время которого уже прошло, не отправляем задним числом
