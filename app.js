@@ -370,22 +370,36 @@
     ed.saving = null;
   }
 
+  // Окно закрывается только после сохранения: если сохранить не удалось — остаётся открытым
+  let edClosing = false;
   async function closeEditor() {
-    await saveNote();
-    // пустая заметка не нужна
-    if (ed.id && !$("ed-body").value.trim()) await deleteNote(true);
-    $("editor").hidden = true;
-    lockSheets(false);
+    if (edClosing) return;
+    edClosing = true;
+    try {
+      await saveNote();
+      if (ed.saving) await ed.saving;
+      if (ed.dirty) {
+        $("ed-status").textContent = "Не сохранилось — проверьте интернет и нажмите «Готово» ещё раз";
+        return;
+      }
+      // пустая заметка не нужна
+      if (ed.id && !$("ed-body").value.trim() && !(await deleteNote(true))) return;
+      $("editor").hidden = true;
+      lockSheets(false);
+    } finally {
+      edClosing = false;
+    }
   }
 
   async function deleteNote(silent) {
-    if (!ed.id) return;
+    if (!ed.id) return true;
     const { error } = await sb.from("notes").delete().eq("id", ed.id);
-    if (error) { toast("Не удалось удалить. Попробуйте ещё раз."); return; }
+    if (error) { toast("Не удалось удалить. Попробуйте ещё раз."); return false; }
     state.notes = state.notes.filter((x) => x.id !== ed.id);
     ed.id = null;
     renderNotes();
     if (!silent) { $("editor").hidden = true; lockSheets(false); toast("Заметка удалена"); }
+    return true;
   }
 
   $("btn-new").addEventListener("click", () => openEditor(null));
@@ -450,13 +464,13 @@
       const s = document.createElement("span");
       s.textContent = p.name;
       b.append(s);
-      b.addEventListener("click", async () => {
+      b.addEventListener("click", () => {
         const old = state.settings && state.settings.wallpaper_path;
         setWall(p.id, null);
-        try {
+        trackWall(async () => {
           await saveSettings({ wallpaper_preset: p.id, wallpaper_path: null });
           if (old) await sb.storage.from("wallpapers").remove([old]);
-        } catch (e) { console.error(e); toast("Заставка не сохранилась. Попробуйте ещё раз."); }
+        }, "Заставка не сохранилась. Попробуйте ещё раз.");
       });
       box.insertBefore(b, box.querySelector(".upload-tile"));
     }
@@ -480,8 +494,31 @@
     $("wallsheet").hidden = false;
     lockSheets(true);
   });
-  $("wallsheet").querySelectorAll("[data-close]").forEach((b) =>
-    b.addEventListener("click", () => { $("wallsheet").hidden = true; lockSheets(false); }));
+  // Сохранение заставки отслеживается: окно не закроется, пока оно не завершится
+  let wallJob = null, wallFailed = false, wallClosing = false;
+  function trackWall(fn, errText) {
+    const job = (async () => {
+      try { await fn(); wallFailed = false; $("wall-status").textContent = ""; }
+      catch (e) { console.error(e); wallFailed = true; $("wall-status").textContent = ""; toast(errText); }
+    })();
+    wallJob = job;
+    job.finally(() => { if (wallJob === job) wallJob = null; });
+    return job;
+  }
+  async function closeWall() {
+    if (wallClosing) return;
+    wallClosing = true;
+    try {
+      if (wallJob) { $("wall-status").textContent = "Сохраняю…"; await wallJob; }
+      if (wallFailed) { $("wall-status").textContent = "Не сохранилось — выберите заставку ещё раз."; return; }
+      $("wall-status").textContent = "";
+      $("wallsheet").hidden = true;
+      lockSheets(false);
+    } finally {
+      wallClosing = false;
+    }
+  }
+  $("wallsheet").querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", closeWall));
 
   // Уменьшаем фото до размера экрана: быстрее грузится и меньше места
   async function shrinkImage(file) {
@@ -504,7 +541,7 @@
     if (file.size > 30 * 1024 * 1024) { toast("Фото слишком большое: максимум 30 МБ."); return; }
     const st = $("wall-status");
     st.textContent = "Загружаю…";
-    try {
+    trackWall(async () => {
       const blob = await shrinkImage(file);
       const path = state.user.id + "/" + Date.now() + ".jpg";
       const up = await sb.storage.from("wallpapers").upload(path, blob, { contentType: "image/jpeg", upsert: false });
@@ -516,19 +553,19 @@
       state.wallUrl = URL.createObjectURL(blob);
       setWall(null, state.wallUrl);
       accentFromImage(blob);
-      st.textContent = "Готово";
-    } catch (err) {
-      console.error(err);
-      st.textContent = "";
-      toast("Не получилось загрузить фото. Попробуйте другое или повторите позже.");
-    }
+    }, "Не получилось загрузить фото. Попробуйте другое или повторите позже.");
   });
 
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
     if (!$("editor").hidden) closeEditor();
-    else if (!$("wallsheet").hidden) { $("wallsheet").hidden = true; lockSheets(false); }
+    else if (!$("wallsheet").hidden) closeWall();
   });
+
+  // Клик по фону вокруг окна закрывает окно и не доходит до того, что под ним
+  document.querySelectorAll(".sheet-backdrop").forEach((bd) =>
+    ["pointerdown", "mousedown", "touchstart"].forEach((t) => bd.addEventListener(t, (e) => e.stopPropagation(), { passive: true })));
+  document.querySelectorAll(".sheet-backdrop").forEach((bd) => bd.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); }));
 
   /* ---------- Старт ---------- */
   buildPresets();
