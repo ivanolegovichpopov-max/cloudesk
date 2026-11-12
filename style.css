@@ -1031,7 +1031,7 @@ input.bad { border-color: var(--danger) !important; }
 /* важная — тонкая полоска акцента у левого края строки */
 .tk.prio::before { content: ""; position: absolute; left: 0; top: 9px; bottom: 9px; width: 2px; border-radius: 1px; background: var(--accent); }
 /* ручка ⋮⋮ — своё место слева, видна при наведении */
-.tk .tk-grip { flex: none; width: 16px; height: 20px; margin: 0; padding: 0; border: 0; background: transparent; opacity: 0; color: var(--ink-dim); cursor: grab; transition: opacity .12s ease; }
+.tk .tk-grip { flex: none; display: grid; place-items: center; width: 16px; height: 20px; margin: 0; padding: 0; border: 0; background: transparent; opacity: 0; color: var(--ink-dim); cursor: grab; transition: opacity .12s ease; }
 .tk .tk-grip svg { width: 14px; height: 14px; }
 .tk:hover .tk-grip, .tk-grip:focus-visible { opacity: 1; }
 .tk .tk-grip:hover { color: var(--ink); background: transparent; }
@@ -1066,7 +1066,7 @@ input.bad { border-color: var(--danger) !important; }
   transform: translateY(-50%); opacity: 0; transition: opacity .12s ease; pointer-events: none;
 }
 .tk:hover .tk-acts, .tk:focus-within .tk-acts { opacity: 1; pointer-events: auto; }
-.tk-acts .tool { width: 28px; height: 28px; color: var(--ink-dim); }
+.tk-acts .tool { width: 28px; height: 28px; padding: 0; display: grid; place-items: center; color: var(--ink-dim); }
 .tk-acts .tool:hover, .tk-acts .tool:focus-visible { color: var(--ink); background: transparent; }
 @media (hover: none) { .tk-acts { display: none; } .tk { padding-right: 8px; } }
 .dragging .tk-acts { display: none; }
