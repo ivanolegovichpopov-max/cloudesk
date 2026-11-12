@@ -507,6 +507,8 @@
     const board = $("board");
     board.classList.remove("desk-in"); void board.offsetWidth; board.classList.add("desk-in");
     renderBoard();
+    // проявление — только в момент смены стола; иначе каждая перерисовка (например, автосохранение) мигала бы
+    clearTimeout(switchDesk.t); switchDesk.t = setTimeout(() => board.classList.remove("desk-in"), 250);
     await applyWallFromSettings();
   }
   // Alt+1…9 — быстрый переход между столами
