@@ -329,40 +329,44 @@ body[data-wall="custom"] .wall  { background-color: #111; }
 .cal-day.today .dot { background: var(--accent-ink); }
 
 .big-time { font-size: clamp(48px, 9vw, 72px); font-weight: 300; letter-spacing: -.03em; line-height: 1; font-variant-numeric: tabular-nums; }
-.chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+/* Таймер и секундомер устроены одинаково: табло всегда на одном месте, под ним — выбор времени или круги */
+.stage-panel:not([hidden]) { display: grid; grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; }
+.stage { display: flex; align-items: flex-end; justify-content: center; }
+.stage-below { min-height: 0; overflow: auto; display: flex; flex-direction: column; align-items: center; }
+.chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; max-width: 460px; }
 .chips button { height: 32px; padding: 0 12px; border: 1px solid var(--line); border-radius: var(--r); background: transparent; font-size: 13px; font-weight: 500; }
-.chips button:hover, .chips button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
-.timer-custom { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--ink-dim); }
-.ctrl-row { display: flex; gap: 8px; }
-.ctrl-row .btn-primary, .ctrl-row .btn-ghost { height: 40px; min-width: 110px; justify-content: center; font-size: 14px; }
-.laps { margin: 0; padding: 0; list-style: none; width: min(320px, 100%); max-height: 30%; overflow: auto; font-size: 13px; font-variant-numeric: tabular-nums; }
-.laps li { display: flex; justify-content: space-between; padding: 6px 4px; border-bottom: 1px solid var(--line); }
-.laps li span:first-child { color: var(--ink-dim); }
+.chips button:hover:not(:disabled), .chips button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.chips button:disabled, .chips input:disabled { opacity: .4; }
+.laps { width: min(460px, 100%); }
 
 input[type="text"], input[type="number"] {
   height: 38px; padding: 0 10px; min-width: 0;
   border: 1px solid var(--line); border-radius: var(--r); background: transparent; color: var(--ink); font-size: 14px;
 }
 input:focus { outline: none; border-color: var(--accent); }
-#timer-min { width: 140px; }
+#timer-min { width: 96px; height: 32px; padding: 0 10px; font-size: 13px; text-align: center; }
+#timer-min.on { border-color: var(--accent); color: var(--accent); }
 
 .rem-form { flex: none; display: grid; gap: 8px; }
-.rem-when { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; }
+.rem-when { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .tab-panel[data-panel="rem"], .tab-panel[data-panel="cities"] { overflow: visible; }
-.rem-list, .city-list { flex: 1; min-height: 0; overflow: auto; margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; align-content: start; }
-.rem-item, .city-item {
-  display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 8px 6px 8px 12px;
+/* Один вид строки для всех списков окна «Время»: напоминания, города, круги.
+   Слева название и пояснение, справа время крупно, затем действие */
+.t-list { flex: 1; min-height: 0; overflow: auto; margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; align-content: start; }
+.t-row {
+  display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 8px 6px 8px 12px;
   border: 1px solid var(--line); border-radius: var(--r);
 }
-.rem-main { flex: 1; min-width: 0; }
-.rem-text { font-size: 14px; overflow-wrap: anywhere; }
-.rem-meta { font-size: 12px; color: var(--ink-dim); font-variant-numeric: tabular-nums; }
-.rem-meta .bad { color: var(--danger); }
-.rem-item.past { opacity: .6; }
-.city-name { flex: 1; min-width: 0; font-size: 14px; }
-.city-diff { font-size: 12px; color: var(--ink-dim); }
-.city-time { font-size: 20px; font-weight: 500; font-variant-numeric: tabular-nums; }
-.city-item.local { background: var(--hover); }
+.t-row.no-tool { padding-right: 12px; }
+.t-main { flex: 1; min-width: 0; }
+.t-title { font-size: 14px; overflow-wrap: anywhere; }
+.t-sub { font-size: 12px; color: var(--ink-dim); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.t-sub .bad { color: var(--danger); }
+.t-val { flex: none; font-size: 18px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.t-row.past { opacity: .6; }
+.t-head { padding: 8px 2px 0; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-dim); }
+.t-ph { flex: none; width: 36px; height: 28px; }
+.t-ph.g { width: 28px; margin-left: -6px; }
 .city-add { flex: none; }
 .city-add .pick-btn { width: 100%; }
 .btn-ghost { display: inline-flex; align-items: center; }
@@ -465,9 +469,11 @@ html:has(.dragging), html:has(.dragging) * { cursor: grabbing !important; user-s
 /* пустая группа — место, куда можно перетащить ссылку */
 .lg-links:empty, .lg-links:has(> .drag-ph:only-child) { min-height: 40px; border: 1px dashed var(--line); border-radius: var(--r); }
 .lg-links:empty::before { content: "Перетащите сюда ссылки"; display: grid; place-items: center; height: 40px; font-size: 12px; color: var(--ink-dim); }
-.city-item .grip { margin-left: -6px; }
+.t-row .grip { margin-left: -6px; }
 .foot-tools { display: inline-flex; align-items: center; gap: 2px; }
 .tool.accent { color: var(--accent); }
+.tool:disabled { opacity: .3; }
+.tool:disabled:hover { background: transparent; }
 .tool.accent:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .pop.pop-end { left: auto; right: 0; min-width: 220px; }
 
@@ -480,10 +486,10 @@ html:has(.dragging), html:has(.dragging) * { cursor: grabbing !important; user-s
 }
 /* Горизонтальной прокрутки нет нигде */
 html, body { overflow-x: hidden; }
-.sheet, .tab-panel, .links-list, .rem-list, .city-list, .pop, .menu, .search-pop, .lg-links, .notes, .board { overflow-x: hidden; }
+.sheet, .tab-panel, .links-list, .t-list, .pop, .menu, .search-pop, .lg-links, .notes, .board { overflow-x: hidden; }
 /* списки-сетки не растягиваются шире окна: колонка не шире контейнера */
-.links-list, .lg-sec, .lg-links, .rem-list, .city-list, .wn-list { grid-template-columns: minmax(0, 1fr); }
-.links-list > *, .lg-sec > *, .lg-links > *, .link-row, .rem-item, .city-item { min-width: 0; }
+.links-list, .lg-sec, .lg-links, .t-list, .wn-list { grid-template-columns: minmax(0, 1fr); }
+.links-list > *, .lg-sec > *, .lg-links > *, .link-row, .t-row { min-width: 0; }
 
 /* Цвета групп */
 :root { --g-sky: #4a8fd0; --g-mint: #3f9e6b; --g-sand: #cf9420; --g-rose: #d65c79; --g-violet: #8a6fd1; --g-ink: #7f838d; }
@@ -603,11 +609,8 @@ button:disabled { cursor: default; opacity: .45; }
   .top.searching .search-inner { flex: 1; width: auto; }
   .top.searching .search-cancel { display: inline-flex; align-items: center; }
   .link-fields { grid-template-columns: 1fr; }
-  .rem-when { grid-template-columns: 1fr 1fr; }
-  .rem-when .btn-primary { grid-column: 1 / -1; justify-content: center; }
   .cal-day { padding: 4px 6px; font-size: 12px; }
-  .tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); overflow: visible; }
-  .tabs button { padding: 0 4px; font-size: 12px; }
+  .tabs button { padding: 0 4px; }
   .top-label { display: none; }
   .top-btn { padding: 0; width: 38px; }
   .sheet-wrap { padding: 0; place-items: end stretch; }

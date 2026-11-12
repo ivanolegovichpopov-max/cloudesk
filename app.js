@@ -758,6 +758,30 @@
   const pad = (n) => String(n).padStart(2, "0");
   const fmtMS = (ms) => { const s = Math.max(0, Math.ceil(ms / 1000)); const h = Math.floor(s / 3600); return (h ? h + ":" + pad(Math.floor(s / 60) % 60) : pad(Math.floor(s / 60))) + ":" + pad(s % 60); };
   const fmtSW = (ms) => { const t = Math.floor(ms / 100); const s = Math.floor(t / 10); const h = Math.floor(s / 3600); return (h ? h + ":" : "") + pad(Math.floor(s / 60) % 60) + ":" + pad(s % 60) + "," + (t % 10); };
+  // Одна строка списка для всего окна «Время»: [ручка] название/пояснение — время — [действие]
+  const X_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M6 6l12 12M18 6 6 18"/></svg>';
+  function tRow(o) {
+    const li = document.createElement("li");
+    li.className = "t-row" + (o.cls ? " " + o.cls : "") + (o.tool === undefined ? " no-tool" : "");
+    if (o.lead) li.append(o.lead);
+    const main = document.createElement("div"); main.className = "t-main";
+    const t = document.createElement("div"); t.className = "t-title" + (o.titleCls ? " " + o.titleCls : ""); t.textContent = o.title;
+    const s = document.createElement("div"); s.className = "t-sub" + (o.subCls ? " " + o.subCls : "");
+    if (o.sub) s.append(o.sub);
+    main.append(t, s);
+    const v = document.createElement("div"); v.className = "t-val" + (o.valCls ? " " + o.valCls : ""); v.textContent = o.val || "";
+    li.append(main, v);
+    if (o.tool) li.append(o.tool);
+    else if (o.tool === null) { const ph = document.createElement("span"); ph.className = "t-ph"; li.append(ph); }
+    return li;
+  }
+  function delBtn(tip, onClick) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "tool"; b.dataset.tip = tip; b.setAttribute("aria-label", tip);
+    b.innerHTML = X_SVG; b.addEventListener("click", onClick);
+    return b;
+  }
+  function tHead(text) { const li = document.createElement("li"); li.className = "t-head"; li.textContent = text; return li; }
   const HINTS = {
     cal: "Нажмите на день, чтобы поставить на него напоминание.",
     timer: "Когда время выйдет, прозвучит сигнал. Таймер идёт, даже если окно закрыть.",
@@ -814,6 +838,7 @@
   }
   $("timesheet").querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", closeTime));
 
+  const plural = (n, a, b, c) => { const m = n % 100, k = n % 10; return m > 10 && m < 20 ? c : k === 1 ? a : k >= 2 && k <= 4 ? b : c; };
   /* Календарь */
   let calMonth = new Date(); calMonth.setDate(1);
   const fmtMonth = new Intl.DateTimeFormat("ru-RU", { month: "long", year: "numeric" });
@@ -826,14 +851,18 @@
     const first = new Date(calMonth);
     const start = new Date(first); start.setDate(1 - ((first.getDay() + 6) % 7));
     const today = dayKey(new Date());
-    const remDays = new Set(state.reminders.filter((r) => !r.sent_at && !r.failed_at).map((r) => dayKey(new Date(r.remind_at))));
+    const remDays = new Map();
+    state.reminders.filter((r) => !r.sent_at && !r.failed_at).forEach((r) => { const k = dayKey(new Date(r.remind_at)); remDays.set(k, (remDays.get(k) || 0) + 1); });
+    const now = new Date();
+    $("cal-today").disabled = calMonth.getFullYear() === now.getFullYear() && calMonth.getMonth() === now.getMonth();
     for (let i = 0; i < 42; i++) {
       const d = new Date(start); d.setDate(start.getDate() + i);
       const b = document.createElement("button");
       b.type = "button";
       b.className = "cal-day" + (d.getMonth() !== calMonth.getMonth() ? " other" : "") + (d.getDay() % 6 === 0 ? " weekend" : "") + (dayKey(d) === today ? " today" : "");
       b.textContent = d.getDate();
-      if (remDays.has(dayKey(d))) { const dot = document.createElement("i"); dot.className = "dot";  b.append(dot); }
+      const n = remDays.get(dayKey(d));
+      if (n) { const dot = document.createElement("i"); dot.className = "dot"; b.append(dot); b.dataset.tip = n + " " + plural(n, "напоминание", "напоминания", "напоминаний"); }
       b.addEventListener("click", () => { setTab("rem"); if (dayKey(d) >= dayKey(new Date())) setRemDate(dayKey(d)); $("rem-text").focus(); });
       g.append(b);
     }
@@ -865,17 +894,26 @@
     const b = document.createElement("button");
     b.type = "button"; b.textContent = m + " мин"; b.dataset.min = m;
     b.addEventListener("click", () => { if (timer.end) return; timer.total = m * 60000; timer.left = 0; $("timer-min").value = ""; saveTimer(); renderTimer(); });
-    $("timer-presets").append(b);
+    $("timer-presets").insertBefore(b, $("timer-min"));
   });
+  // своё время: пока поле в фокусе — только число, после — «7 мин»
+  $("timer-min").addEventListener("focus", () => { $("timer-min").value = $("timer-min").value.replace(/\D/g, ""); });
+  $("timer-min").addEventListener("blur", () => renderTimer());
   $("timer-min").addEventListener("input", () => {
-    const m = Math.round(Number($("timer-min").value));
+    $("timer-min").value = $("timer-min").value.replace(/\D/g, "").slice(0, 3);
+    const m = Number($("timer-min").value);
     if (!timer.end && m >= 1 && m <= 600) { timer.total = m * 60000; timer.left = 0; saveTimer(); renderTimer(); }
   });
   function timerLeft() { return timer.end ? timer.end - Date.now() : timer.left || timer.total; }
   function renderTimer() {
     $("timer-display").textContent = fmtMS(timerLeft());
     setIconBtn($("timer-go"), timer.end ? PATHS.pause : PATHS.play, timer.end ? "Пауза" : timer.left ? "Продолжить" : "Старт");
-    document.querySelectorAll("#timer-presets button").forEach((b) => b.setAttribute("aria-pressed", String(Number(b.dataset.min) * 60000 === timer.total)));
+    const preset = [1, 5, 10, 15, 25, 30, 60].includes(timer.total / 60000);
+    document.querySelectorAll("#timer-presets button").forEach((b) => { b.setAttribute("aria-pressed", String(Number(b.dataset.min) * 60000 === timer.total)); b.disabled = !!timer.end; });
+    $("timer-min").disabled = !!timer.end;
+    $("timer-min").classList.toggle("on", !preset);
+    if (document.activeElement !== $("timer-min")) $("timer-min").value = preset ? "" : Math.round(timer.total / 60000) + " мин";
+    $("timer-reset").disabled = !timer.end && !timer.left && !timer.done;
   }
   $("timer-go").addEventListener("click", () => {
     if (timer.end) { timer.left = timer.end - Date.now(); timer.end = 0; }
@@ -896,12 +934,11 @@
     $("sw-lap").disabled = !sw.start;
     const ol = $("sw-laps");
     ol.textContent = "";
-    sw.laps.slice().reverse().forEach((t, i) => {
-      const li = document.createElement("li");
-      const a = document.createElement("span"); a.textContent = "Круг " + (sw.laps.length - i);
-      const b = document.createElement("span"); b.textContent = fmtSW(t);
-      li.append(a, b); ol.append(li);
-    });
+    $("sw-reset").disabled = !sw.start && !sw.acc && !sw.laps.length;
+    for (let i = sw.laps.length - 1; i >= 0; i--) {
+      const split = sw.laps[i] - (i ? sw.laps[i - 1] : 0);
+      ol.append(tRow({ title: "Круг " + (i + 1), sub: "+" + fmtSW(split), val: fmtSW(sw.laps[i]) }));
+    }
   }
   $("sw-go").addEventListener("click", () => {
     if (sw.start) { sw.acc += Date.now() - sw.start; sw.start = 0; } else sw.start = Date.now();
@@ -947,37 +984,41 @@
       .gte("remind_at", new Date(Date.now() - 7 * 86400000).toISOString()).order("remind_at");
     if (!error) { state.reminders = data || []; renderReminders(); if (!$("timesheet").hidden && timeTab === "cal") renderCal(); }
   }
+  const fmtHM = new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit" });
+  const fmtDM = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", weekday: "short" });
+  function relDay(d) {
+    const diff = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()) - new Date(new Date().toDateString())) / 86400000);
+    return diff === 0 ? "Сегодня" : diff === 1 ? "Завтра" : diff === -1 ? "Вчера" : fmtDM.format(d);
+  }
   function renderReminders() {
     const ul = $("rem-list");
     ul.textContent = "";
-    const list = state.reminders.slice().sort((a, b) => (!!a.sent_at - !!b.sent_at) || (new Date(a.remind_at) - new Date(b.remind_at)));
-    for (const r of list) {
-      const li = document.createElement("li");
-      li.className = "rem-item" + (r.sent_at || r.failed_at ? " past" : "");
-      const main = document.createElement("div"); main.className = "rem-main";
-      const t = document.createElement("div"); t.className = "rem-text"; t.textContent = r.text;
-      const m = document.createElement("div"); m.className = "rem-meta";
-      m.textContent = fmtRem.format(new Date(r.remind_at));
-      if (r.sent_at) m.append(" · отправлено");
+    const done = (r) => !!(r.sent_at || r.failed_at);
+    const next = state.reminders.filter((r) => !done(r)).sort((a, b) => new Date(a.remind_at) - new Date(b.remind_at));
+    const past = state.reminders.filter(done).sort((a, b) => new Date(b.remind_at) - new Date(a.remind_at));
+    const row = (r) => {
+      const d = new Date(r.remind_at);
+      const sub = document.createDocumentFragment();
+      sub.append(relDay(d));
+      if (r.sent_at) sub.append(" · отправлено");
       if (r.failed_at) {
         const bad = document.createElement("span"); bad.className = "bad";
         bad.textContent = r.error === "bot_blocked" ? " · не доставлено: откройте бота и нажмите «Старт»" : " · не доставлено";
-        m.append(bad);
+        sub.append(bad);
       }
-      main.append(t, m);
-      const del = document.createElement("button");
-      del.type = "button"; del.className = "tool"; del.dataset.tip = "Удалить"; del.setAttribute("aria-label", "Удалить");
-      del.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M6 6l12 12M18 6 6 18"/></svg>';
-      del.addEventListener("click", () => trackTime(async () => {
-        const { error } = await sb.from("reminders").delete().eq("id", r.id);
-        if (error) { toast("Не удалось удалить. Попробуйте ещё раз."); throw error; }
-        state.reminders = state.reminders.filter((x) => x.id !== r.id);
-        renderReminders();
-      }));
-      li.append(main, del);
-      ul.append(li);
-    }
-    $("rem-empty").hidden = list.length > 0;
+      return tRow({
+        cls: done(r) ? "past" : "", title: r.text, sub, val: fmtHM.format(d),
+        tool: delBtn("Удалить", () => trackTime(async () => {
+          const { error } = await sb.from("reminders").delete().eq("id", r.id);
+          if (error) { toast("Не удалось удалить. Попробуйте ещё раз."); throw error; }
+          state.reminders = state.reminders.filter((x) => x.id !== r.id);
+          renderReminders();
+        })),
+      });
+    };
+    next.forEach((r) => ul.append(row(r)));
+    if (past.length) { if (next.length) ul.append(tHead("Прошедшие")); past.forEach((r) => ul.append(row(r))); }
+    $("rem-empty").hidden = state.reminders.length > 0;
   }
   /* Свои поля даты и времени вместо системных */
   const fmtDay = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", weekday: "short" });
@@ -1087,24 +1128,15 @@
     ul.textContent = "";
     const localTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const rows = [[localTz, true]].concat(cities().map((c) => [c, false]));
+    const many = rows.length > 1;
     for (const [tz, local] of rows) {
-      const li = document.createElement("li");
-      li.className = "city-item" + (local ? " local" : "");
+      const lead = local ? (many ? Object.assign(document.createElement("span"), { className: "t-ph g" }) : null) : gripBtn("Город " + cityName(tz));
+      const li = tRow({
+        cls: "city-item" + (local ? " local" : ""), lead,
+        title: local ? "Ваше время" : cityName(tz), subCls: "city-diff", valCls: "city-time",
+        tool: local ? (many ? null : undefined) : delBtn("Убрать город", () => saveCities(cities().filter((c) => c !== tz))),
+      });
       li.dataset.tz = tz;
-      const name = document.createElement("div"); name.className = "city-name";
-      name.textContent = local ? "Ваше время" : cityName(tz);
-      const diff = document.createElement("div"); diff.className = "city-diff";
-      name.append(diff);
-      const time = document.createElement("div"); time.className = "city-time";
-      if (!local) li.append(gripBtn("Город " + cityName(tz)));
-      li.append(name, time);
-      if (!local) {
-        const del = document.createElement("button");
-        del.type = "button"; del.className = "tool"; del.dataset.tip = "Убрать город"; del.setAttribute("aria-label", "Убрать город");
-        del.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M6 6l12 12M18 6 6 18"/></svg>';
-        del.addEventListener("click", () => saveCities(cities().filter((c) => c !== tz)));
-        li.append(del);
-      }
       ul.append(li);
     }
     const pop = $("city-pop");
