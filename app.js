@@ -1052,7 +1052,7 @@
     clearTimeout(ed.timer);
     if (!ed.dirty) return;
     if (ed.saving) await ed.saving;
-    const body = $("ed-body").value.slice(0, 3000), title = $("ed-head").value.trim().slice(0, 80);
+    const body = $("ed-body").value.slice(0, ED_LIM.body), title = $("ed-head").value.trim().slice(0, ED_LIM.head);
     if (!ed.id && !body.trim() && !title) { ed.dirty = false; $("ed-status").textContent = ""; return; }
     ed.dirty = false;
     ed.saving = (async () => {
@@ -1110,8 +1110,8 @@
 
   $("ed-body").addEventListener("input", () => queueSave());
   $("ed-head").addEventListener("input", () => { queueSave(); edCount(); });
-  // ограничения заметки: заголовок 80, текст 3000 символов; счётчик появляется ближе к пределу
-  const ED_LIM = { head: 80, body: 3000 };
+  // ограничения заметки: заголовок 20, текст 1000 символов; счётчик появляется ближе к пределу
+  const ED_LIM = { head: 20, body: 1000 };
   function edCount() {
     const h = $("ed-head").value.length, b = $("ed-body").value.length;
     const parts = [];
