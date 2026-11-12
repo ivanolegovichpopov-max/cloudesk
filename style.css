@@ -1054,9 +1054,11 @@ input.bad { border-color: var(--danger) !important; }
 .tk.checking { animation: tk-out .26s ease-in forwards; animation-delay: .1s; }
 @keyframes tk-out { to { opacity: 0; transform: translateY(-3px); } }
 /* вторая строка задачи — везде одинаковая и в одну строку: срок, значки, серия, подпункты, начало описания (с многоточием) */
-.tk-meta { display: flex; flex-wrap: nowrap; align-items: center; gap: 4px 8px; overflow: hidden; white-space: nowrap; font-size: 12px; line-height: 16px; color: var(--ink-dim); font-variant-numeric: tabular-nums; }
-.tk-meta > * { flex: none; }
-.tk-meta > .tk-desc { flex: 0 1 auto; }
+/* то, что не помещается целиком, уходит на скрытую вторую строку — значки никогда не режутся пополам;
+   описание занимает остаток строки и обрезается многоточием (если места меньше 40 px — не показывается) */
+.tk-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0 8px; height: 16px; overflow: hidden; white-space: nowrap; font-size: 12px; line-height: 16px; color: var(--ink-dim); font-variant-numeric: tabular-nums; }
+.tk-meta > * { flex: none; height: 16px; }
+.tk-meta > .tk-desc { flex: 1 1 0; min-width: 40px; }
 .tk-due.over { color: var(--danger); font-weight: 600; }
 .tk-due.none { opacity: .7; }
 .tk-meta { min-height: 16px; }
