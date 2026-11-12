@@ -1053,7 +1053,10 @@ input.bad { border-color: var(--danger) !important; }
 .tk.checking .tk-title { text-decoration: line-through; opacity: .55; }
 .tk.checking { animation: tk-out .26s ease-in forwards; animation-delay: .1s; }
 @keyframes tk-out { to { opacity: 0; transform: translateY(-3px); } }
-.tk-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 12px; line-height: 16px; color: var(--ink-dim); font-variant-numeric: tabular-nums; }
+/* вторая строка задачи — везде одинаковая и в одну строку: срок, значки, серия, подпункты, начало описания (с многоточием) */
+.tk-meta { display: flex; flex-wrap: nowrap; align-items: center; gap: 4px 8px; overflow: hidden; white-space: nowrap; font-size: 12px; line-height: 16px; color: var(--ink-dim); font-variant-numeric: tabular-nums; }
+.tk-meta > * { flex: none; }
+.tk-meta > .tk-desc { flex: 0 1 auto; }
 .tk-due.over { color: var(--danger); font-weight: 600; }
 .tk-due.none { opacity: .7; }
 .tk-meta { min-height: 16px; }
@@ -1130,22 +1133,23 @@ input.bad { border-color: var(--danger) !important; }
 .tk-board .tk-list:empty, .tk-board .tk-list:has(> .drag-ph:only-child) { border: 1px dashed var(--line); }
 /* узкие колонки недели: без значков при наведении, название в одну строку с многоточием */
 /* справа у карточки недели узкая полоса под значки: сверху ⋮⋮ (перенос), снизу «Удалить»; срок меняется переносом */
+/* карточка недели — та же задача: справа столбиком ⋮⋮, «Срок», «Удалить» (отступы 6 px) */
 .tk-board.week .tk { padding-right: 30px; gap: 6px; }
-.tk-board.week .tk-acts { top: auto; bottom: 6px; right: 6px; transform: none; }
+.tk-board.week .tk-acts { top: auto; bottom: 6px; right: 6px; transform: none; flex-direction: column; gap: 9px; }
 .tk-board.week .tk-acts .tool { width: 20px; height: 20px; }
-.tk-board.week .tk-acts .tool:not(:last-child) { display: none; }
 /* ручка ⋮⋮ в неделе — в правом верхнем углу карточки, место в строке не занимает: берёте и переносите на другой день */
 .tk-board.week .tk .tk-grip { position: absolute; top: 6px; right: 6px; width: 20px; height: 20px; }
 /* в неделе карточки выше: название до двух строк, срок и значки переносятся — ничего не обрезается;
    все карточки и пустые места одной высоты: 8 + 40 + 2 + 32 + 8 = 90 px */
 .tk-board.week { --tk-row: 90px; }
 .tk-board.week .tk { height: var(--tk-row); }
-.tk-board.week .tk-title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
-.tk-board.week .tk-meta { flex-wrap: wrap; white-space: normal; max-height: 32px; overflow: hidden; }
-.tk-board.week .tk-desc { display: none; }
+/* в узкой карточке: название в одну строку, под ним срок со значками, ещё ниже — строка описания */
+.tk-board.week .tk-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tk-desc2 { display: none; }
+.tk-board.week .tk-meta > .tk-desc { display: none; }
+.tk-board.week .tk-desc2 { display: block; font-size: 12px; line-height: 16px; color: var(--ink-dim); opacity: .85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tk-rest { margin-top: 4px; }
 /* в широком поле вторая строка тоже в одну строку: срок, значки, серия, начало описания */
-.tk-board .tk-meta { flex-wrap: nowrap; overflow: hidden; white-space: nowrap; }
 .tk-desc { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .85; }
 .tk-streak { display: inline-flex; align-items: center; gap: 2px; color: var(--accent); font-weight: 600; }
 .tk-hist { display: inline-flex; align-items: center; gap: 2px; flex: none; }
@@ -1166,3 +1170,11 @@ input.bad { border-color: var(--danger) !important; }
   .tk-board.week { grid-template-columns: minmax(0, 1fr); }
   .tk-board.week .tk-grp { gap: 4px; }
 }
+
+/* окно задачи: история повторяющейся задачи — серия и последние 14 раз */
+.it-hist { flex: none; display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; padding: 2px 2px; font-size: 13px; color: var(--ink-dim); }
+.it-hist[hidden] { display: none; }
+.it-hist-l { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); font-weight: 600; }
+.tk-hist.big { gap: 3px; }
+.tk-hist.big i { width: 10px; height: 10px; border-radius: 2px; }
+.it-hist-c { font-variant-numeric: tabular-nums; }

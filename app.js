@@ -812,21 +812,15 @@
     if (subs.length) {
       const dn = subs.filter((x) => x.done).length;
       const s = document.createElement("span"); s.className = "tk-subs" + (dn === subs.length ? " full" : ""); s.dataset.tip = "Подпункты";
-      if (opts.wide) { const bar = document.createElement("i"); bar.className = "tk-bar"; bar.style.setProperty("--p", Math.round((dn / subs.length) * 100) + "%"); s.classList.add("wide"); s.append(bar); }
+      const bar = document.createElement("i"); bar.className = "tk-bar"; bar.style.setProperty("--p", Math.round((dn / subs.length) * 100) + "%"); s.classList.add("wide"); s.append(bar);
       s.append(dn + "/" + subs.length); meta.append(s);
     }
-    // в широком поле: полоска последних 14 раз у повторяющейся задачи и начало описания
-    const showHist = opts.wide && dt.repeat && dt.due && !t.done && (dt.log || []).length > 0;
-    if (showHist) {
-      const strip = document.createElement("span"); strip.className = "tk-hist";
-      const h = taskHistory(t, opts.wide === 3 ? 14 : 7); strip.dataset.tip = "Последние " + h.length + " раз: сделано " + h.filter((x) => x.done).length;
-      h.forEach((x) => { const i = document.createElement("i"); if (x.done) i.className = "on"; strip.append(i); });
-      meta.append(strip);
-    }
+    // начало описания — у всех задач, при любой ширине поля (в одну строку с многоточием)
     const desc = (t.body || "").trim();
-    if (desc && opts.wide && !showHist) { const d = document.createElement("span"); d.className = "tk-desc"; d.textContent = desc.split("\n")[0]; meta.append(d); }
-    else if (desc) meta.append(ic("M5 7h14M5 12h14M5 17h9", "Есть описание"));
-    main.append(meta); // у всех задач две строки: название и под ним срок — строки одной высоты
+    if (desc) { const d = document.createElement("span"); d.className = "tk-desc"; d.textContent = desc.split("\n")[0]; meta.append(d); }
+    // в узкой карточке недели описание — отдельной строкой под сроком (в обычной строке — в конце второй строки)
+    const desc2 = desc ? Object.assign(document.createElement("div"), { className: "tk-desc2", textContent: desc.split("\n")[0] }) : null;
+    main.append(meta); if (desc2) main.append(desc2); // у всех задач две строки: название и под ним срок — строки одной высоты
     li.append(cb, main);
     // при наведении: срок и удалить
     const acts = document.createElement("div"); acts.className = "tk-acts";
@@ -1635,6 +1629,20 @@
     $("it-prio").dataset.tip = id_.prio ? "Важная — снять отметку" : "Сделать важной — будет выше в своей группе";
     $("it-done").setAttribute("aria-pressed", String(id_.done));
     $("it-done").dataset.tip = id_.done ? "Вернуть в работу" : "Отметить выполненной";
+    // история повторяющейся задачи: серия и последние 14 раз
+    const hist = $("it-hist"), it0 = id_.id ? state.items.find((x) => x.id === id_.id) : null;
+    if (id_.repeat && id_.date && it0) {
+      const pseudo = { data: Object.assign({}, tData(it0), { repeat: id_.repeat, due: new Date(id_.date + "T" + (id_.time || "00:00")).toISOString(), allday: !id_.time }) };
+      const h = taskHistory(pseudo, 14), n = taskStreak(pseudo), dn = h.filter((x) => x.done).length;
+      hist.textContent = "";
+      const lab = document.createElement("span"); lab.className = "it-hist-l";
+      lab.innerHTML = svgIco("M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2.2 1-3.6 2-4.6.3 1.6 1 2.6 2 3.1C11 9 11 6 12 3z", 14, 2);
+      lab.append(n ? "Серия " + n : "Серии пока нет");
+      const strip = document.createElement("span"); strip.className = "tk-hist big";
+      h.forEach((x) => { const i = document.createElement("i"); if (x.done) i.className = "on"; i.dataset.tip = fmtWdDate.format(new Date(x.key + "T12:00")).replace(/\.$/, "") + (x.done ? " — сделано" : " — пропущено"); strip.append(i); });
+      const cap = document.createElement("span"); cap.className = "it-hist-c"; cap.textContent = "последние 14 раз: " + dn;
+      hist.append(lab, strip, cap); hist.hidden = false;
+    } else hist.hidden = true;
     $("it-when-clear").dataset.tip = id_.time ? "Убрать время" : "Без срока";
     $("it-when-clear").setAttribute("aria-label", $("it-when-clear").dataset.tip);
     $("it-when-clear").disabled = !id_.date && !id_.time;
@@ -1696,7 +1704,7 @@
     document.querySelectorAll("#itemsheet .it-ttool").forEach((b) => (b.hidden = !isTask));
     $("it-done").hidden = !isTask || !it;
     $("it-when-clear").hidden = !isTask;
-    $("it-remind-f").hidden = !isTask; $("it-repeat-f").hidden = !isTask; $("it-subs-box").hidden = true;
+    $("it-remind-f").hidden = !isTask; $("it-repeat-f").hidden = !isTask; $("it-subs-box").hidden = true; $("it-hist").hidden = true;
     if (isTask) {
       const dt = it ? tData(it) : {};
       id_.remind = dt.remind ?? null; id_.repeat = dt.repeat || null; id_.prio = !!dt.prio;
