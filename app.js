@@ -237,6 +237,7 @@
   function hideTip() { clearTimeout(tipT); tipFor = null; tipEl.hidden = true; }
   function showTip(el) {
     if (!el.isConnected || el.getAttribute("aria-expanded") === "true" || document.querySelector(".dragging")) return;
+    if (!el.dataset.tip) return;
     tipEl.textContent = el.dataset.tip;
     tipEl.hidden = false;
     const r = el.getBoundingClientRect(), w = tipEl.offsetWidth, h = tipEl.offsetHeight, m = 8;
@@ -249,7 +250,7 @@
   }
   document.addEventListener("pointerover", (e) => {
     if (e.pointerType !== "mouse") return;
-    const el = e.target.closest && e.target.closest("[data-tip]");
+    const el = e.target.closest && e.target.closest('[data-tip]:not([data-tip=""])'); // пустая подсказка не показывается
     if (el === tipFor) return;
     hideTip();
     if (!el || el.disabled) return;
@@ -1535,7 +1536,6 @@
     document.querySelectorAll("#itemsheet .it-ttool").forEach((b) => (b.hidden = !isTask));
     $("it-done").hidden = !isTask || !it;
     $("it-when-clear").hidden = !isTask;
-    $("it-date-btn").closest(".it-when").dataset.tip = "";
     $("it-remind-f").hidden = !isTask; $("it-repeat-f").hidden = !isTask; $("it-subs-box").hidden = true;
     if (isTask) {
       const dt = it ? tData(it) : {};

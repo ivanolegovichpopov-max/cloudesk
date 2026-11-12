@@ -598,7 +598,9 @@ button:disabled { cursor: default; opacity: .45; }
 .dp-day:hover:not(:disabled) { background: var(--hover); }
 .dp-day.other { color: var(--ink-dim); }
 .dp-day.today { box-shadow: inset 0 0 0 1px var(--accent); }
-.dp-day.sel { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+/* выбранный день остаётся выбранным и при наведении; сегодня — рамка акцента, при наведении тоже читается */
+.dp-day.sel, .dp-day.sel:hover:not(:disabled) { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.dp-day:disabled { color: var(--ink-dim); opacity: .45; cursor: default; }
 .pop-time { display: flex; gap: 6px; width: 180px; }
 .tp-col { flex: 1; min-width: 0; }
 .tp-head { padding: 2px 6px 6px; font-size: 11px; font-weight: 600; color: var(--ink-dim); text-transform: uppercase; letter-spacing: .06em; }
