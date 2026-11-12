@@ -825,7 +825,7 @@
     if (t === "rem") { loadReminders(); renderBotHint(); }
     if (t === "cities") renderCities();
     if (t === "timer") renderTimer();
-    if (t === "sw") renderSW();
+    if (t === "sw") { renderSW(); swTick(); }
   }
   document.querySelectorAll("#timesheet [data-tab]").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
 
@@ -965,7 +965,7 @@
   }
   $("sw-go").addEventListener("click", () => {
     if (sw.start) { sw.acc += Date.now() - sw.start; sw.start = 0; } else sw.start = Date.now();
-    saveSW(); renderSW(); renderRun();
+    saveSW(); renderSW(); renderRun(); swTick();
   });
   $("sw-lap").addEventListener("click", () => { if (sw.start) { sw.laps.push(swNow()); sw.laps = sw.laps.slice(-50); saveSW(); renderSW(); } });
   $("sw-reset").addEventListener("click", () => { sw.start = 0; sw.acc = 0; sw.laps = []; saveSW(); renderSW(); renderRun(); });
@@ -988,13 +988,22 @@
     }
     if (!$("timesheet").hidden) {
       if (timeTab === "timer") renderTimer();
-      if (timeTab === "sw") $("sw-display").textContent = fmtSW(swNow());
       if (timeTab === "cities") renderCityTimes();
     }
     renderRun();
     checkDueReminders();
   }
   setInterval(timeLoop, 100 * 2.5);
+  // Табло секундомера — по кадрам экрана, чтобы десятые шли ровно; работает только пока его видно и он идёт
+  let swRaf = 0;
+  function swFrame() {
+    swRaf = 0;
+    if ($("timesheet").hidden || timeTab !== "sw" || !sw.start) return;
+    const t = fmtSW(swNow());
+    if ($("sw-display").textContent !== t) $("sw-display").textContent = t;
+    swRaf = requestAnimationFrame(swFrame);
+  }
+  function swTick() { if (!swRaf) swRaf = requestAnimationFrame(swFrame); }
   $("clock-run").addEventListener("click", (e) => {
     if (timer.done) { e.stopPropagation(); timer.done = false; saveTimer(); renderRun(); openTime("timer"); }
   });
