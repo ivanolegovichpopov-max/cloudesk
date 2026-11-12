@@ -568,6 +568,7 @@
   const IC = {
     note: "M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 16h5",
     task: "M4 5h16v14H4zM8 12l3 3 5-6",
+    tools: "M5 3h14v18H5zM8 7h8M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01M8 18h.01M12 18h.01M16 18h.01",
     plus: "M12 5v14M5 12h14",
     pin: "M9 3h6l-1 6 4 4H6l4-4zM11 13h2v8h-2z",
     set: "M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4",
@@ -612,8 +613,315 @@
       // итог дня в заголовке: «3 из 5» и тонкая полоска
       sub: (f) => { const d = daySummary(f); return d.total ? { text: d.done + " из " + d.total, p: Math.round((d.done / d.total) * 100), full: d.done === d.total, tip: "Сегодня сделано " + d.done + " из " + d.total } : null; },
     },
+    tools: {
+      name: "Инструменты", icon: IC.tools, spans: [1],
+      render: (f, body) => renderTools(f, body),
+    },
   };
-  const APP_ORDER = ["notes", "tasks"];
+  const APP_ORDER = ["notes", "tasks", "tools"];
+  /* ---------- Приложение «Инструменты» (1 колонка): калькулятор, проценты и НДС, валюты, даты, текст ----------
+     Вкладки-значки сверху, как в окне «Время». Всё, что введено, хранится в браузере для каждого поля,
+     поэтому перерисовка стола (автосохранение и т. п.) ничего не сбрасывает. */
+  const TOOL_TABS = [
+    ["calc", "Калькулятор", "M5 3h14v18H5zM8 7h8M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01M8 18h.01M12 18h.01M16 18h.01"],
+    ["pct", "Проценты и НДС", "M19 5 5 19M7 9a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM17 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"],
+    ["fx", "Курсы валют", "M4 8h13l-3-3M20 16H7l3 3"],
+    ["dates", "Даты", "M4 6h16v14H4zM4 10h16M8 3v4M16 3v4M8 14h3M13 17h3"],
+    ["text", "Счётчик символов", "M4 6h16M4 12h10M4 18h7M17 15v6M14 18h6"],
+  ];
+  const toolState = {};
+  function toolsOf(fid) {
+    if (!toolState[fid]) {
+      let saved = {};
+      try { saved = JSON.parse(store.get("cloudesk-tools-" + fid) || "{}") || {}; } catch (e) {}
+      toolState[fid] = Object.assign({ tab: "calc", expr: "", last: "", sum: "", pct: "20", fxAmt: "100", fxBase: "USD", d1: "", d2: "", dn: "10", text: "" }, saved);
+    }
+    return toolState[fid];
+  }
+  const saveTools = (fid) => store.set("cloudesk-tools-" + fid, JSON.stringify(toolsOf(fid)));
+  const fmtNum = (n, max = 2) => (Number.isFinite(n) ? n.toLocaleString("ru-RU", { maximumFractionDigits: max }) : "—");
+  const parseNum = (v) => { const n = Number(String(v).replace(/\s/g, "").replace(",", ".")); return Number.isFinite(n) ? n : NaN; };
+  async function copyText(t) {
+    try { await navigator.clipboard.writeText(t); toast("Скопировано: " + t); } catch (e) { toast("Не удалось скопировать"); }
+  }
+  // строка результата: подпись слева, число справа; нажатие копирует число
+  function resRow(label, value, raw) {
+    const b = document.createElement("button"); b.type = "button"; b.className = "tl-res";
+    b.dataset.tip = "Скопировать";
+    const l = document.createElement("span"); l.className = "tl-res-l"; l.textContent = label;
+    const v = document.createElement("span"); v.className = "tl-res-v"; v.textContent = value;
+    b.append(l, v);
+    b.addEventListener("click", () => { if (raw != null && raw !== "—") copyText(String(raw)); });
+    return b;
+  }
+  function tlInput(fid, key, ph, label, cls) {
+    const st = toolsOf(fid);
+    const wrap = document.createElement("label"); wrap.className = "tl-in" + (cls ? " " + cls : "");
+    if (label) { const s = document.createElement("span"); s.textContent = label; wrap.append(s); }
+    const i = document.createElement("input"); i.type = "text"; i.inputMode = key === "text" ? "text" : "decimal"; i.autocomplete = "off";
+    i.placeholder = ph; i.value = st[key]; i.dataset.keep = fid + ":" + key; i.maxLength = 40;
+    wrap.append(i);
+    return [wrap, i];
+  }
+
+  /* Калькулятор: свой разбор выражения (без eval) — + − × ÷ и %; «200 + 10%» = 220 */
+  function calcEval(expr) {
+    const toks = expr.replace(/,/g, ".").match(/\d*\.?\d+(?:e[+-]?\d+)?%?|[+\-−×÷]/g);
+    if (!toks) return NaN;
+    const vals = [], ops = [];
+    let expectNum = true, neg = false;
+    for (const t of toks) {
+      if (expectNum) {
+        if (t === "−" || t === "-") { neg = !neg; continue; }
+        if (/[+×÷]/.test(t)) return NaN;
+        vals.push({ n: parseFloat(t) * (neg ? -1 : 1), pct: t.endsWith("%") }); neg = false; expectNum = false;
+      } else { ops.push(t === "-" ? "−" : t); expectNum = true; }
+    }
+    if (expectNum) ops.pop(); // «12 +» — последний знак без числа не считается
+    // проценты: после + или − — от предыдущего числа, иначе — сотая часть
+    for (let i = 0; i < vals.length; i++) if (vals[i].pct) vals[i].n = vals[i].n / 100;
+    // × и ÷ — первыми
+    let a = [vals[0]], o = [];
+    for (let i = 0; i < ops.length; i++) {
+      const v = vals[i + 1];
+      if (ops[i] === "×" || ops[i] === "÷") { const p = a[a.length - 1]; a[a.length - 1] = { n: ops[i] === "×" ? p.n * v.n : p.n / v.n, pct: false }; }
+      else { a.push(v); o.push(ops[i]); }
+    }
+    let r = a[0].n;
+    for (let i = 0; i < o.length; i++) { const v = a[i + 1]; const x = v.pct ? r * v.n : v.n; r = o[i] === "+" ? r + x : r - x; }
+    return Math.round(r * 1e10) / 1e10;
+  }
+  function renderCalc(f, box) {
+    const st = toolsOf(f.id);
+    const root = document.createElement("div"); root.className = "tl-calc"; root.tabIndex = 0; root.dataset.keep = f.id + ":calc";
+    root.setAttribute("aria-label", "Калькулятор: можно печатать с клавиатуры");
+    const disp = document.createElement("button"); disp.type = "button"; disp.className = "tl-disp"; disp.dataset.tip = "Скопировать результат";
+    const ex = document.createElement("div"); ex.className = "tl-disp-ex";
+    const res = document.createElement("div"); res.className = "tl-disp-res";
+    disp.append(ex, res);
+    const show = () => {
+      const r = st.expr ? calcEval(st.expr) : NaN;
+      ex.textContent = st.last || "";
+      res.textContent = st.expr || "0";
+      res.classList.toggle("long", res.textContent.length > 14);
+      disp.dataset.preview = st.expr && Number.isFinite(r) && /[+\-×÷%]/.test(st.expr) ? "= " + fmtNum(r, 10) : "";
+      ex.textContent = disp.dataset.preview || st.last || "";
+      saveTools(f.id);
+    };
+    const press = (k) => {
+      const e = st.expr;
+      if (k === "C") { st.expr = ""; st.last = ""; }
+      else if (k === "⌫") st.expr = e.slice(0, -1);
+      else if (k === "=") { const r = calcEval(e); if (Number.isFinite(r)) { st.last = e + " ="; st.expr = String(r).replace(".", ","); } }
+      else if (k === "±") { const m = e.match(/(−?)(\d+,?\d*%?)$/); if (m) st.expr = e.slice(0, e.length - m[0].length) + (m[1] ? "" : "−") + m[2]; }
+      else if ("+−×÷".includes(k)) { if (!e && k !== "−") return; st.expr = /[+−×÷]$/.test(e) ? e.slice(0, -1) + k : e + k; }
+      else if (k === ",") { const m = e.match(/[\d,]*$/)[0]; if (!m.includes(",")) st.expr = e + (m ? "," : "0,"); }
+      else if (k === "%") { if (/\d$/.test(e)) st.expr = e + "%"; }
+      else if (/^\d$/.test(k)) { if (st.expr.length < 40) st.expr = e + k; }
+      show();
+    };
+    disp.addEventListener("click", () => { const r = st.expr ? calcEval(st.expr) : NaN; if (Number.isFinite(r)) copyText(fmtNum(r, 10).replace(/\s/g, "")); });
+    const keys = ["C", "⌫", "%", "÷", "7", "8", "9", "×", "4", "5", "6", "−", "1", "2", "3", "+", "±", "0", ",", "="];
+    const pad = document.createElement("div"); pad.className = "tl-keys";
+    keys.forEach((k) => {
+      const b = document.createElement("button"); b.type = "button"; b.textContent = k; b.tabIndex = -1;
+      b.className = "tl-key" + ("+−×÷".includes(k) ? " op" : "") + (k === "=" ? " eq" : "") + ("C⌫%±".includes(k) ? " fn" : "");
+      if (k === "⌫") b.setAttribute("aria-label", "Стереть");
+      b.addEventListener("mousedown", (e) => e.preventDefault());
+      b.addEventListener("click", () => { press(k); root.focus({ preventScroll: true }); });
+      pad.append(b);
+    });
+    // печать с клавиатуры, пока калькулятор в фокусе
+    root.addEventListener("keydown", (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const map = { "*": "×", "/": "÷", "-": "−", "+": "+", ".": ",", ",": ",", "Enter": "=", "=": "=", "Backspace": "⌫", "Escape": "C", "Delete": "C", "%": "%" };
+      const k = /^\d$/.test(e.key) ? e.key : map[e.key];
+      if (!k) return;
+      e.preventDefault(); e.stopPropagation(); press(k);
+    });
+    root.append(disp, pad);
+    box.append(root);
+    show();
+  }
+
+  /* Проценты и НДС: сумма и процент → все расчёты сразу */
+  function renderPct(f, box) {
+    const st = toolsOf(f.id);
+    const row = document.createElement("div"); row.className = "tl-row2";
+    const [w1, i1] = tlInput(f.id, "sum", "1 000", "Сумма");
+    const [w2, i2] = tlInput(f.id, "pct", "20", "%", "short");
+    row.append(w1, w2);
+    const list = document.createElement("div"); list.className = "tl-list";
+    const calc = () => {
+      st.sum = i1.value; st.pct = i2.value; saveTools(f.id);
+      const s = parseNum(st.sum), p = parseNum(st.pct);
+      list.textContent = "";
+      const ok = Number.isFinite(s) && Number.isFinite(p) && st.sum !== "" && st.pct !== "";
+      const v = (x) => (ok ? fmtNum(x) : "—"), r = (x) => (ok ? Math.round(x * 100) / 100 : null);
+      const pp = ok ? fmtNum(p) + "%" : "n%";
+      list.append(
+        resRow(pp + " от суммы", v((s * p) / 100), r((s * p) / 100)),
+        resRow("Скидка " + pp, v(s - (s * p) / 100), r(s - (s * p) / 100)),
+        resRow("Наценка " + pp, v(s + (s * p) / 100), r(s + (s * p) / 100)),
+        resRow("С НДС " + pp + " сверху", v(s * (1 + p / 100)), r(s * (1 + p / 100))),
+        resRow("НДС " + pp + " в т. ч.", v((s * p) / (100 + p)), r((s * p) / (100 + p))),
+        resRow("Без НДС", v((s * 100) / (100 + p)), r((s * 100) / (100 + p))),
+      );
+    };
+    [i1, i2].forEach((i) => i.addEventListener("input", calc));
+    box.append(row, list);
+    calc();
+  }
+
+  /* Курсы валют: сумма в любой валюте — остальные пересчитываются. Источник — ExchangeRate-API (раз в сутки) */
+  const FX = [["RUB", "₽"], ["AMD", "֏"], ["USD", "$"], ["EUR", "€"], ["KZT", "₸"], ["CNY", "¥"]];
+  let fxRates = null, fxLoading = null;
+  function fxCached() { try { const c = JSON.parse(store.get("cloudesk-fx") || "null"); return c && c.rates ? c : null; } catch (e) { return null; } }
+  async function loadFx() {
+    const c = fxCached();
+    if (c && Date.now() - c.at < 12 * 3600e3) { fxRates = c; return c; }
+    if (fxLoading) return fxLoading;
+    fxLoading = (async () => {
+      try {
+        const r = await fetch("https://open.er-api.com/v6/latest/USD");
+        const j = await r.json();
+        if (j.result !== "success") throw new Error("fx");
+        fxRates = { at: Date.now(), upd: j.time_last_update_unix * 1000, rates: j.rates };
+        store.set("cloudesk-fx", JSON.stringify(fxRates));
+      } catch (e) { fxRates = c || null; }
+      fxLoading = null;
+      return fxRates;
+    })();
+    return fxLoading;
+  }
+  function renderFx(f, box) {
+    const st = toolsOf(f.id);
+    const list = document.createElement("div"); list.className = "tl-fx";
+    const note = document.createElement("div"); note.className = "tl-note";
+    const inputs = {};
+    const fill = () => {
+      const R = fxRates && fxRates.rates;
+      const amt = parseNum(st.fxAmt);
+      FX.forEach(([code]) => {
+        const i = inputs[code];
+        if (code === st.fxBase) { if (document.activeElement !== i) i.value = st.fxAmt; return; }
+        i.value = R && Number.isFinite(amt) && st.fxAmt !== "" ? fmtNum((amt / R[st.fxBase]) * R[code]) : "";
+      });
+      note.textContent = "";
+      if (R) {
+        note.append("Курс на " + fmtShort.format(new Date(fxRates.upd)) + " · ");
+        const a = document.createElement("a"); a.href = "https://www.exchangerate-api.com"; a.target = "_blank"; a.rel = "noopener noreferrer"; a.textContent = "ExchangeRate-API"; note.append(a);
+      } else note.textContent = fxLoading ? "Загружаю курсы…" : "Курсы не загрузились — проверьте интернет";
+    };
+    FX.forEach(([code, sym]) => {
+      const row = document.createElement("label"); row.className = "tl-fx-row";
+      const c = document.createElement("span"); c.className = "tl-fx-code"; c.textContent = code;
+      const i = document.createElement("input"); i.type = "text"; i.inputMode = "decimal"; i.autocomplete = "off"; i.maxLength = 20;
+      i.dataset.keep = f.id + ":fx-" + code; i.placeholder = "0"; i.setAttribute("aria-label", "Сумма в " + code);
+      const s = document.createElement("span"); s.className = "tl-fx-sym"; s.textContent = sym;
+      i.addEventListener("focus", () => { if (st.fxBase !== code) { st.fxBase = code; st.fxAmt = i.value.replace(/\s/g, ""); saveTools(f.id); } i.select(); });
+      i.addEventListener("input", () => { st.fxBase = code; st.fxAmt = i.value; saveTools(f.id); fill(); });
+      inputs[code] = i;
+      row.append(c, i, s);
+      list.append(row);
+    });
+    box.append(list, note);
+    fill();
+    if (!fxRates || Date.now() - fxRates.at > 12 * 3600e3) loadFx().then(() => { if (list.isConnected) fill(); });
+  }
+
+  /* Даты: разница между датами (дни, рабочие дни, недели) и дата + N дней */
+  function parseDay(v) {
+    v = String(v || "").trim().toLowerCase();
+    if (!v || v === "сегодня") { const d = new Date(); d.setHours(0, 0, 0, 0); return v ? d : null; }
+    const m = v.match(/^(\d{1,2})[.\/-](\d{1,2})(?:[.\/-](\d{2,4}))?$/);
+    if (!m) return null;
+    const y = m[3] ? (m[3].length === 2 ? 2000 + Number(m[3]) : Number(m[3])) : new Date().getFullYear();
+    const d = new Date(y, Number(m[2]) - 1, Number(m[1]));
+    return d.getMonth() === Number(m[2]) - 1 ? d : null;
+  }
+  const workdays = (a, b) => { let n = 0; const s = a < b ? a : b, e = a < b ? b : a; for (let d = new Date(s); d < e; d.setDate(d.getDate() + 1)) { const w = d.getDay(); if (w && w !== 6) n++; } return n; };
+  function renderDates(f, box) {
+    const st = toolsOf(f.id);
+    const today = new Date(), tk = pad(today.getDate()) + "." + pad(today.getMonth() + 1) + "." + today.getFullYear();
+    const row = document.createElement("div"); row.className = "tl-row2";
+    const [w1, i1] = tlInput(f.id, "d1", tk, "С");
+    const [w2, i2] = tlInput(f.id, "d2", "дд.мм.гггг", "По");
+    [i1, i2].forEach((i) => (i.inputMode = "numeric"));
+    row.append(w1, w2);
+    const list1 = document.createElement("div"); list1.className = "tl-list";
+    const row2 = document.createElement("div"); row2.className = "tl-row2";
+    const [w3, i3] = tlInput(f.id, "dn", "10", "+ дней", "short");
+    i3.inputMode = "numeric";
+    row2.append(w3);
+    const list2 = document.createElement("div"); list2.className = "tl-list";
+    const fmtD = new Intl.DateTimeFormat("ru-RU", { weekday: "short", day: "numeric", month: "long", year: "numeric" });
+    const calc = () => {
+      st.d1 = i1.value; st.d2 = i2.value; st.dn = i3.value; saveTools(f.id);
+      const a = parseDay(st.d1 || "сегодня"), b = parseDay(st.d2), n = parseInt(st.dn, 10);
+      list1.textContent = ""; list2.textContent = "";
+      const ok = a && b;
+      const days = ok ? Math.round((b - a) / 86400000) : null;
+      list1.append(
+        resRow("Дней между датами", ok ? fmtNum(Math.abs(days), 0) : "—", ok ? Math.abs(days) : null),
+        resRow("Из них рабочих (пн–пт)", ok ? fmtNum(workdays(a, b), 0) : "—", ok ? workdays(a, b) : null),
+        resRow("Недель", ok ? fmtNum(Math.abs(days) / 7, 1) : "—", ok ? Math.round((Math.abs(days) / 7) * 10) / 10 : null),
+      );
+      if (a && Number.isFinite(n)) {
+        const plus = addDays(a, n);
+        let w = new Date(a), left = Math.abs(n); const dir = n < 0 ? -1 : 1;
+        while (left > 0) { w = addDays(w, dir); if (w.getDay() && w.getDay() !== 6) left--; }
+        const t1 = fmtD.format(plus).replace(" г.", ""), t2 = fmtD.format(w).replace(" г.", "");
+        list2.append(resRow("Через " + n + " " + plural(Math.abs(n), "день", "дня", "дней"), t1, t1), resRow("Через " + n + " рабочих", t2, t2));
+      } else list2.append(resRow("Через N дней", "—", null));
+    };
+    [i1, i2, i3].forEach((i) => i.addEventListener("input", calc));
+    box.append(row, list1, row2, list2);
+    calc();
+  }
+
+  /* Счётчик символов: символы, без пробелов, слова; пределы объявлений Яндекс Директа */
+  const DIRECT_LIM = [["Заголовок", 56], ["Доп. заголовок", 30], ["Текст", 81]];
+  function renderText(f, box) {
+    const st = toolsOf(f.id);
+    const ta = document.createElement("textarea"); ta.className = "tl-text"; ta.placeholder = "Вставьте или напишите текст";
+    ta.value = st.text; ta.dataset.keep = f.id + ":text"; ta.maxLength = 20000; ta.setAttribute("aria-label", "Текст для подсчёта");
+    const stats = document.createElement("div"); stats.className = "tl-stats";
+    const lims = document.createElement("div"); lims.className = "tl-lims";
+    const calc = () => {
+      st.text = ta.value; saveTools(f.id);
+      const t = ta.value, n = t.length, ns = t.replace(/\s/g, "").length, w = (t.match(/[^\s]+/g) || []).length;
+      stats.textContent = "";
+      [["Символов", n], ["Без пробелов", ns], ["Слов", w]].forEach(([l, v]) => {
+        const s = document.createElement("span"); const b = document.createElement("b"); b.textContent = fmtNum(v, 0); s.append(b, " " + l.toLowerCase()); stats.append(s);
+      });
+      lims.textContent = "";
+      DIRECT_LIM.forEach(([l, m]) => {
+        const s = document.createElement("span"); s.className = "tl-lim" + (n > m ? " over" : n ? " ok" : "");
+        s.textContent = l + " " + n + "/" + m; s.dataset.tip = "Яндекс Директ: " + l.toLowerCase() + " — до " + m + " символов";
+        lims.append(s);
+      });
+    };
+    ta.addEventListener("input", calc);
+    box.append(ta, stats, lims);
+    calc();
+  }
+
+  function renderTools(f, body) {
+    const st = toolsOf(f.id);
+    const wrap = document.createElement("div"); wrap.className = "tools";
+    const tabs = document.createElement("div"); tabs.className = "tabs tl-tabs"; tabs.setAttribute("role", "tablist"); tabs.setAttribute("aria-label", "Инструменты");
+    TOOL_TABS.forEach(([key, name, path]) => {
+      const b = document.createElement("button"); b.type = "button"; b.setAttribute("role", "tab"); b.setAttribute("aria-selected", String(st.tab === key));
+      b.dataset.tip = name; b.setAttribute("aria-label", name); b.innerHTML = svgIco(path, 18);
+      b.addEventListener("click", () => { if (st.tab === key) return; st.tab = key; saveTools(f.id); body.textContent = ""; renderTools(f, body); const p = body.querySelector(".tl-panel"); if (p) replay(p); });
+      tabs.append(b);
+    });
+    const panel = document.createElement("div"); panel.className = "tl-panel"; panel.dataset.tab = st.tab;
+    ({ calc: renderCalc, pct: renderPct, fx: renderFx, dates: renderDates, text: renderText }[st.tab] || renderCalc)(f, panel);
+    wrap.append(tabs, panel);
+    body.append(wrap);
+  }
 
   /* ---------- Приложение «Задачи» ----------
      Задача — запись items (type "task"): title — название, body — описание, done/done_at — выполнена,
@@ -1266,6 +1574,8 @@
     // строка ввода задачи не теряет фокус и набранный текст, когда стол перерисовывается
     const ae = document.activeElement;
     const keepIn = ae && ae.classList && ae.classList.contains("tk-input") ? { fid: ae.closest(".fld").dataset.id, v: ae.value, a: ae.selectionStart, b: ae.selectionEnd } : null;
+    // поля ввода инструментов (и калькулятор) тоже не теряют фокус при перерисовке
+    const keepTool = ae && ae.dataset && ae.dataset.keep ? { k: ae.dataset.keep, a: ae.selectionStart, b: ae.selectionEnd } : null;
     board.querySelectorAll(".fld, .fld-new").forEach((n) => n.remove());
     const frag = document.createDocumentFragment();
     for (const f of orderedFields()) {
@@ -1316,6 +1626,10 @@
     if (keepIn) {
       const i = board.querySelector('.fld[data-id="' + keepIn.fid + '"] .tk-input');
       if (i) { i.value = keepIn.v; i.focus({ preventScroll: true }); try { i.setSelectionRange(keepIn.a, keepIn.b); } catch (e) {} if (keepIn.v) i.dispatchEvent(new Event("input")); }
+    }
+    if (keepTool) {
+      const i = board.querySelector('[data-keep="' + keepTool.k + '"]');
+      if (i) { i.focus({ preventScroll: true }); try { if (keepTool.a != null) i.setSelectionRange(keepTool.a, keepTool.b); } catch (e) {} }
     }
     boardFirst = false;
     requestAnimationFrame(fitNotes);

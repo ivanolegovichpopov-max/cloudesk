@@ -1165,3 +1165,62 @@ input.bad { border-color: var(--danger) !important; }
 .tk-hist.big { gap: 3px; }
 .tk-hist.big i { width: 10px; height: 10px; border-radius: 2px; }
 .it-hist-c { font-variant-numeric: tabular-nums; }
+
+/* ---------- Приложение «Инструменты» (1 колонка): вкладки-значки как в окне «Время» ---------- */
+.tools { display: flex; flex-direction: column; gap: 10px; min-width: 0; height: 100%; }
+.tl-tabs { flex: none; }
+.tl-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+/* калькулятор */
+.tl-calc { display: flex; flex-direction: column; gap: 6px; outline: none; border-radius: var(--r); }
+.tl-disp {
+  display: grid; justify-items: end; gap: 0; min-height: 46px; padding: 2px 6px; border: 0; border-radius: var(--r);
+  background: transparent; color: var(--ink); text-align: right; cursor: pointer; overflow: hidden;
+}
+.tl-disp:hover { background: var(--hover); }
+.tl-disp-ex { min-height: 16px; font-size: 12px; line-height: 16px; color: var(--ink-dim); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tl-disp-res { max-width: 100%; font-size: 24px; line-height: 28px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.tl-disp-res.long { font-size: 18px; }
+.tl-calc:focus-visible .tl-disp { box-shadow: inset 0 0 0 1px var(--accent); }
+.tl-keys { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+.tl-key {
+  height: 32px; border: 1px solid var(--line); border-radius: var(--r); background: transparent;
+  color: var(--ink); font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums;
+}
+.tl-key:hover { border-color: var(--accent); }
+.tl-key.fn { color: var(--ink-dim); }
+.tl-key.op { color: var(--accent); }
+.tl-key.eq { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+/* поля ввода и строки результатов */
+.tl-row2 { display: flex; gap: 8px; min-width: 0; }
+.tl-in { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.tl-in.short { flex: 0 0 84px; }
+.tl-in > span { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-dim); }
+.tl-in input { width: 100%; height: 34px !important; font-variant-numeric: tabular-nums; }
+.tl-list { display: grid; gap: 0; }
+.tl-res {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; height: 28px; padding: 0 6px;
+  border: 0; border-radius: var(--r); background: transparent; color: var(--ink); font-size: 13px; text-align: left; cursor: pointer;
+}
+.tl-res:hover { background: var(--hover); }
+.tl-res-l { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-dim); }
+.tl-res-v { flex: none; font-weight: 600; font-variant-numeric: tabular-nums; }
+/* валюты: в любой строке можно писать — остальные пересчитываются */
+.tl-fx { display: grid; gap: 4px; }
+.tl-fx-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.tl-fx-code { flex: none; width: 36px; font-size: 12px; font-weight: 600; letter-spacing: .04em; color: var(--ink-dim); }
+.tl-fx-row input { flex: 1; min-width: 0; height: 30px !important; text-align: right; font-variant-numeric: tabular-nums; }
+.tl-fx-sym { flex: none; width: 14px; color: var(--ink-dim); text-align: center; }
+.tl-note { font-size: 11px; color: var(--ink-dim); }
+.tl-note a { color: inherit; }
+/* текст */
+.tl-text {
+  flex: 1; min-height: 90px; width: 100%; resize: none; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--r);
+  background: transparent; color: var(--ink); font: inherit; font-size: 14px; line-height: 1.45;
+}
+.tl-text:focus { outline: none; border-color: var(--accent); }
+.tl-stats { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--ink-dim); }
+.tl-stats b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.tl-lims { display: flex; flex-wrap: wrap; gap: 4px; }
+.tl-lim { padding: 1px 6px; border-radius: 4px; font-size: 11px; font-weight: 600; background: rgba(127,127,127,.18); color: var(--ink-dim); font-variant-numeric: tabular-nums; }
+.tl-lim.ok { color: var(--accent); }
+.tl-lim.over { background: color-mix(in srgb, var(--danger) 18%, transparent); color: var(--danger); }
