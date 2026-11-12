@@ -19,6 +19,10 @@
   ];
 
   const $ = (id) => document.getElementById(id);
+  /* Единые пределы для всех приложений (и будущих): любое название — до 20 символов, любое описание — до 1000.
+     Старые длинные названия сохраняются как есть, но изменить их можно только в пределах 20. */
+  const LIM = { title: 20, desc: 1000 };
+  const LONG_TITLE = "Название — не больше " + LIM.title + " символов";
   const sb = window.supabase.createClient(SB_URL, SB_KEY, {
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, storageKey: "cloudesk-auth" },
   });
@@ -442,7 +446,7 @@
 
   /* ---------- Столы: «Работа», «Личный», … — у каждого свои поля, ссылки и заставка ---------- */
   const DESK_COLS = "id,title,position,wallpaper_preset,wallpaper_path,wallpaper_weekly,wallpaper_week_from";
-  const DESK_MAX = 10, DESK_TITLE = 20;
+  const DESK_MAX = 10, DESK_TITLE = LIM.title;
   state.desks = []; state.desk = null; state.base = null;
   const curDesk = () => state.desks.find((d) => d.id === state.desk) || null;
   async function loadDesks() {
@@ -614,7 +618,7 @@
      Задача — запись items (type "task"): title — название, body — описание, done/done_at — выполнена,
      data: { due (ISO), allday, remind (минут до срока или null), repeat (day|weekdays|week|month), prio, subs: [{t, done}], tz },
      remind_at — когда прислать напоминание в Telegram (считается из срока и remind). */
-  const TASK_LIM = { field: 100, title: 200, body: 1000, subs: 30, sub: 200 };
+  const TASK_LIM = { field: 100, title: LIM.title, body: LIM.desc, subs: 30, sub: LIM.title };
   const REMINDS = [[null, "Нет"], [0, "В срок"], [15, "За 15 мин"], [60, "За час"], [1440, "За день"]];
   const REPEATS = [[null, "Нет"], ["day", "День"], ["weekdays", "Будни"], ["week", "Неделя"], ["month", "Месяц"]];
   const REPEAT_TXT = { day: "каждый день", weekdays: "по будням", week: "каждую неделю", month: "каждый месяц" };
@@ -852,6 +856,9 @@
       const v = inp.value.trim();
       if (!v) { hint.hidden = true; return; }
       const p = parseTask(v), parts = [];
+      const long = p.title.length > TASK_LIM.title;
+      hint.classList.toggle("bad", long);
+      if (long) { hint.textContent = LONG_TITLE + " (сейчас " + p.title.length + ")"; hint.hidden = false; return; }
       if (p.due) parts.push(dueLabel(p.due, p.allday));
       if (p.repeat) parts.push(REPEAT_TXT[p.repeat]);
       if (p.prio) parts.push("важная");
@@ -865,10 +872,11 @@
       const v = inp.value.trim();
       if (!v) return;
       const p = parseTask(v);
+      if (p.title.length > TASK_LIM.title) { showHint(); return; }
       inp.value = ""; showHint();
       const minPos = all.reduce((m, x) => Math.min(m, x.position), 0);
       const data = { due: p.due, allday: p.allday, remind: p.due && !p.allday ? 0 : null, repeat: p.repeat, prio: p.prio, subs: [], tz: TZ };
-      const r = await createItem({ type: "task", section_id: f.id, position: minPos - 1, title: p.title.slice(0, TASK_LIM.title), body: "", data, remind_at: remindAtFor(data.due, data.allday, data.remind) });
+      const r = await createItem({ type: "task", section_id: f.id, position: minPos - 1, title: p.title, body: "", data, remind_at: remindAtFor(data.due, data.allday, data.remind) });
       if (!r) { inp.value = v; showHint(); }
     });
     form.append(plus, inp);
@@ -1332,7 +1340,7 @@
 
   async function createItem(row) {
     const r = await sb.from("items").insert(Object.assign({ position: row.section_id ? nextPos(row.section_id) : 0 }, row)).select(ITEM_COLS).single();
-    if (r.error) { console.error(r.error); const m = String(r.error.message); toast(m.includes("items_limit") ? "Слишком много записей: удалите ненужные." : m.includes("tasks_limit") ? "В поле уже 100 задач — это предел." : "Не сохранилось — проверьте интернет."); return null; }
+    if (r.error) { console.error(r.error); const m = String(r.error.message); toast(m.includes("title_len") ? LONG_TITLE + "." : m.includes("body_len") ? "Описание — не больше " + LIM.desc + " символов." : m.includes("items_limit") ? "Слишком много записей: удалите ненужные." : m.includes("tasks_limit") ? "В поле уже 100 задач — это предел." : "Не сохранилось — проверьте интернет."); return null; }
     state.items.push(r.data);
     itemsChanged();
     return r.data;
@@ -1343,7 +1351,7 @@
     const prev = Object.assign({}, it);
     Object.assign(it, patch);
     const r = await sb.from("items").update(patch).eq("id", id).select(ITEM_COLS).single();
-    if (r.error) { console.error(r.error); Object.assign(it, prev); itemsChanged(); toast("Не сохранилось — проверьте интернет."); return false; }
+    if (r.error) { console.error(r.error); Object.assign(it, prev); itemsChanged(); toast(String(r.error.message).includes("title_len") ? LONG_TITLE + "." : "Не сохранилось — проверьте интернет."); return false; }
     Object.assign(it, r.data);
     itemsChanged();
     return true;
@@ -1531,7 +1539,7 @@
     $("it-h").textContent = (it ? "" : "Новое ") + (isTask ? (it ? "Задача" : "задача").replace(/^Новое з/, "Новая з") : (it ? "Напоминание" : "напоминание"));
     if (!it) $("it-h").textContent = isTask ? "Новая задача" : "Новое напоминание";
     $("it-title").placeholder = isTask ? "Задача" : "Напоминание";
-    $("it-title").maxLength = isTask ? TASK_LIM.title : 500;
+    $("it-title").maxLength = LIM.title;
     $("it-title").value = it ? it.title : "";
     $("it-body").value = it ? it.body : "";
     $("it-body").hidden = !isTask;
@@ -1563,8 +1571,10 @@
     try {
       closeMenus(null);
       const it = id_.id ? state.items.find((x) => x.id === id_.id) : null;
-      const title = $("it-title").value.trim().slice(0, 500);
+      const title = $("it-title").value.trim();
       const isTask = id_.type === "task";
+      // длинное старое название можно оставить как есть, а новое или изменённое — только до 20 символов
+      if (title.length > LIM.title && (!it || title !== it.title)) { $("it-title").classList.add("bad"); $("it-status").textContent = LONG_TITLE; return; }
       if (isTask) {
         if (!title) {
           if (!it) { animHide($("itemsheet"), 170); lockSheets(false); return; }
@@ -1573,7 +1583,7 @@
         const allday = !!id_.date && !id_.time;
         const due = id_.date ? new Date(id_.date + "T" + (id_.time || "00:00")).toISOString() : null;
         const old = it ? tData(it) : {};
-        const subs = id_.subs.map((x) => ({ t: x.t.trim().slice(0, TASK_LIM.sub), done: !!x.done })).filter((x) => x.t);
+        const subs = id_.subs.map((x) => ({ t: x.t.trim(), done: !!x.done })).filter((x) => x.t);
         let data = Object.assign({}, old, { due, allday, remind: due ? id_.remind : null, repeat: due ? id_.repeat : null, prio: id_.prio, subs, tz: TZ });
         let done = id_.done, toastMsg = "";
         // повторяющаяся задача, отмеченная «Сделано», переезжает на следующий срок
@@ -1647,7 +1657,7 @@
      Текст хранится простой разметкой: **жирный**, _курсив_, строки «[ ] …» / «[x] …» — пункты списка.
      В редакторе это видно как настоящий жирный, курсив и галочки. */
   const ed = { id: null, sec: null, color: "paper", pinned: false, files: [], filesNew: [], filesRemoved: [], timer: null, saving: null, dirty: false };
-  const ED_LIM = { head: 20, body: 1000, files: 5, fileSize: 5 * 1024 * 1024 };
+  const ED_LIM = { head: LIM.title, body: LIM.desc, files: 5, fileSize: 5 * 1024 * 1024 };
   const rich = $("ed-rich");
 
   function setEdColor(c) {
@@ -2673,6 +2683,7 @@
     const text = $("rem-text").value.trim();
     const dt = new Date($("rem-date").value + "T" + $("rem-time").value);
     if (!text) { $("time-status").textContent = "Напишите, о чём напомнить"; return false; }
+    if (text.length > LIM.title) { $("time-status").textContent = LONG_TITLE; return false; }
     if (isNaN(dt)) { setTab("rem"); $("time-status").textContent = "Укажите дату и время"; return false; }
     if (dt.getTime() < Date.now() - 60000) { setTab("rem"); $("time-status").textContent = "Это время уже прошло — выберите другое"; return false; }
     $("time-status").textContent = "Сохраняю…";
@@ -2881,7 +2892,7 @@
         const idx = dgroups.indexOf(g);
         const move = gripBtn("Группа «" + (g.name || "без названия") + "»"); move.classList.add("g-grip"); move.disabled = g.removed;
         const name = document.createElement("input");
-        name.type = "text"; name.maxLength = 40; name.placeholder = "Название группы"; name.value = g.name; name.disabled = g.removed;
+        name.type = "text"; name.maxLength = LIM.title; name.placeholder = "Название группы"; name.value = g.name; name.disabled = g.removed;
         name.className = "lg-name"; name.setAttribute("aria-label", "Название группы");
         name.addEventListener("input", () => { g.name = name.value; g.bad = false; h.classList.remove("bad"); });
         const count = document.createElement("span"); count.className = "lg-count"; count.textContent = links.length ? String(links.length) : "";
@@ -2921,7 +2932,7 @@
     row.dataset.id = d.id;
     const move = gripBtn("Ссылка «" + (d.title || d.url || "новая") + "»"); move.classList.add("l-grip");
     const fields = document.createElement("div"); fields.className = "link-fields";
-    const t = document.createElement("input"); t.type = "text"; t.maxLength = 40; t.placeholder = "Название"; t.value = d.title; t.disabled = d.removed; t.setAttribute("aria-label", "Название ссылки");
+    const t = document.createElement("input"); t.type = "text"; t.maxLength = LIM.title; t.placeholder = "Название"; t.value = d.title; t.disabled = d.removed; t.setAttribute("aria-label", "Название ссылки");
     const u = document.createElement("input"); u.type = "text"; u.maxLength = 500; u.placeholder = "Адрес, например rentikacrm.com"; u.value = d.url; u.disabled = d.removed;
     u.setAttribute("aria-label", "Адрес ссылки"); u.inputMode = "url"; u.autocomplete = "off"; u.spellcheck = false;
     t.addEventListener("input", () => { d.title = t.value; });
@@ -3023,7 +3034,7 @@
     {
       closeMenus(null);
       // 1) проверка
-      let bad = 0;
+      let bad = 0, longBad = false;
       const keepLinks = [];
       for (const d of draft) {
         d.bad = false;
@@ -3031,7 +3042,11 @@
         if (!d.title.trim() && !d.url.trim()) continue; // пустая строка — не сохраняем
         const url = normUrl(d.url);
         if (!url) { d.bad = true; bad++; continue; }
-        keepLinks.push({ d, url, title: (d.title.trim() || hostOf(url)).slice(0, 40) });
+        // пустое название — имя сайта (до 20 символов); своё длинное старое название остаётся, пока его не изменят
+        const o = state.links.find((l) => l.id === d.id);
+        const title = d.title.trim() || hostOf(url).slice(0, LIM.title);
+        if (title.length > LIM.title && !(o && o.title === title)) { d.bad = true; bad++; longBad = true; continue; }
+        keepLinks.push({ d, url, title });
       }
       const keepGroups = [];
       for (const g of dgroups) {
@@ -3042,9 +3057,11 @@
           if (used || !g.isNew) { g.bad = true; bad++; }
           continue; // новая пустая группа без названия — просто не создаём
         }
+        const og = state.groups.find((x) => x.id === g.id);
+        if (g.name.trim().length > LIM.title && !(og && og.name === g.name.trim())) { g.bad = true; bad++; longBad = true; continue; }
         keepGroups.push(g);
       }
-      if (bad) { renderDraft(); $("set-status").textContent = "Заполните отмеченное красным"; return false; }
+      if (bad) { renderDraft(); $("set-status").textContent = longBad ? LONG_TITLE : "Заполните отмеченное красным"; return false; }
       $("set-status").textContent = "Сохраняю…";
 
       // 2) группы: удаление, создание (нужны настоящие id), переименование и порядок
@@ -3054,7 +3071,7 @@
       const lmark = trashMark();
       await Promise.all(dgroups.filter((g) => g.removed && !g.isNew).map((g) => sb.from("link_groups").update(lmark).eq("id", g.id).then(chk)));
       await Promise.all(keepGroups.map(async (g, i) => {
-        const name = g.name.trim().slice(0, 40);
+        const name = g.name.trim();
         if (g.isNew) {
           const r = chk(await sb.from("link_groups").insert({ name, position: i, color: g.color || null, desk_id: state.desk }).select("id").single());
           if (r.data) { idMap[g.id] = r.data.id; g.id = r.data.id; g.isNew = false; }

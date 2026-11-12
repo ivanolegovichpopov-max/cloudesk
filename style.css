@@ -1110,3 +1110,4 @@ input.bad { border-color: var(--danger) !important; }
 .it-sub .cl-box { width: 16px; height: 16px; }
 #it-prio[aria-pressed="true"], #it-done[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
 .task-due-pop .menu-item { justify-content: flex-start; }
+.tk-hint.bad { color: var(--danger); }
