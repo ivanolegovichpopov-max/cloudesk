@@ -382,6 +382,7 @@ input:focus { outline: none; border-color: var(--accent); }
 .link-chip.add { width: 32px; padding: 0; justify-content: center; color: var(--ink-dim); }
 .link-chip.add:hover { color: var(--accent); }
 .link-chip.more { padding: 0 8px 0 10px; gap: 6px; }
+.links-more { flex: none; }
 .more-n { font-size: 12px; color: var(--ink-dim); font-variant-numeric: tabular-nums; }
 .pop.pop-right { left: auto; right: 0; min-width: 240px; max-height: 60vh; overflow: auto; }
 .link-item { justify-content: flex-start; text-decoration: none; color: var(--ink); }
@@ -482,8 +483,12 @@ button:disabled { cursor: default; opacity: .45; }
   .note { padding: 10px 12px; }
   .presets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .link-chip.add { display: none; }
-  .links { justify-content: flex-end; }
-  .links-row { flex: 0; }
+  /* телефон: часы сжимаются первыми, кнопка «Ссылки» — того же размера, что «Меню», с отступом */
+  .top { gap: 8px; }
+  .clock { flex: 1 1 auto; }
+  .links { flex: 0 0 auto; gap: 0; }
+  .links-row { display: none; }
+  .link-chip.more { height: 38px; padding: 0 10px 0 12px; font-size: 14px; }
   .link-fields { grid-template-columns: 1fr; }
   .rem-when { grid-template-columns: 1fr 1fr; }
   .rem-when .btn-primary { grid-column: 1 / -1; justify-content: center; }
