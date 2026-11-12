@@ -1092,30 +1092,40 @@
     richEmpty();
   }
   // строки редактора → разметка
-  function serInline(node) {
-    let s = "";
-    node.childNodes.forEach((n) => {
-      if (n.nodeType === 3) s += n.nodeValue.replace(/​/g, "");
-      else if (n.nodeType === 1) {
-        if (n.classList.contains("cbx") || n.tagName === "BR") return;
-        const inner = serInline(n);
-        const fw = n.style && n.style.fontWeight, fs = n.style && n.style.fontStyle;
-        const b = n.tagName === "B" || n.tagName === "STRONG" || fw === "bold" || Number(fw) >= 600;
-        const i = n.tagName === "I" || n.tagName === "EM" || fs === "italic";
-        let t = inner;
-        if (i && t.trim()) t = "_" + t + "_";
-        if (b && t.trim()) t = "**" + t + "**";
-        s += t;
-      }
-    });
-    return s;
+  /* Строка редактора → разметка. Текст разбирается посимвольно (жирный? курсив?), затем
+     собирается заново: метки всегда парные, не переходят на другую строку, пробелы — снаружи */
+  function serInline(line) {
+    const runs = [];
+    (function walk(node, b, i) {
+      node.childNodes.forEach((n) => {
+        if (n.nodeType === 3) {
+          const t = n.nodeValue.replace(/\u200b/g, "");
+          if (!t) return;
+          const last = runs[runs.length - 1];
+          if (last && last.b === b && last.i === i) last.t += t; else runs.push({ t, b, i });
+        } else if (n.nodeType === 1) {
+          if (n.classList.contains("cbx") || n.tagName === "BR") return;
+          const fw = n.style && n.style.fontWeight, fs = n.style && n.style.fontStyle;
+          walk(n, b || n.tagName === "B" || n.tagName === "STRONG" || fw === "bold" || Number(fw) >= 600,
+                  i || n.tagName === "I" || n.tagName === "EM" || fs === "italic");
+        }
+      });
+    })(line, false, false);
+    return runs.map(({ t, b, i }) => {
+      const m = t.match(/^(\s*)([\s\S]*?)(\s*)$/);
+      if (!m[2] || (!b && !i)) return t;
+      let core = m[2];
+      if (i) core = "_" + core + "_";
+      if (b) core = "**" + core + "**";
+      return m[1] + core + m[3];
+    }).join("");
   }
   function getRich() {
     const out = [];
     rich.childNodes.forEach((n) => {
       if (n.nodeType === 3) { if (n.nodeValue) out.push(n.nodeValue); return; }
       if (n.nodeType !== 1) return;
-      const t = serInline(n).replace(/\*\*\*\*/g, "").replace(/__/g, "");
+      const t = serInline(n);
       out.push(n.classList.contains("cl") ? (n.classList.contains("done") ? "[x] " : "[ ] ") + t : t);
     });
     while (out.length > 1 && !out[out.length - 1].trim()) out.pop();
@@ -1231,7 +1241,16 @@
     if (r.collapsed) {
       // без выделения: дальше печатается жирным/курсивом — или наоборот, выходим из него
       const m = inMark(r.startContainer, tag);
-      if (m) { splitAt(m, r.startContainer, r.startOffset); const z = document.createTextNode("\u200b"); m.after(z); placeCaret(z, 1); }
+      if (m) {
+        // выходим из одного оформления, остальные (например, курсив внутри жирного) сохраняем
+        const keep = [];
+        for (let n = r.startContainer; n && n !== m; n = n.parentNode) if (n.nodeType === 1 && (n.tagName === "B" || n.tagName === "I") && n.tagName !== tag) keep.push(n.tagName);
+        splitAt(m, r.startContainer, r.startOffset);
+        const z = document.createTextNode("\u200b");
+        let wrap = z;
+        keep.forEach((t) => { const el = document.createElement(t); el.append(wrap); wrap = el; });
+        m.after(wrap); placeCaret(z, 1);
+      }
       else { const el = document.createElement(tag); const z = document.createTextNode("\u200b"); el.append(z); r.insertNode(el); placeCaret(z, 1); }
       updFmt(); return;
     }
