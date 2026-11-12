@@ -1030,39 +1030,19 @@
     a.addEventListener("click", () => closeMenus(null));
     return a;
   }
-  // В шапку — сколько помещается, остальное — в список «Ещё»
+  // Ссылки — в выпадающем списке у кнопки «Ссылки»
   function renderLinks() {
-    const row = $("links-row"), pop = $("links-pop");
-    row.textContent = ""; pop.textContent = "";
-    state.links.forEach((l) => row.append(linkEl(l, "link-chip")));
-    $("links-more-wrap").hidden = true;
-    fitLinks();
-  }
-  function fitLinks() {
-    const row = $("links-row"), pop = $("links-pop");
-    // вернуть всё из «Ещё» обратно и перемерить
-    [...pop.children].forEach((a) => { a.className = "link-chip"; row.append(a); });
-    $("links-more-wrap").hidden = true;
-    const narrow = window.matchMedia("(max-width: 560px)").matches;
-    const chips = [...row.children];
-    if (!chips.length) return;
-    const left = row.getBoundingClientRect().left, avail = row.clientWidth;
-    const rightOf = (c) => c.getBoundingClientRect().right - left;
-    let over = narrow ? chips : chips.filter((c) => rightOf(c) > avail + 1);
-    if (!over.length) return;
-    $("links-more-wrap").hidden = false;
-    // освобождаем место под кнопку «Ещё»
-    if (!narrow) {
-      const moreW = $("links-more-wrap").offsetWidth + 6;
-      over = chips.filter((c) => rightOf(c) > avail - moreW + 1);
+    const list = $("links-menu-list");
+    list.textContent = "";
+    if (!state.links.length) {
+      const e = document.createElement("div");
+      e.className = "menu-empty";
+      e.textContent = "Ссылок пока нет. Добавьте первую в настройке ниже.";
+      list.append(e);
+      return;
     }
-    over.forEach((a) => { a.className = "menu-item link-item"; pop.append(a); });
-    $("links-more-n").textContent = narrow ? "" : String(over.length);
-    $("links-more").querySelector(".more-label").textContent = narrow ? "Ссылки" : "Ещё";
+    state.links.forEach((l) => { const a = linkEl(l, "menu-item link-item"); a.setAttribute("role", "menuitem"); list.append(a); });
   }
-  let fitT;
-  window.addEventListener("resize", () => { clearTimeout(fitT); fitT = setTimeout(fitLinks, 120); });
-  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => fitLinks());
 
   async function loadLinks() {
     const { data, error } = await sb.from("links").select("id,title,url,position").order("position").order("created_at");
@@ -1080,7 +1060,7 @@
     animShow($("linksheet"));
     lockSheets(true);
   }
-  $("links-add").addEventListener("click", openLinks);
+  $("links-edit-btn").addEventListener("click", openLinks);
   $("btn-links").addEventListener("click", openLinks);
 
   const ICON = (d, size = 16) => '<svg viewBox="0 0 24 24" width="' + size + '" height="' + size + '" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="' + d + '"/></svg>';
@@ -1162,6 +1142,123 @@
     } finally { linksClosing = false; }
   }
   $("linksheet").querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", closeLinks));
+
+  /* ---------- Поиск по столу ---------- */
+  const S = { items: [], active: -1 };
+  const norm = (t) => (t || "").toLowerCase().replace(/ё/g, "е");
+  // текст с подсветкой найденного; только текстовые узлы — без вставки HTML
+  function hl(text, q) {
+    const frag = document.createDocumentFragment();
+    const nt = norm(text);
+    let i = 0, k;
+    while (q && (k = nt.indexOf(q, i)) !== -1) {
+      if (k > i) frag.append(text.slice(i, k));
+      const m = document.createElement("mark"); m.textContent = text.slice(k, k + q.length); frag.append(m);
+      i = k + q.length;
+    }
+    frag.append(text.slice(i));
+    return frag;
+  }
+  function snippet(text, q) {
+    const flat = text.replace(/\s+/g, " ").trim();
+    const k = norm(flat).indexOf(q);
+    if (k < 0) return flat.slice(0, 80);
+    const from = Math.max(0, k - 30);
+    return (from ? "…" : "") + flat.slice(from, from + 90) + (flat.length > from + 90 ? "…" : "");
+  }
+  const ICO = {
+    note: "M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 16h5",
+    rem: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7v5l3 2",
+    link: "M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1",
+  };
+  function resultEl(kind, title, sub, q, onPick, href) {
+    const el = document.createElement(href ? "a" : "button");
+    if (href) { el.href = href; el.target = "_blank"; el.rel = "noopener noreferrer"; } else el.type = "button";
+    el.className = "menu-item search-item";
+    el.setAttribute("role", "option");
+    el.innerHTML = '<svg class="search-ico" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="' + ICO[kind] + '"/></svg>';
+    const box = document.createElement("span"); box.className = "search-text";
+    const t = document.createElement("span"); t.className = "search-title"; t.append(hl(title, q));
+    box.append(t);
+    if (sub) { const s2 = document.createElement("span"); s2.className = "search-sub"; s2.append(hl(sub, q)); box.append(s2); }
+    el.append(box);
+    el.addEventListener("click", () => { closeSearch(true); if (onPick) onPick(); });
+    return el;
+  }
+  function runSearch() {
+    const raw = $("search-input").value;
+    const q = norm(raw.trim());
+    $("search-clear").hidden = !raw;
+    const pop = $("search-pop");
+    pop.textContent = "";
+    S.items = []; S.active = -1;
+    if (!q) { hidePop(); return; }
+    const groups = [];
+    const notes = state.notes.filter((n) => norm(n.body).includes(q)).slice(0, 6).map((n) => {
+      const lines = n.body.split("\n"); const title = (lines[0] || "").trim() || "Без заголовка";
+      const rest = lines.slice(1).join(" ");
+      const sub = norm(title).includes(q) ? snippet(rest, "") : snippet(rest, q);
+      return resultEl("note", title, sub, q, () => openEditor(n.id));
+    });
+    if (notes.length) groups.push(["Заметки", notes]);
+    const rems = (state.reminders || []).filter((r) => norm(r.text).includes(q)).slice(0, 5).map((r) =>
+      resultEl("rem", r.text, fmtRem.format(new Date(r.remind_at)) + (r.sent_at ? " · отправлено" : ""), q, () => openTime("rem")));
+    if (rems.length) groups.push(["Напоминания", rems]);
+    const links = state.links.filter((l) => norm(l.title).includes(q) || norm(l.url).includes(q)).slice(0, 6).map((l) =>
+      resultEl("link", l.title, hostOf(l.url), q, null, l.url));
+    if (links.length) groups.push(["Ссылки", links]);
+    if (!groups.length) {
+      const e = document.createElement("div"); e.className = "menu-empty";
+      e.textContent = "Ничего не найдено в заметках, напоминаниях и ссылках";
+      pop.append(e);
+    }
+    groups.forEach(([name, els]) => {
+      const g = document.createElement("div"); g.className = "menu-group";
+      const h = document.createElement("div"); h.className = "menu-label"; h.textContent = name;
+      g.append(h, ...els); pop.append(g);
+      S.items.push(...els);
+    });
+    if (S.items.length) setActive(0);
+    showPop();
+  }
+  function setActive(i) {
+    S.items.forEach((el) => el.classList.remove("active"));
+    S.active = i;
+    const el = S.items[i];
+    if (el) { el.classList.add("active"); el.scrollIntoView({ block: "nearest" }); }
+  }
+  function showPop() { if ($("search-pop").hidden) animShow($("search-pop")); $("search-input").setAttribute("aria-expanded", "true"); }
+  function hidePop() { animHide($("search-pop"), 120); $("search-input").setAttribute("aria-expanded", "false"); }
+  function closeSearch(clear) {
+    hidePop();
+    if (clear) { $("search-input").value = ""; $("search-clear").hidden = true; }
+    $("search-input").blur();
+    document.querySelector(".top").classList.remove("searching");
+  }
+  $("search-input").addEventListener("input", runSearch);
+  $("search-input").addEventListener("focus", () => { closeMenus(null); if ($("search-input").value.trim()) runSearch(); });
+  $("search-input").addEventListener("keydown", (e) => {
+    if (e.key === "ArrowDown" && S.items.length) { e.preventDefault(); setActive((S.active + 1) % S.items.length); }
+    else if (e.key === "ArrowUp" && S.items.length) { e.preventDefault(); setActive((S.active - 1 + S.items.length) % S.items.length); }
+    else if (e.key === "Enter") { e.preventDefault(); const el = S.items[S.active]; if (el) el.click(); }
+    else if (e.key === "Escape") { e.stopPropagation(); if ($("search-input").value) { $("search-input").value = ""; runSearch(); } else closeSearch(false); }
+  });
+  $("search-clear").addEventListener("click", () => { $("search-input").value = ""; runSearch(); $("search-input").focus(); });
+  // клик мимо поиска закрывает список результатов
+  document.addEventListener("click", (e) => { if (!e.composedPath().includes($("search"))) { hidePop(); if (!$("search-input").value) document.querySelector(".top").classList.remove("searching"); } });
+  // телефон: лупа разворачивает поле на всю шапку
+  $("search-open").addEventListener("click", () => { closeMenus(null); document.querySelector(".top").classList.add("searching"); setTimeout(() => $("search-input").focus(), 30); });
+  $("search-cancel").addEventListener("click", () => closeSearch(true));
+  // «/» или Ctrl+K — сразу в поиск (если не печатаете в поле и не открыто окно)
+  document.addEventListener("keydown", (e) => {
+    const typing = /^(INPUT|TEXTAREA)$/.test(document.activeElement && document.activeElement.tagName);
+    const sheetOpen = [...document.querySelectorAll(".sheet-wrap")].some((w) => !w.hidden);
+    if (sheetOpen || $("desk").hidden) return;
+    if ((e.key === "/" && !typing) || ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "л"))) {
+      e.preventDefault();
+      if (window.matchMedia("(max-width: 560px)").matches) $("search-open").click(); else $("search-input").focus();
+    }
+  });
 
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
