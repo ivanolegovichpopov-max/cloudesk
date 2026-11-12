@@ -433,9 +433,90 @@
   $("btn-logout").addEventListener("click", async () => {
     closeMenus(null);
     await sb.auth.signOut();
-    state.items = []; state.sections = [];
+    state.items = []; state.sections = []; state.desks = []; state.desk = null;
+    $("desk-tabs").textContent = "";
     $("board").querySelectorAll(".fld, .fld-new").forEach((n) => n.remove());
     showLogin("Вы вышли.");
+  });
+
+  /* ---------- Столы: «Работа», «Личный», … — у каждого свои поля, ссылки и заставка ---------- */
+  const DESK_COLS = "id,title,position,wallpaper_preset,wallpaper_path,wallpaper_weekly,wallpaper_week_from";
+  const DESK_MAX = 10, DESK_TITLE = 20;
+  state.desks = []; state.desk = null; state.base = null;
+  const curDesk = () => state.desks.find((d) => d.id === state.desk) || null;
+  async function loadDesks() {
+    const r = await sb.from("desks").select(DESK_COLS).is("deleted_at", null).order("position").order("created_at");
+    if (r.error) { toast("Не удалось загрузить стол. Обновите страницу."); return false; }
+    state.desks = r.data || [];
+    if (!state.desks.length) {
+      const b = state.base || {};
+      const c = await sb.from("desks").insert({ title: "Главный", position: 0, wallpaper_preset: b.wallpaper_preset || null, wallpaper_path: b.wallpaper_path || null, wallpaper_weekly: !!b.wallpaper_weekly, wallpaper_week_from: b.wallpaper_week_from ?? null }).select(DESK_COLS).single();
+      if (c.error) { toast("Не удалось создать стол. Обновите страницу."); return false; }
+      state.desks = [c.data];
+    }
+    const saved = store.get("cloudesk-desk");
+    if (!state.desks.some((d) => d.id === state.desk)) { state.desk = state.desks.some((d) => d.id === saved) ? saved : state.desks[0].id; store.set("cloudesk-desk", state.desk); }
+    return true;
+  }
+  // state.settings — общие настройки + заставка открытого стола (для всего кода оформления)
+  function mergeSettings() {
+    const d = curDesk() || {};
+    const s = Object.assign({}, state.base || {});
+    WALL_KEYS.forEach((k) => (s[k] = d[k] ?? (k === "wallpaper_weekly" ? false : null)));
+    state.settings = s;
+    const h = document.getElementById("wall-head");
+    if (h) h.textContent = state.desks.length > 1 && d.title ? "Заставка стола «" + d.title + "»" : "Заставка";
+  }
+  function renderDeskTabs() {
+    const nav = $("desk-tabs");
+    const keep = nav.querySelector(".dtabs-scroll");
+    const sl = keep ? keep.scrollLeft : 0;
+    nav.textContent = "";
+    const sc = document.createElement("div"); sc.className = "dtabs-scroll"; sc.setAttribute("role", "tablist"); sc.setAttribute("aria-label", "Столы");
+    state.desks.forEach((d, i) => {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "dtab"; b.setAttribute("role", "tab"); b.dataset.id = d.id;
+      b.setAttribute("aria-selected", String(d.id === state.desk));
+      b.textContent = d.title;
+      if (i < 9) b.dataset.tip = "Alt+" + (i + 1);
+      b.addEventListener("click", () => switchDesk(d.id));
+      sc.append(b);
+    });
+    const add = document.createElement("button");
+    add.type = "button"; add.className = "dtab dtab-add";
+    const full = state.desks.length >= DESK_MAX;
+    add.dataset.tip = full ? "Не больше " + DESK_MAX + " столов" : "Новый стол";
+    add.setAttribute("aria-label", "Новый стол");
+    if (full) { add.setAttribute("aria-disabled", "true"); add.classList.add("off"); }
+    add.innerHTML = svgIco(IC.plus, 16, 2);
+    add.addEventListener("click", () => (full ? toast("Не больше " + DESK_MAX + " столов") : openSettings("desks", { newDesk: true })));
+    sc.append(add);
+    nav.append(sc);
+    sc.scrollLeft = sl;
+    const act = sc.querySelector('[aria-selected="true"]');
+    if (act) requestAnimationFrame(() => { const l = act.offsetLeft, r = l + act.offsetWidth; if (l < sc.scrollLeft) sc.scrollLeft = l - 8; else if (r > sc.scrollLeft + sc.clientWidth) sc.scrollLeft = r - sc.clientWidth + 8; });
+  }
+  async function switchDesk(id) {
+    if (id === state.desk || !state.desks.some((d) => d.id === id)) return;
+    closeMenus(null);
+    state.desk = id;
+    store.set("cloudesk-desk", id);
+    mergeSettings();
+    renderDeskTabs();
+    scopeLinks(); renderLinks();
+    const board = $("board");
+    board.classList.remove("desk-in"); void board.offsetWidth; board.classList.add("desk-in");
+    renderBoard();
+    await applyWallFromSettings();
+  }
+  // Alt+1…9 — быстрый переход между столами
+  document.addEventListener("keydown", (e) => {
+    if (!e.altKey || e.ctrlKey || e.metaKey || $("desk").hidden) return;
+    if ([...document.querySelectorAll(".sheet-wrap")].some((w) => !w.hidden)) return;
+    const m = /^Digit([1-9])$/.exec(e.code);
+    if (!m) return;
+    const d = state.desks[Number(m[1]) - 1];
+    if (d) { e.preventDefault(); switchDesk(d.id); }
   });
 
   /* ---------- Загрузка данных ---------- */
@@ -457,8 +538,11 @@
     renderUser();
 
 
-    state.settings = sets.data || null;
-    applyTheme(state.settings && state.settings.theme);
+    state.base = sets.data || null;
+    applyTheme(state.base && state.base.theme);
+    if (!(await loadDesks())) return;
+    mergeSettings();
+    renderDeskTabs();
     loadItems();
     loadLinks();
     await applyWallFromSettings();
@@ -472,7 +556,7 @@
      У каждого приложения свои допустимые ширины. Новое приложение = новая запись в APPS, стол под него не меняется.
      Записи приложений (заметки, напоминания и будущие) хранятся в общей таблице items с привязкой к полю. */
   const ITEM_COLS = "id,section_id,type,position,title,body,data,color,pinned,done,done_at,remind_at,sent_at,failed_at,error,created_at,updated_at,edited_at";
-  const SEC_COLS = "id,title,app,span,settings,position";
+  const SEC_COLS = "id,title,app,span,settings,position,desk_id";
   state.items = []; state.sections = [];
   const IC = {
     note: "M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 16h5",
@@ -703,7 +787,7 @@
     return true;
   }
   const nextPos = (secId) => state.items.filter((it) => it.section_id === secId).reduce((m, it) => Math.max(m, it.position), -1) + 1;
-  const orderedFields = () => state.sections.slice().sort((a, b) => a.position - b.position);
+  const orderedFields = () => state.sections.filter((f) => f.desk_id === state.desk).sort((a, b) => a.position - b.position);
 
   function renderBoard() {
     const board = $("board");
@@ -842,9 +926,9 @@
       const title = (a ? a.name : "Поле").slice(0, 40); // поле называется по приложению
       if (!f) {
         $("sec-status").textContent = "Сохраняю…";
-        const pos = state.sections.reduce((m, x) => Math.max(m, x.position), -1) + 1;
-        const r = await sb.from("sections").insert({ title, app: fd.app, span: fd.span, position: pos, settings: fd.settings }).select(SEC_COLS).single();
-        if (r.error) { $("sec-status").textContent = String(r.error.message).includes("sections_limit") ? "Не больше 30 полей" : "Не сохранилось — проверьте интернет"; return; }
+        const pos = orderedFields().reduce((m, x) => Math.max(m, x.position), -1) + 1;
+        const r = await sb.from("sections").insert({ title, app: fd.app, span: fd.span, position: pos, settings: fd.settings, desk_id: state.desk }).select(SEC_COLS).single();
+        if (r.error) { $("sec-status").textContent = String(r.error.message).includes("sections_limit") ? "Не больше 30 полей на одном столе" : "Не сохранилось — проверьте интернет"; return; }
         state.sections.push(r.data);
         renderBoard();
       } else {
@@ -918,20 +1002,33 @@
   }
   const newId = () => (window.crypto && crypto.randomUUID ? crypto.randomUUID() : "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (c) => (c ^ (Math.random() * 16) >> (c / 4)).toString(16)));
   function trashMark() { return { deleted_at: new Date().toISOString(), deleted_batch: newId() }; }
-  const TRASH_TABLES = ["items", "sections", "links", "link_groups"];
+  const TRASH_TABLES = ["items", "sections", "links", "link_groups", "desks"];
   async function restoreBatch(batch) {
     // запись, чьё поле тоже в корзине, возвращается вместе с полем — иначе ей негде появиться
     const own = await sb.from("items").select("section_id").eq("deleted_batch", batch);
     const secIds = [...new Set(((own && own.data) || []).map((r) => r.section_id).filter(Boolean))];
+    // и стол, на котором лежат возвращаемые поля и ссылки, если он тоже в корзине
+    const [ps, pl, pg] = await Promise.all([
+      secIds.length ? sb.from("sections").select("desk_id").in("id", secIds) : { data: [] },
+      sb.from("sections").select("desk_id").eq("deleted_batch", batch),
+      sb.from("links").select("desk_id").eq("deleted_batch", batch),
+    ]);
+    const pgr = await sb.from("link_groups").select("desk_id").eq("deleted_batch", batch);
+    const deskIds = [...new Set([ps, pl, pg, pgr].flatMap((r) => (r && r.data) || []).map((r) => r.desk_id).filter(Boolean))];
+    const dres = deskIds.length ? await sb.from("desks").update({ deleted_at: null, deleted_batch: null }).in("id", deskIds).not("deleted_at", "is", null) : {};
     if (secIds.length) await sb.from("sections").update({ deleted_at: null, deleted_batch: null }).in("id", secIds).not("deleted_at", "is", null);
     const res = await Promise.all(TRASH_TABLES.map((t) => sb.from(t).update({ deleted_at: null, deleted_batch: null }).eq("deleted_batch", batch)));
+    res.push(dres);
     if (res.some((r) => r.error)) {
-      const full = res.some((r) => r.error && String(r.error.message).includes("notes_limit"));
-      toast(full ? "Не вернуть: в поле уже 20 заметок. Освободите место." : "Не получилось вернуть — проверьте интернет.");
+      const msg = res.map((r) => (r.error ? String(r.error.message) : "")).join(" ");
+      toast(msg.includes("notes_limit") ? "Не вернуть: в поле уже 20 заметок. Освободите место."
+        : msg.includes("desks_limit") ? "Не вернуть: столов уже " + DESK_MAX + ". Удалите лишний."
+        : "Не получилось вернуть — проверьте интернет.");
       return false;
     }
+    if (await loadDesks()) { mergeSettings(); renderDeskTabs(); }
     await Promise.all([loadItems(), loadLinks()]);
-    if (!$("setsheet").hidden) { if (!linksChanged()) prepareLinks(); renderTrash(); }
+    if (!$("setsheet").hidden) { if (!linksChanged()) prepareLinks(); if (!desksChanged()) prepareDesks(); renderTrash(); }
     return true;
   }
 
@@ -1370,7 +1467,7 @@
     closeMenus(null);
     const n = id ? state.items.find((x) => x.id === id) : null;
     ed.id = n ? n.id : null;
-    ed.sec = n ? n.section_id : secId || (state.sections.find((f) => f.app === "notes") || {}).id || null;
+    ed.sec = n ? n.section_id : secId || (orderedFields().find((f) => f.app === "notes") || {}).id || null;
     ed.pinned = !!(n && n.pinned);
     ed.files = ((n && n.data && n.data.files) || []).map((f) => Object.assign({}, f));
     ed.filesNew = []; ed.filesRemoved = [];
@@ -1551,15 +1648,22 @@
       p.setAttribute("aria-checked", String(!url && p.dataset.preset === (preset || "dusk"))));
   }
 
+  const wallCache = new Map();
   async function applyWallFromSettings() {
     const s = state.settings;
     if (s && s.wallpaper_path) {
-      const { data, error } = await sb.storage.from("wallpapers").download(s.wallpaper_path);
-      if (!error && data) {
+      // фото столов запоминаются: переключение между столами — без повторной загрузки
+      let blob = wallCache.get(s.wallpaper_path);
+      if (!blob) {
+        const { data, error } = await sb.storage.from("wallpapers").download(s.wallpaper_path);
+        if (!error && data) { blob = data; wallCache.set(s.wallpaper_path, data); }
+      }
+      if (state.settings !== s) return; // пока грузилось, переключили стол
+      if (blob) {
         if (state.wallUrl) URL.revokeObjectURL(state.wallUrl);
-        state.wallUrl = URL.createObjectURL(data);
+        state.wallUrl = URL.createObjectURL(blob);
         setWall(null, state.wallUrl);
-        accentFromImage(data);
+        accentFromImage(blob);
         return;
       }
     }
@@ -1596,12 +1700,26 @@
     if (s && s.wallpaper_weekly && !s.wallpaper_path && document.documentElement.dataset.wall !== shownPreset()) setWall(shownPreset(), null);
   }, 60000);
 
+  // Заставка — у каждого стола своя (таблица desks), остальное — общие настройки
+  const WALL_KEYS = ["wallpaper_preset", "wallpaper_path", "wallpaper_weekly", "wallpaper_week_from"];
   async function saveSettings(patch) {
-    const row = Object.assign({ user_id: state.user.id }, state.settings || {}, patch);
-    const { data, error } = await sb.from("settings").upsert(row, { onConflict: "user_id" })
-      .select("wallpaper_preset,wallpaper_path,wallpaper_weekly,wallpaper_week_from,theme,cities,weather_on,weather_city,weather_lat,weather_lon").single();
-    if (error) throw error;
-    state.settings = data;
+    const wall = {}, rest = {};
+    Object.keys(patch).forEach((k) => ((WALL_KEYS.includes(k) ? wall : rest)[k] = patch[k]));
+    if (Object.keys(wall).length) {
+      const { data, error } = await sb.from("desks").update(wall).eq("id", state.desk).select(DESK_COLS).single();
+      if (error) throw error;
+      const i = state.desks.findIndex((d) => d.id === data.id);
+      if (i >= 0) state.desks[i] = data;
+    }
+    if (Object.keys(rest).length) {
+      const row = Object.assign({ user_id: state.user.id }, state.base || {}, rest);
+      WALL_KEYS.forEach((k) => delete row[k]);
+      const { data, error } = await sb.from("settings").upsert(row, { onConflict: "user_id" })
+        .select("theme,cities,weather_on,weather_city,weather_lat,weather_lon").single();
+      if (error) throw error;
+      state.base = data;
+    }
+    mergeSettings();
   }
 
   function buildPresets() {
@@ -1680,7 +1798,7 @@
       const old = state.settings && state.settings.wallpaper_path;
       await saveSettings({ wallpaper_path: path, wallpaper_weekly: false });
       renderWeekly();
-      wallNew.add(path);
+      wallNew.add(path); wallCache.set(path, blob);
       if (old && old !== path) wallTrash.add(old);
       if (state.wallUrl) URL.revokeObjectURL(state.wallUrl);
       state.wallUrl = URL.createObjectURL(blob);
@@ -2159,8 +2277,12 @@
   }
 
   /* ---------- Быстрые ссылки (с группами) ---------- */
-  state.links = [];
-  state.groups = [];
+  state.links = []; state.groups = []; state.allLinks = []; state.allGroups = [];
+  // ссылки у каждого стола свои: state.links / state.groups — ссылки открытого стола
+  function scopeLinks() {
+    state.groups = state.allGroups.filter((g) => g.desk_id === state.desk);
+    state.links = state.allLinks.filter((l) => l.desk_id === state.desk);
+  }
   function normUrl(u) {
     u = (u || "").trim();
     if (!u) return "";
@@ -2168,7 +2290,7 @@
     try { const x = new URL(u); return /^https?:$/.test(x.protocol) && x.hostname.includes(".") ? x.href : null; } catch (e) { return null; }
   }
   const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch (e) { return u; } };
-  const groupName = (id) => { const g = state.groups.find((x) => x.id === id); return g ? g.name : ""; };
+  const groupName = (id) => { const g = state.allGroups.find((x) => x.id === id); return g ? g.name : ""; };
   function linkEl(l, cls) {
     const a = document.createElement("a");
     a.className = cls;
@@ -2208,11 +2330,12 @@
 
   async function loadLinks() {
     const [g, l] = await Promise.all([
-      sb.from("link_groups").select("id,name,position,color").is("deleted_at", null).order("position").order("created_at"),
-      sb.from("links").select("id,title,url,position,group_id").is("deleted_at", null).order("position").order("created_at"),
+      sb.from("link_groups").select("id,name,position,color,desk_id").is("deleted_at", null).order("position").order("created_at"),
+      sb.from("links").select("id,title,url,position,group_id,desk_id").is("deleted_at", null).order("position").order("created_at"),
     ]);
-    if (!g.error) state.groups = g.data || [];
-    if (!l.error) state.links = l.data || [];
+    if (!g.error) state.allGroups = g.data || [];
+    if (!l.error) state.allLinks = l.data || [];
+    scopeLinks();
     renderLinks();
   }
 
@@ -2434,7 +2557,7 @@
       await Promise.all(keepGroups.map(async (g, i) => {
         const name = g.name.trim().slice(0, 40);
         if (g.isNew) {
-          const r = chk(await sb.from("link_groups").insert({ name, position: i, color: g.color || null }).select("id").single());
+          const r = chk(await sb.from("link_groups").insert({ name, position: i, color: g.color || null, desk_id: state.desk }).select("id").single());
           if (r.data) { idMap[g.id] = r.data.id; g.id = r.data.id; g.isNew = false; }
         } else {
           const o = state.groups.find((x) => x.id === g.id);
@@ -2453,7 +2576,7 @@
       sorted.forEach(({ d, url, title }, i) => {
         const gid = d.gid && !String(d.gid).startsWith("new") ? d.gid : null;
         const o = state.links.find((l) => l.id === d.id);
-        if (d.isNew) ops.push(sb.from("links").insert({ title, url, position: i, group_id: gid }).then(chk));
+        if (d.isNew) ops.push(sb.from("links").insert({ title, url, position: i, group_id: gid, desk_id: state.desk }).then(chk));
         else if (!o || o.title !== title || o.url !== url || o.position !== i || (o.group_id || null) !== gid)
           ops.push(sb.from("links").update({ title, url, position: i, group_id: gid }).eq("id", d.id).then(chk));
       });
@@ -2483,6 +2606,147 @@
     return sorted.some((d, i) => { const o = state.links[i]; return !o || o.id !== d.id || o.title !== d.title.trim() || o.url !== d.url.trim() || (o.group_id || null) !== d.gid; });
   }
 
+  /* ---------- Настройки → «Столы»: название, порядок, новый стол, удаление в корзину ---------- */
+  let ddesks = [], deskFocus = null, deskSwitchTo = null;
+  function prepareDesks(opts) {
+    ddesks = state.desks.map((d) => ({ id: d.id, title: d.title, removed: false }));
+    deskSwitchTo = null;
+    if (opts && opts.newDesk && state.desks.length < DESK_MAX) addDeskDraft();
+    renderDesksDraft();
+  }
+  function addDeskDraft() {
+    const d = { id: tmp(), title: "", removed: false, isNew: true };
+    ddesks.push(d); deskFocus = d.id; deskSwitchTo = d.id;
+  }
+  const liveDesks = () => ddesks.filter((d) => !d.removed);
+  function deskStat(id) {
+    const secs = state.sections.filter((f) => f.desk_id === id);
+    const notes = state.items.filter((it) => secs.some((f) => f.id === it.section_id)).length;
+    const links = state.allLinks.filter((l) => l.desk_id === id).length;
+    const parts = [secs.length + " " + plural(secs.length, "поле", "поля", "полей")];
+    if (notes) parts.push(notes + " " + plural(notes, "заметка", "заметки", "заметок"));
+    if (links) parts.push(links + " " + plural(links, "ссылка", "ссылки", "ссылок"));
+    return parts.join(" · ");
+  }
+  function renderDesksDraft() {
+    const ol = $("desks-list");
+    const keep = ol.scrollTop;
+    ol.textContent = "";
+    const live = liveDesks().length;
+    ddesks.forEach((d) => {
+      const li = document.createElement("li");
+      li.className = "t-row desk-row" + (d.removed ? " removed" : "") + (d.bad ? " bad" : "") + (d.id === deskFocus ? " fade-in" : "");
+      li.dataset.id = d.id;
+      const g = gripBtn("Стол «" + (d.title || "новый") + "»"); g.classList.add("d-grip"); g.disabled = d.removed;
+      const main = document.createElement("div"); main.className = "t-main";
+      const inp = document.createElement("input");
+      inp.type = "text"; inp.className = "desk-name"; inp.maxLength = DESK_TITLE; inp.placeholder = "Название стола";
+      inp.value = d.title; inp.disabled = d.removed; inp.setAttribute("aria-label", "Название стола");
+      inp.addEventListener("input", () => { d.title = inp.value; d.bad = false; li.classList.remove("bad"); });
+      inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); inp.blur(); } });
+      const sub = document.createElement("div"); sub.className = "t-sub";
+      sub.textContent = d.isNew ? "Новый стол" : (d.id === state.desk ? "Открыт сейчас · " : "") + deskStat(d.id);
+      main.append(inp, sub);
+      let act;
+      if (d.removed) act = tool(P.undo, "Вернуть стол", () => { d.removed = false; renderDesksDraft(); });
+      else if (live <= 1) { act = tool(P.x, "Хотя бы один стол нужен"); act.setAttribute("aria-disabled", "true"); act.classList.add("off"); act.addEventListener("click", () => toast("Хотя бы один стол должен остаться")); }
+      else act = tool(P.x, "Удалить стол", () => {
+        if (d.isNew) { ddesks.splice(ddesks.indexOf(d), 1); if (deskSwitchTo === d.id) deskSwitchTo = null; }
+        else d.removed = true;
+        renderDesksDraft();
+      });
+      li.append(g, main, act);
+      ol.append(li);
+      if (d.id === deskFocus) setTimeout(() => inp.focus(), 20);
+    });
+    ol.scrollTop = keep;
+    const nb = $("desks-new");
+    const full = live >= DESK_MAX;
+    nb.classList.toggle("off", full); nb.setAttribute("aria-disabled", String(full));
+    nb.dataset.tip = full ? "Не больше " + DESK_MAX + " столов" : "Новый стол";
+    deskFocus = null;
+  }
+  $("desks-new").addEventListener("click", () => {
+    if (liveDesks().length >= DESK_MAX) { toast("Не больше " + DESK_MAX + " столов"); return; }
+    addDeskDraft(); renderDesksDraft();
+    const ol = $("desks-list"); ol.scrollTop = ol.scrollHeight;
+  });
+  sortable($("desks-list"), {
+    item: ".desk-row", handle: ".d-grip", scroller: () => $("desks-list"),
+    onDrop: () => { const order = [...$("desks-list").querySelectorAll(".desk-row")].map((li) => li.dataset.id); ddesks.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id)); renderDesksDraft(); },
+    onKey: (li, dir) => {
+      const i = ddesks.findIndex((d) => d.id === li.dataset.id), j = i + dir;
+      if (j < 0 || j >= ddesks.length) return;
+      [ddesks[i], ddesks[j]] = [ddesks[j], ddesks[i]];
+      renderDesksDraft(); const g = $("desks-list").querySelector('.desk-row[data-id="' + li.dataset.id + '"] .d-grip'); if (g) g.focus();
+    },
+  });
+  function desksChanged() {
+    const keep = ddesks.filter((d) => !d.removed && !(d.isNew && !d.title.trim()));
+    if (ddesks.some((d) => d.removed) || keep.length !== state.desks.length) return true;
+    return keep.some((d, i) => { const o = state.desks[i]; return !o || o.id !== d.id || o.title !== d.title.trim(); });
+  }
+  // Удаление стола: поле, заметки, ссылки и группы этого стола — в корзину одной пачкой
+  async function trashDesk(id) {
+    const mark = trashMark();
+    const secIds = state.sections.filter((f) => f.desk_id === id).map((f) => f.id);
+    const chk = (r) => { if (r.error) throw r.error; return r; };
+    if (secIds.length) chk(await sb.from("items").update(mark).in("section_id", secIds).is("deleted_at", null));
+    chk(await sb.from("sections").update(mark).eq("desk_id", id).is("deleted_at", null));
+    chk(await sb.from("links").update(mark).eq("desk_id", id).is("deleted_at", null));
+    chk(await sb.from("link_groups").update(mark).eq("desk_id", id).is("deleted_at", null));
+    chk(await sb.from("desks").update(mark).eq("id", id));
+    return mark.deleted_batch;
+  }
+  async function saveDesks() {
+    closeMenus(null);
+    let bad = 0;
+    ddesks.forEach((d) => { d.bad = !d.removed && !d.isNew && !d.title.trim(); if (d.bad) bad++; });
+    if (bad) { renderDesksDraft(); $("set-status").textContent = "Дайте столу название"; return false; }
+    $("set-status").textContent = "Сохраняю…";
+    const removed = ddesks.filter((d) => d.removed && !d.isNew);
+    const keep = ddesks.filter((d) => !d.removed && !(d.isNew && !d.title.trim()));
+    const batches = [];
+    try {
+      for (const d of removed) batches.push({ title: d.title || (state.desks.find((x) => x.id === d.id) || {}).title || "", batch: await trashDesk(d.id) });
+      for (let i = 0; i < keep.length; i++) {
+        const d = keep[i], title = d.title.trim().slice(0, DESK_TITLE);
+        if (d.isNew) {
+          const r = await sb.from("desks").insert({ title, position: i }).select("id").single();
+          if (r.error) throw r.error;
+          if (deskSwitchTo === d.id) deskSwitchTo = r.data.id;
+          d.id = r.data.id; d.isNew = false;
+        } else {
+          const o = state.desks.find((x) => x.id === d.id);
+          if (!o || o.title !== title || o.position !== i) { const r = await sb.from("desks").update({ title, position: i }).eq("id", d.id); if (r.error) throw r.error; }
+        }
+      }
+    } catch (e) {
+      console.error(e);
+      await reloadDesks();
+      prepareDesks();
+      $("set-status").textContent = String(e.message || "").includes("desks_limit") ? "Не больше " + DESK_MAX + " столов" : "Сохранилось не всё — проверьте интернет и нажмите «Готово» ещё раз";
+      return false;
+    }
+    if (removed.some((d) => d.id === state.desk) && !deskSwitchTo) deskSwitchTo = keep[0] && keep[0].id;
+    await reloadDesks(deskSwitchTo);
+    deskSwitchTo = null;
+    if (batches.length) {
+      const label = batches.length === 1 ? "Стол «" + batches[0].title + "» удалён" : "Удалено столов: " + batches.length;
+      toast(label, "Вернуть", async () => { let ok = true; for (const b of batches) ok = (await restoreBatch(b.batch)) && ok; if (ok) toast("Восстановлено"); });
+    }
+    return true;
+  }
+  // перечитать столы и всё, что на них, и показать нужный (или текущий) стол
+  async function reloadDesks(openId) {
+    if (!(await loadDesks())) return;
+    if (openId && state.desks.some((d) => d.id === openId)) { state.desk = openId; store.set("cloudesk-desk", openId); }
+    mergeSettings();
+    renderDeskTabs();
+    await Promise.all([loadItems(), loadLinks()]);
+    await applyWallFromSettings();
+  }
+
   /* ---------- Окно «Настройки»: вкладки «Оформление» и «Быстрые ссылки» ---------- */
   let setTabNow = "look", setClosing = false, setSnap = null;
   // старые фото заставки удаляются только по «Готово»; загруженные и отменённые — по «Отменить»
@@ -2501,10 +2765,11 @@
     if (t === "trash") renderTrash();
   }
   document.querySelectorAll("#setsheet [data-tab]").forEach((b) => b.addEventListener("click", () => { closeMenus(null); setSetTab(b.dataset.tab); }));
-  function openSettings(tab) {
+  function openSettings(tab, opts) {
     closeMenus(null);
     $("set-status").textContent = "";
     prepareLinks();
+    prepareDesks(opts);
     setSnap = {}; SNAP_KEYS.forEach((k) => (setSnap[k] = state.settings ? state.settings[k] : undefined));
     setSnap.theme = setSnap.theme || store.get("cloudesk-theme") || "auto";
     wallTrash.clear(); wallNew.clear();
@@ -2524,6 +2789,9 @@
       if (linksChanged()) {
         $("set-status").textContent = "Сохраняю…";
         if (!(await saveLinks())) { setSetTab("links"); return; }
+      }
+      if (desksChanged()) {
+        if (!(await saveDesks())) { setSetTab("desks"); return; }
       }
       $("set-status").textContent = "";
       purgeWalls(wallTrash); wallTrash.clear(); wallNew.clear();
@@ -2549,7 +2817,8 @@
         if (Object.keys(patch).some((k) => k.startsWith("weather"))) loadWeather(true);
       }
       purgeWalls(wallNew); wallTrash.clear(); wallNew.clear();
-      prepareLinks(); // черновик ссылок отбрасывается
+      prepareLinks(); // черновики ссылок и столов отбрасываются
+      prepareDesks();
       $("set-status").textContent = "";
       animHide($("setsheet"), 170);
       lockSheets(false);
@@ -2559,28 +2828,35 @@
 
   /* ---------- Корзина: удалённое за 30 дней, восстановление пачкой ---------- */
   const TRASH_DAYS = 30;
-  const TRASH_ICO = { field: "M4 5h16v14H4zM4 10h16", note: "M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 16h5", reminder: "M6 10a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6zM10 20a2 2 0 0 0 4 0", link: "M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1", group: "M3 7h6l2 2h10v10H3z" };
+  const TRASH_ICO = { field: "M4 5h16v14H4zM4 10h16", note: "M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 16h5", reminder: "M6 10a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6zM10 20a2 2 0 0 0 4 0", link: "M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1", group: "M3 7h6l2 2h10v10H3z", desk: "M3 5h8v6H3zM13 5h8v6h-8zM3 13h8v6H3zM13 13h8v6h-8z" };
   const UNDO_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M9 14 4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3"/></svg>';
   const q_ = (s) => "«" + (s.length > 40 ? s.slice(0, 40) + "…" : s) + "»";
   async function renderTrash() {
     const since = new Date(Date.now() - TRASH_DAYS * 86400000).toISOString();
     const pick = (t, cols) => sb.from(t).select(cols + ",deleted_at,deleted_batch").not("deleted_at", "is", null).gte("deleted_at", since).order("deleted_at", { ascending: false }).limit(300);
-    const [it, se, li, gr] = await Promise.all([pick("items", "id,type,title,body"), pick("sections", "id,app"), pick("links", "id,title"), pick("link_groups", "id,name")]);
-    if ([it, se, li, gr].some((r) => r.error)) { $("set-status").textContent = "Не удалось открыть корзину — проверьте интернет"; return; }
+    const [it, se, li, gr, dk] = await Promise.all([pick("items", "id,type,title,body"), pick("sections", "id,app"), pick("links", "id,title"), pick("link_groups", "id,name"), pick("desks", "id,title")]);
+    if ([it, se, li, gr, dk].some((r) => r.error)) { $("set-status").textContent = "Не удалось открыть корзину — проверьте интернет"; return; }
     const batches = new Map();
     const add = (kind, row) => {
       const b = batches.get(row.deleted_batch) || { at: row.deleted_at, rows: [] };
       b.rows.push(Object.assign({ kind }, row)); if (row.deleted_at > b.at) b.at = row.deleted_at;
       batches.set(row.deleted_batch, b);
     };
-    se.data.forEach((r) => add("field", r)); it.data.forEach((r) => add(r.type, r)); li.data.forEach((r) => add("link", r)); gr.data.forEach((r) => add("group", r));
+    se.data.forEach((r) => add("field", r)); it.data.forEach((r) => add(r.type, r)); li.data.forEach((r) => add("link", r)); gr.data.forEach((r) => add("group", r)); dk.data.forEach((r) => add("desk", r));
     const ul = $("trash-list"); ul.textContent = "";
     const list = [...batches.entries()].sort((a, b) => (a[1].at < b[1].at ? 1 : -1));
     for (const [batch, b] of list) {
       const by = (k) => b.rows.filter((r) => r.kind === k);
-      const f = by("field"), notes = by("note"), rems = by("reminder"), links = by("link"), groups = by("group");
+      const f = by("field"), notes = by("note"), rems = by("reminder"), links = by("link"), groups = by("group"), desks = by("desk");
       let kind, title;
-      if (f.length) { kind = "field"; const app = APPS[f[0].app]; title = "Поле " + q_(app ? app.name : "Поле") + (notes.length ? " и " + notes.length + " " + plural(notes.length, "заметка", "заметки", "заметок") : ""); }
+      if (desks.length) {
+        kind = "desk"; title = "Стол " + q_(desks[0].title || "");
+        const parts = [];
+        if (f.length) parts.push(f.length + " " + plural(f.length, "поле", "поля", "полей"));
+        if (notes.length) parts.push(notes.length + " " + plural(notes.length, "заметка", "заметки", "заметок"));
+        if (links.length) parts.push(links.length + " " + plural(links.length, "ссылка", "ссылки", "ссылок"));
+        if (parts.length) title += " · " + parts.join(", ");
+      } else if (f.length) { kind = "field"; const app = APPS[f[0].app]; title = "Поле " + q_(app ? app.name : "Поле") + (notes.length ? " и " + notes.length + " " + plural(notes.length, "заметка", "заметки", "заметок") : ""); }
       else if (notes.length) { kind = "note"; title = notes.length === 1 ? "Заметка " + q_(noteTitle(notes[0])) : notes.length + " " + plural(notes.length, "заметка", "заметки", "заметок"); }
       else if (rems.length) { kind = "reminder"; title = rems.length === 1 ? "Напоминание " + q_(rems[0].title || "") : "Напоминаний: " + rems.length; }
       else if (links.length || groups.length) {
@@ -2608,6 +2884,10 @@
     const gone = await sb.from("items").select("data").not("deleted_at", "is", null);
     const paths = ((gone && gone.data) || []).flatMap((r) => ((r.data && r.data.files) || []).map((f) => f.path)).filter(Boolean);
     if (paths.length) await sb.storage.from("attachments").remove(paths);
+    // и фото заставок удалённых столов
+    const gd = await sb.from("desks").select("wallpaper_path").not("deleted_at", "is", null);
+    const walls = ((gd && gd.data) || []).map((r) => r.wallpaper_path).filter(Boolean);
+    if (walls.length) await sb.storage.from("wallpapers").remove(walls);
     const res = [];
     for (const t of TRASH_TABLES) res.push(await sb.from(t).delete().not("deleted_at", "is", null));
     if (res.some((r) => r.error)) toast("Очистилось не всё — проверьте интернет.");
@@ -2670,18 +2950,22 @@
     if (!q) { hidePop(); return; }
     const groups = [];
     // заметки; во второй строке — поле и фрагмент текста
-    const fieldName = () => "";
+    // если столов несколько — во второй строке название стола; выбор открывает нужный стол
+    const many = state.desks.length > 1;
+    const deskOf = (secId) => { const f = state.sections.find((x) => x.id === secId); return f ? state.desks.find((d) => d.id === f.desk_id) : null; };
+    const fieldName = (it) => { const d = many && deskOf(it.section_id); return d ? d.title : ""; };
     const notes = state.items.filter((it) => it.type === "note" && norm((it.title || "") + " " + stripMarks(it.body)).includes(q)).slice(0, 6).map((it) => {
       const title = noteTitle(it);
       const extra = norm(title).includes(q) ? snippet(noteSub(it), "") : snippet(noteSub(it), q);
-      return resultEl("note", title, [fieldName(it), extra].filter(Boolean).join(" · "), q, () => openEditor(it.id));
+      return resultEl("note", title, [fieldName(it), extra].filter(Boolean).join(" · "), q, async () => { const d = deskOf(it.section_id); if (d && d.id !== state.desk) await switchDesk(d.id); openEditor(it.id); });
     });
     if (notes.length) groups.push(["Заметки", notes]);
     const rems = (state.reminders || []).filter((r) => norm(r.text).includes(q)).slice(0, 5).map((r) =>
       resultEl("rem", r.text, fmtRem.format(new Date(r.remind_at)) + (r.sent_at ? " · отправлено" : ""), q, () => openItem(r.id)));
     if (rems.length) groups.push(["Напоминания", rems]);
-    const links = state.links.filter((l) => norm(l.title).includes(q) || norm(l.url).includes(q)).slice(0, 6).map((l) =>
-      resultEl("link", l.title, (l.group_id && groupName(l.group_id) ? groupName(l.group_id) + " · " : "") + hostOf(l.url), q, null, l.url));
+    const linkDesk = (l) => { const d = many && state.desks.find((x) => x.id === l.desk_id); return d ? d.title + " · " : ""; };
+    const links = state.allLinks.filter((l) => norm(l.title).includes(q) || norm(l.url).includes(q)).slice(0, 6).map((l) =>
+      resultEl("link", l.title, linkDesk(l) + (l.group_id && groupName(l.group_id) ? groupName(l.group_id) + " · " : "") + hostOf(l.url), q, null, l.url));
     if (links.length) groups.push(["Ссылки", links]);
     if (!groups.length) {
       const e = document.createElement("div"); e.className = "menu-empty";

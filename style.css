@@ -959,3 +959,39 @@ input.bad { border-color: var(--danger) !important; }
 
 /* кнопка на пределе: видна, но бледная; нажатие объясняет, почему нельзя */
 .icon-primary.off { opacity: .4; cursor: default; filter: none; }
+
+/* ---------- Столы: вкладки над полями. Белым по заставке, как часы; открытый — ярче и с чертой акцента ---------- */
+.desk-tabs { margin: -8px 0 -6px; min-width: 0; }
+.desk-tabs:empty { display: none; }
+.dtabs-scroll {
+  display: flex; align-items: center; gap: 2px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none;
+  margin-left: -10px; padding: 0 2px;
+}
+.dtabs-scroll::-webkit-scrollbar { display: none; }
+.dtab {
+  position: relative; flex: none; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 34px; padding: 0 10px; border: 0; border-radius: var(--r); background: transparent;
+  color: var(--on-wall); text-shadow: 0 1px 8px rgba(0,0,0,.35); font-size: 14px; font-weight: 500; white-space: nowrap;
+  opacity: .72; transition: opacity .15s ease;
+}
+.dtab:hover, .dtab:focus-visible { opacity: 1; }
+.dtab::after {
+  content: ""; position: absolute; left: 10px; right: 10px; bottom: 3px; height: 2px; border-radius: 1px;
+  background: var(--accent); transform: scaleX(0); transition: transform .18s var(--ease);
+}
+.dtab[aria-selected="true"] { opacity: 1; font-weight: 600; }
+.dtab[aria-selected="true"]::after { transform: scaleX(1); }
+.dtab-add { width: 34px; padding: 0; }
+.dtab-add.off { opacity: .35; }
+.dtab-add svg { filter: drop-shadow(0 1px 4px rgba(0,0,0,.35)); }
+.dtab:active:not(:disabled) { transform: none; }
+/* смена стола — поля мягко проявляются */
+.fields.desk-in > .fld, .fields.desk-in > .fld-new { animation: fade-in .18s ease-out; }
+
+/* Настройки → Столы */
+.desk-row { padding-left: 6px; gap: 8px; }
+.desk-row .t-main { display: grid; gap: 4px; }
+.desk-name { width: 100%; font-weight: 600; }
+.desk-row.bad .desk-name { border-color: var(--danger); }
+.desk-row.removed .desk-name { text-decoration: line-through; }
+.desk-row .tool.off { opacity: .35; }

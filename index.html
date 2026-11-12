@@ -107,6 +107,9 @@
     </nav>
   </header>
 
+  <!-- Столы: «Работа», «Личный», … — вкладками; у каждого свои поля, ссылки и заставка -->
+  <nav id="desk-tabs" class="desk-tabs" aria-label="Столы"></nav>
+
   <!-- Стол: сетка из 3 колонок; поле шириной 1–3 колонки, в поле — приложение -->
   <main id="board" class="fields" aria-label="Стол">
     <div id="board-loading" class="empty"><p>Загрузка…</p></div>
@@ -279,6 +282,7 @@
     </div>
     <div class="tabs" role="tablist" aria-label="Разделы настроек">
       <button type="button" role="tab" data-tab="look" data-tip="Оформление" aria-label="Оформление"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 3a9 9 0 1 0 0 18c1 0 1.6-.7 1.6-1.5 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.8.7-1.4 1.5-1.4H16a5 5 0 0 0 5-5c0-4.3-4-7.9-9-7.9zM7.5 12h.01M9.5 7.5h.01M14.5 7.5h.01"/></svg></button>
+      <button type="button" role="tab" data-tab="desks" data-tip="Столы" aria-label="Столы"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M3 5h8v6H3zM13 5h8v6h-8zM3 13h8v6H3zM13 13h8v6h-8z"/></svg></button>
       <button type="button" role="tab" data-tab="links" data-tip="Быстрые ссылки" aria-label="Быстрые ссылки"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg></button>
       <button type="button" role="tab" data-tab="weather" data-tip="Погода" aria-label="Погода"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M7 18h10a4 4 0 0 0 .6-8A6 6 0 0 0 6 9.5 4.3 4.3 0 0 0 7 18z"/></svg></button>
       <button type="button" role="tab" data-tab="trash" data-tip="Корзина" aria-label="Корзина"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>
@@ -291,12 +295,16 @@
                 <button type="button" role="radio" data-theme-set="light">Светлая</button>
                 <button type="button" role="radio" data-theme-set="dark">Тёмная</button>
               </div>
-      <div class="t-head">Заставка</div>
+      <div class="t-head" id="wall-head">Заставка</div>
       <button type="button" id="wall-weekly" class="switch-row" role="switch" aria-checked="false">
         <span>Менять каждую неделю</span><span class="switch" aria-hidden="true"></span>
       </button>
       <div id="presets" class="presets"></div>
       <input id="wall-file" type="file" accept="image/jpeg,image/png,image/webp" class="sr">
+    </section>
+
+    <section class="tab-panel" data-panel="desks" role="tabpanel" hidden>
+      <ol id="desks-list" class="t-list desks-list"></ol>
     </section>
 
     <section class="tab-panel" data-panel="links" role="tabpanel" hidden>
@@ -324,6 +332,7 @@
       <span class="foot-spacer"></span>
       <div class="foot-actions">
         <span class="foot-tools" data-for="look"><label class="tool accent" for="wall-file" data-tip="Загрузить своё фото" aria-label="Загрузить своё фото"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg></label></span>
+        <span class="foot-tools" data-for="desks" hidden><button type="button" id="desks-new" class="tool accent" data-tip="Новый стол" aria-label="Новый стол"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14"/></svg></button></span>
         <span class="foot-tools" data-for="links" hidden><button type="button" id="groups-new" class="tool" data-tip="Добавить группу" aria-label="Добавить группу"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M3 7h6l2 2h10v10H3zM12 12v5M9.5 14.5h5"/></svg></button>
         <button type="button" id="links-new" class="tool accent" data-tip="Добавить ссылку" aria-label="Добавить ссылку"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14"/></svg></button></span>
         <span class="foot-tools" data-for="weather" hidden><button type="button" id="weather-refresh" class="tool accent" data-tip="Обновить погоду" aria-label="Обновить погоду"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 1 1-9-9c2.5 0 4.9 1 6.7 2.7L21 8M21 3v5h-5"/></svg></button></span>
