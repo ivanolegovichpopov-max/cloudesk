@@ -265,7 +265,7 @@
   }, { capture: true, passive: true });
 
   // Мягкий край у всего, что прокручивается: содержимое плавно тает у края, за которым есть ещё
-  const FADE_SEL = ".tab-panel, .stage-below, .t-list, .links-list, #links-menu-list, .pop-scroll, .tp-list, .ed-body, .presets, .notes";
+  const FADE_SEL = ".tab-panel, .stage-below, .t-list, .links-list, #links-menu-list, .pop-scroll, .tp-list, .ed-body, .presets, .fld-body";
   function fadeUpdate(el) {
     const over = el.scrollHeight - el.clientHeight > 1;
     const oy = over && getComputedStyle(el).overflowY;
@@ -415,14 +415,13 @@
   // Esc сначала закрывает открытый список/выбор, и только следующее нажатие — окно
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
-    if (!$("add-pop").hidden) { closeAddMenu(); e.stopImmediatePropagation(); return; }
     if (document.querySelector('[data-menu][aria-expanded="true"]')) { closeMenus(null); e.stopImmediatePropagation(); }
   });
   $("btn-logout").addEventListener("click", async () => {
     closeMenus(null);
     await sb.auth.signOut();
     state.items = []; state.sections = [];
-    $("board").querySelectorAll(".sec, .sec-new").forEach((n) => n.remove());
+    $("board").querySelectorAll(".fld, .fld-new").forEach((n) => n.remove());
     showLogin("Вы вышли.");
   });
 
@@ -455,60 +454,56 @@
     renderOnline();
   }
 
-  /* ---------- Стол: разделы и записи ----------
-     Раздел — контейнер по теме. Запись — элемент любого инструмента; инструмент = тип в ITEM_TYPES.
-     Новый инструмент добавляется новым типом: стол, перетаскивание, поиск и «+» подхватывают его сами. */
-  const ITEM_COLS = "id,section_id,type,position,title,body,data,color,done,done_at,remind_at,sent_at,failed_at,error,created_at,updated_at";
-  const SEC_COLS = "id,title,color,wide,collapsed,is_inbox,position";
-  state.items = []; state.sections = []; state.inboxId = null;
+  /* ---------- Стол: поля и приложения ----------
+     Сетка из 3 колонок. Поле занимает 1, 2 или 3 колонки и фиксированную высоту; в поле — одно приложение.
+     У каждого приложения свои допустимые ширины. Новое приложение = новая запись в APPS, стол под него не меняется.
+     Записи приложений (заметки, напоминания и будущие) хранятся в общей таблице items с привязкой к полю. */
+  const ITEM_COLS = "id,section_id,type,position,title,body,data,color,pinned,done,done_at,remind_at,sent_at,failed_at,error,created_at,updated_at";
+  const SEC_COLS = "id,title,app,span,settings,position";
+  state.items = []; state.sections = [];
   const IC = {
-    task: "M5 12.5l4.5 4.5L19 7.5",
     note: "M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 16h5",
-    reminder: "M6 10a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6zM10 20a2 2 0 0 0 4 0",
     plus: "M12 5v14M5 12h14",
-    chev: "M6 9l6 6 6-6",
+    pin: "M9 3h6l-1 6 4 4H6l4-4zM11 13h2v8h-2z",
   };
   const svgIco = (d, s = 16, w = 1.8) => '<svg viewBox="0 0 24 24" width="' + s + '" height="' + s + '" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="' + w + '" stroke-linecap="round" stroke-linejoin="round" d="' + d + '"/></svg>';
-  const fmtDM2 = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short" });
-  const fmtHM2 = new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit" });
-  // коротко о времени: сегодня — «21:00», завтра — «Завтра 21:00», дальше — «13 нояб. 21:00»
-  function whenShort(iso) {
-    const d = new Date(iso), t = fmtHM2.format(d);
-    const diff = Math.round((new Date(d.toDateString()) - new Date(new Date().toDateString())) / 86400000);
-    return diff === 0 ? t : diff === 1 ? "Завтра " + t : diff === -1 ? "Вчера " + t : fmtDM2.format(d).replace(".", "") + " " + t;
-  }
   const noteTitle = (it) => ((it.body || "").split("\n")[0] || "").trim() || "Без заголовка";
   const noteSub = (it) => (it.body || "").split("\n").slice(1).join(" ").replace(/\s+/g, " ").trim();
 
-  // Инструменты. label — в меню «+», row — что показать в строке, open — что открыть по нажатию, text — для поиска
-  const ITEM_TYPES = {
-    task: {
-      label: "Задача", icon: IC.task,
-      add: (secId) => startTaskInput(secId),
-      row: (it) => ({ title: it.title || "Без названия", sub: it.body ? it.body.replace(/\s+/g, " ").slice(0, 120) : "",
-        meta: it.remind_at && !it.done ? whenShort(it.remind_at) : "", late: !it.done && it.remind_at && new Date(it.remind_at) < new Date() }),
-      open: (it) => openItem(it.id),
-      text: (it) => it.title + " " + it.body,
-    },
-    note: {
-      label: "Заметка", icon: IC.note,
-      add: (secId) => openEditor(null, secId),
-      row: (it) => ({ title: noteTitle(it), sub: noteSub(it), meta: "" }),
-      open: (it) => openEditor(it.id),
-      text: (it) => it.body,
-    },
-    reminder: {
-      label: "Напоминание", icon: IC.reminder,
-      add: (secId) => openItem(null, "reminder", secId),
-      row: (it) => ({ title: it.title || "Без названия", sub: it.sent_at ? "Отправлено" : it.failed_at ? "Не доставлено" : "",
-        meta: it.remind_at ? whenShort(it.remind_at) : "", past: !!(it.sent_at || it.failed_at) }),
-      open: (it) => openItem(it.id),
-      text: (it) => it.title,
+  // Приложения: name — название, spans — допустимые ширины, render — содержимое поля, add — действие «+»
+  const APPS = {
+    notes: {
+      name: "Заметки", icon: IC.note, spans: [2, 3], addTip: "Новая заметка",
+      add: (f) => openEditor(null, f.id),
+      render: (f, body) => {
+        const list = state.items.filter((it) => it.type === "note" && it.section_id === f.id)
+          .sort((a, b) => (b.pinned - a.pinned) || (new Date(b.updated_at) - new Date(a.updated_at)));
+        if (!list.length) { const e = document.createElement("div"); e.className = "fld-empty"; e.textContent = "Заметок нет"; body.append(e); return; }
+        const grid = document.createElement("div"); grid.className = "notes";
+        list.forEach((n) => grid.append(noteCard(n)));
+        body.append(grid);
+      },
+      count: (f) => state.items.filter((it) => it.type === "note" && it.section_id === f.id).length,
     },
   };
-  const ADD_ORDER = ["task", "note", "reminder"];
+  const APP_ORDER = ["notes"];
 
-  // Напоминания для окна «Время» и всё, у чего есть время (для календаря, плашки в шапке, сигнала)
+  const seenNotes = new Set();
+  let boardFirst = true;
+  function noteCard(n) {
+    const el = document.createElement("button");
+    el.type = "button"; el.className = "note"; el.dataset.color = n.color || "paper"; el.dataset.id = n.id;
+    if (!seenNotes.has(n.id)) { seenNotes.add(n.id); if (!boardFirst) el.classList.add("fade-in"); }
+    const h = document.createElement("p"); h.className = "note-title"; h.textContent = noteTitle(n); el.append(h);
+    const rest = (n.body || "").split("\n").slice(1).join("\n").trim();
+    if (rest) { const p = document.createElement("p"); p.className = "note-text"; p.textContent = rest; el.append(p); }
+    const meta = document.createElement("div"); meta.className = "note-meta"; meta.textContent = fmtShort.format(new Date(n.updated_at)); el.append(meta);
+    if (n.pinned) { const pin = document.createElement("span"); pin.className = "note-pin"; pin.setAttribute("aria-label", "Закреплена"); pin.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="' + IC.pin + '"/></svg>'; el.append(pin); }
+    el.addEventListener("click", () => openEditor(n.id));
+    return el;
+  }
+
+  // Напоминания (окно «Время») и всё, у чего есть время (календарь, плашка в шапке, сигнал)
   function syncReminders() {
     state.reminders = state.items.filter((i) => i.type === "reminder" && i.remind_at)
       .map((i) => ({ id: i.id, text: i.title, remind_at: i.remind_at, sent_at: i.sent_at, failed_at: i.failed_at, error: i.error }));
@@ -524,15 +519,6 @@
     if (!$("timesheet").hidden && timeTab === "cal") renderCal();
   }
 
-  async function ensureInbox() {
-    let inbox = state.sections.find((s) => s.is_inbox);
-    if (inbox) return inbox;
-    const r = await sb.from("sections").insert({ title: "Входящие", is_inbox: true, position: 0 }).select(SEC_COLS).single();
-    if (r.data) { state.sections.unshift(r.data); return r.data; }
-    const again = await sb.from("sections").select(SEC_COLS).eq("is_inbox", true).maybeSingle();
-    if (again.data) { state.sections.unshift(again.data); return again.data; }
-    return null;
-  }
   async function loadItems() {
     const [secs, items] = await Promise.all([
       sb.from("sections").select(SEC_COLS).order("position"),
@@ -541,199 +527,196 @@
     if (secs.error || items.error) { toast("Не удалось загрузить стол. Обновите страницу."); return false; }
     state.sections = secs.data || [];
     state.items = items.data || [];
-    const inbox = await ensureInbox();
-    state.inboxId = inbox && inbox.id;
     $("board-loading").hidden = true;
     itemsChanged();
     return true;
   }
-  const secOf = (it) => (it.section_id && state.sections.some((s) => s.id === it.section_id) ? it.section_id : state.inboxId);
-  function sectionItems(secId) {
-    return state.items.filter((it) => secOf(it) === secId)
-      .sort((a, b) => ((a.type === "task" && a.done) - (b.type === "task" && b.done)) || (a.position - b.position) || (new Date(a.created_at) - new Date(b.created_at)));
-  }
-  const nextPos = (secId) => state.items.filter((it) => secOf(it) === secId).reduce((m, it) => Math.max(m, it.position), -1) + 1;
-  function orderedSections() {
-    return state.sections.slice().sort((a, b) => (b.is_inbox - a.is_inbox) || (a.position - b.position));
-  }
+  const nextPos = (secId) => state.items.filter((it) => it.section_id === secId).reduce((m, it) => Math.max(m, it.position), -1) + 1;
+  const orderedFields = () => state.sections.slice().sort((a, b) => a.position - b.position);
 
-  /* Отрисовка */
-  const seenItems = new Set();
-  let boardFirst = true;
-  function itemRow(it) {
-    const T = ITEM_TYPES[it.type];
-    const li = document.createElement("li");
-    li.className = "it";
-    li.dataset.id = it.id; li.dataset.type = it.type;
-    if (it.type === "note" && it.color && it.color !== "paper") li.dataset.color = it.color;
-    if (!seenItems.has(it.id)) { seenItems.add(it.id); if (!boardFirst) li.classList.add("fade-in"); }
-    if (!T) { li.textContent = "Неизвестная запись"; return li; }
-    const v = T.row(it);
-    if (it.type === "task" && it.done) li.classList.add("is-done");
-    if (v.past) li.classList.add("is-past");
-    li.append(gripBtn(T.label + " «" + v.title + "»"));
-    let lead;
-    if (it.type === "task") {
-      lead = document.createElement("button");
-      lead.type = "button"; lead.className = "it-check"; lead.setAttribute("role", "checkbox");
-      lead.setAttribute("aria-checked", String(!!it.done)); lead.setAttribute("aria-label", it.done ? "Сделано" : "Отметить сделанной");
-      lead.dataset.tip = it.done ? "Вернуть в работу" : "Сделано";
-      lead.innerHTML = svgIco(IC.task, 14, 2.4);
-      lead.addEventListener("click", (e) => { e.stopPropagation(); toggleDone(it.id); });
-    } else {
-      lead = document.createElement("span");
-      lead.className = "it-ico"; lead.innerHTML = svgIco(T.icon, 16);
-    }
-    const main = document.createElement("span"); main.className = "it-main";
-    const t = document.createElement("span"); t.className = "it-title"; t.textContent = v.title;
-    main.append(t);
-    if (v.sub) { const s = document.createElement("span"); s.className = "it-sub"; s.textContent = v.sub; main.append(s); }
-    li.append(lead, main);
-    if (v.meta) { const m = document.createElement("span"); m.className = "it-meta" + (v.late ? " late" : ""); m.textContent = v.meta; li.append(m); }
-    li.addEventListener("click", (e) => { if (e.target.closest(".grip, .it-check")) return; T.open(it); });
-    li.tabIndex = 0;
-    li.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target === li) T.open(it); });
-    return li;
-  }
   function renderBoard() {
     const board = $("board");
-    const keepInput = board.querySelector(".it-new input");
-    const pending = keepInput ? { sec: keepInput.closest(".sec").dataset.id, value: keepInput.value } : null;
-    board.querySelectorAll(".sec, .sec-new").forEach((n) => n.remove());
+    const keep = {};
+    board.querySelectorAll(".fld").forEach((f) => { const b = f.querySelector(".fld-body"); if (b) keep[f.dataset.id] = b.scrollTop; });
+    board.querySelectorAll(".fld, .fld-new").forEach((n) => n.remove());
     const frag = document.createDocumentFragment();
-    for (const s of orderedSections()) {
-      const sec = document.createElement("section");
-      sec.className = "sec" + (s.wide ? " wide" : "") + (s.collapsed ? " collapsed" : "") + (s.is_inbox ? " inbox" : "");
-      sec.dataset.id = s.id;
-      if (s.color) sec.dataset.gcolor = s.color;
-      const items = sectionItems(s.id);
-      const open = items.filter((it) => !(it.type === "task" && it.done)).length;
-      const head = document.createElement("div"); head.className = "sec-head";
-      const g = gripBtn("Раздел «" + s.title + "»"); g.classList.add("sec-grip"); if (s.is_inbox) g.disabled = true;
+    for (const f of orderedFields()) {
+      const app = APPS[f.app];
+      const el = document.createElement("section");
+      el.className = "fld"; el.dataset.id = f.id; el.dataset.span = String(f.span);
+      const head = document.createElement("div"); head.className = "fld-head";
+      const g = gripBtn("Поле «" + f.title + "»"); g.classList.add("fld-grip");
       const title = document.createElement("button");
-      title.type = "button"; title.className = "sec-title";
-      title.dataset.tip = s.is_inbox ? "Раздел по умолчанию" : "Настроить раздел";
-      title.innerHTML = '<i class="gdot"></i>';
-      const tt = document.createElement("span"); tt.className = "sec-name"; tt.textContent = s.title;
-      const cnt = document.createElement("span"); cnt.className = "count"; cnt.textContent = open ? String(open) : "";
-      title.append(tt, cnt);
-      title.addEventListener("click", () => openSection(s.id));
-      const fold = document.createElement("button");
-      fold.type = "button"; fold.className = "tool sec-fold";
-      fold.dataset.tip = s.collapsed ? "Развернуть" : "Свернуть"; fold.setAttribute("aria-label", fold.dataset.tip);
-      fold.setAttribute("aria-expanded", String(!s.collapsed));
-      fold.innerHTML = svgIco(IC.chev, 16);
-      fold.addEventListener("click", () => toggleCollapse(s.id));
-      const add = document.createElement("button");
-      add.type = "button"; add.className = "tool accent sec-add";
-      add.dataset.tip = "Добавить"; add.setAttribute("aria-label", "Добавить в «" + s.title + "»"); add.setAttribute("aria-haspopup", "menu");
-      add.innerHTML = svgIco(IC.plus, 18, 2);
-      add.addEventListener("click", (e) => { e.stopPropagation(); openAddMenu(add, s.id); });
-      head.append(g, title, fold, add);
-      const ul = document.createElement("ul"); ul.className = "sec-list"; ul.dataset.sec = s.id;
-      if (!s.collapsed) items.forEach((it) => ul.append(itemRow(it)));
-      sec.append(head, ul);
-      frag.append(sec);
+      title.type = "button"; title.className = "fld-title"; title.dataset.tip = "Настроить поле";
+      const tt = document.createElement("span"); tt.className = "fld-name"; tt.textContent = f.title || (app ? app.name : "Поле");
+      title.append(tt);
+      const n = app && app.count ? app.count(f) : 0;
+      if (n) { const cnt = document.createElement("span"); cnt.className = "count"; cnt.textContent = String(n); title.append(cnt); }
+      title.addEventListener("click", () => openField(f.id));
+      head.append(g, title);
+      if (app && app.add) {
+        const add = document.createElement("button");
+        add.type = "button"; add.className = "icon-primary fld-add";
+        add.dataset.tip = app.addTip; add.setAttribute("aria-label", app.addTip);
+        add.innerHTML = svgIco(IC.plus, 18, 2.2);
+        add.addEventListener("click", () => app.add(f));
+        head.append(add);
+      }
+      const body = document.createElement("div"); body.className = "fld-body";
+      if (app) app.render(f, body);
+      else { const e = document.createElement("div"); e.className = "fld-empty"; e.textContent = "Приложение недоступно"; body.append(e); }
+      el.append(head, body);
+      frag.append(el);
+      if (keep[f.id]) requestAnimationFrame(() => { body.scrollTop = keep[f.id]; });
     }
     const nb = document.createElement("button");
-    nb.type = "button"; nb.className = "sec-new"; nb.dataset.tip = "Новый раздел"; nb.setAttribute("aria-label", "Новый раздел");
-    nb.innerHTML = svgIco(IC.plus, 20, 2);
-    nb.addEventListener("click", () => openSection(null));
+    nb.type = "button"; nb.className = "fld-new"; nb.dataset.tip = "Новое поле"; nb.setAttribute("aria-label", "Новое поле");
+    nb.innerHTML = svgIco(IC.plus, 22, 2);
+    nb.addEventListener("click", () => openField(null));
     frag.append(nb);
     board.append(frag);
     boardFirst = false;
-    if (pending) startTaskInput(pending.sec, pending.value);
   }
 
-  /* Меню «+»: какой инструмент добавить в раздел */
-  let addFor = null;
-  function openAddMenu(btn, secId) {
-    const pop = $("add-pop");
-    if (!pop.hidden && addFor === btn) { closeAddMenu(); return; }
-    closeMenus(null);
-    addFor = btn; btn.setAttribute("aria-expanded", "true");
-    pop.textContent = "";
-    ADD_ORDER.forEach((type) => {
-      const T = ITEM_TYPES[type];
-      const b = document.createElement("button");
-      b.type = "button"; b.className = "menu-item"; b.setAttribute("role", "menuitem");
-      b.innerHTML = '<span class="menu-ico">' + svgIco(T.icon, 18) + "</span>";
-      b.querySelector(".menu-ico").append(T.label);
-      b.addEventListener("click", () => { closeAddMenu(); T.add(secId); });
-      pop.append(b);
+  /* Поля переставляются перетаскиванием за ручку ⋮⋮ */
+  async function saveFieldOrder() {
+    const ops = [];
+    [...$("board").querySelectorAll(":scope > .fld")].forEach((el, i) => {
+      const f = state.sections.find((x) => x.id === el.dataset.id);
+      if (!f || f.position === i) return;
+      f.position = i;
+      ops.push(sb.from("sections").update({ position: i }).eq("id", f.id));
     });
-    animShow(pop);
-    const r = btn.getBoundingClientRect(), w = pop.offsetWidth, hh = pop.offsetHeight, m = 8;
-    let x = Math.min(Math.max(m, r.right - w), window.innerWidth - w - m);
-    let y = r.bottom + 4; if (y + hh > window.innerHeight - m) y = r.top - 4 - hh;
-    pop.style.left = x + "px"; pop.style.top = Math.max(m, y) + "px";
+    renderBoard();
+    const res = await Promise.all(ops);
+    if (res.some((r) => r.error)) { toast("Порядок не сохранился — проверьте интернет."); loadItems(); }
   }
-  function closeAddMenu() {
-    const pop = $("add-pop");
-    if (!pop.hidden) animHide(pop, 120);
-    if (addFor) addFor.setAttribute("aria-expanded", "false");
-    addFor = null;
-  }
-  document.addEventListener("click", (e) => {
-    if (!e.composedPath().some((n) => n.id === "add-pop" || (n.classList && n.classList.contains("sec-add")))) closeAddMenu();
+  sortable($("board"), {
+    item: ".fld", handle: ".fld-grip", list: "#board",
+    onDrop: () => saveFieldOrder(),
+    onKey: (el, dir) => {
+      const sib = dir < 0 ? el.previousElementSibling : el.nextElementSibling;
+      if (!sib || !sib.matches(".fld")) return;
+      if (dir < 0) sib.before(el); else sib.after(el);
+      const id = el.dataset.id; saveFieldOrder();
+      const g = $("board").querySelector('.fld[data-id="' + id + '"] .fld-grip'); if (g) g.focus();
+    },
   });
-  window.addEventListener("scroll", closeAddMenu, true);
-  window.addEventListener("resize", closeAddMenu);
 
-  /* Задача пишется прямо в разделе: Enter — сохранить и писать следующую, Esc или пусто — убрать строку */
-  function startTaskInput(secId, value) {
-    const s = state.sections.find((x) => x.id === secId);
-    if (s && s.collapsed) { toggleCollapse(secId, true); }
-    const ul = $("board").querySelector('.sec-list[data-sec="' + secId + '"]');
-    if (!ul) return;
-    let li = ul.querySelector(".it-new");
-    if (!li) {
-      li = document.createElement("li");
-      li.className = "it it-new";
-      li.innerHTML = '<span class="it-check" aria-hidden="true"></span>';
-      const inp = document.createElement("input");
-      inp.type = "text"; inp.maxLength = 500; inp.placeholder = "Задача"; inp.setAttribute("aria-label", "Новая задача");
-      li.append(inp);
-      ul.append(li);
-      inp.addEventListener("keydown", async (e) => {
-        if (e.key === "Escape") { e.stopPropagation(); li.remove(); return; }
-        if (e.key !== "Enter") return;
-        e.preventDefault();
-        const title = inp.value.trim();
-        if (!title) { li.remove(); return; }
-        inp.value = "";
-        await createItem({ type: "task", title, section_id: secId });
-      });
-      inp.addEventListener("blur", () => setTimeout(() => {
-        if (!li.isConnected || document.activeElement === inp) return;
-        const title = inp.value.trim();
-        li.remove();
-        if (title) createItem({ type: "task", title, section_id: secId });
-      }, 150));
-    }
-    const inp = li.querySelector("input");
-    if (value != null) inp.value = value;
-    inp.focus();
+  /* ---------- Окно поля: приложение, ширина, название, удаление ---------- */
+  const fd = { id: null, app: "notes", span: 3 };
+  APP_ORDER.forEach((key) => {
+    const a = APPS[key];
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "app-tile"; b.setAttribute("role", "radio"); b.dataset.app = key;
+    b.innerHTML = svgIco(a.icon, 22);
+    const t = document.createElement("span"); t.textContent = a.name; b.append(t);
+    const s = document.createElement("small"); s.textContent = a.spans.join(" или ") + " кол."; b.append(s);
+    b.addEventListener("click", () => { fd.app = key; if (!a.spans.includes(fd.span)) fd.span = a.spans[a.spans.length - 1]; renderFieldForm(); });
+    $("sec-apps").append(b);
+  });
+  document.querySelectorAll("#sec-span [data-span]").forEach((b) => b.addEventListener("click", () => { fd.span = Number(b.dataset.span); renderFieldForm(); }));
+  function renderFieldForm() {
+    const a = APPS[fd.app];
+    document.querySelectorAll("#sec-apps .app-tile").forEach((b) => {
+      b.setAttribute("aria-checked", String(b.dataset.app === fd.app));
+      b.disabled = !!fd.id && b.dataset.app !== fd.app; // приложение выбирается только при создании
+    });
+    document.querySelectorAll("#sec-span [data-span]").forEach((b) => {
+      const n = Number(b.dataset.span), ok = !!a && a.spans.includes(n);
+      b.disabled = !ok;
+      b.dataset.tip = ok ? "" : (a ? a.name + ": только " + a.spans.join(" или ") + " кол." : "");
+      if (!b.dataset.tip) delete b.dataset.tip;
+      b.setAttribute("aria-checked", String(n === fd.span));
+    });
+    $("sec-title").placeholder = a ? a.name : "Название";
   }
+  function openField(id) {
+    closeMenus(null);
+    const f = id ? state.sections.find((x) => x.id === id) : null;
+    fd.id = f ? f.id : null; fd.app = f ? f.app : APP_ORDER[0];
+    const a = APPS[fd.app];
+    fd.span = f ? f.span : a.spans[a.spans.length - 1];
+    $("sec-h").textContent = f ? "Поле" : "Новое поле";
+    $("sec-title").value = f ? f.title : "";
+    $("sec-status").textContent = "";
+    $("sec-delete").hidden = !f;
+    $("sec-confirm").hidden = true; $("sec-actions").hidden = false;
+    renderFieldForm();
+    animShow($("secsheet"));
+    lockSheets(true);
+  }
+  let fldClosing = false, fldCancel = false;
+  async function closeField() {
+    if (fldClosing) return;
+    fldClosing = true;
+    try {
+      const f = fd.id ? state.sections.find((x) => x.id === fd.id) : null;
+      const a = APPS[fd.app];
+      const title = ($("sec-title").value.trim() || (a ? a.name : "Поле")).slice(0, 40);
+      if (!f) {
+        $("sec-status").textContent = "Сохраняю…";
+        const pos = state.sections.reduce((m, x) => Math.max(m, x.position), -1) + 1;
+        const r = await sb.from("sections").insert({ title, app: fd.app, span: fd.span, position: pos }).select(SEC_COLS).single();
+        if (r.error) { $("sec-status").textContent = String(r.error.message).includes("sections_limit") ? "Не больше 30 полей" : "Не сохранилось — проверьте интернет"; return; }
+        state.sections.push(r.data);
+        renderBoard();
+      } else {
+        const patch = {};
+        if (title !== f.title) patch.title = title;
+        if (fd.span !== f.span) patch.span = fd.span;
+        if (Object.keys(patch).length) {
+          $("sec-status").textContent = "Сохраняю…";
+          const { error } = await sb.from("sections").update(patch).eq("id", f.id);
+          if (error) { $("sec-status").textContent = "Не сохранилось — проверьте интернет"; return; }
+          Object.assign(f, patch);
+          renderBoard();
+        }
+      }
+      $("sec-status").textContent = "";
+      animHide($("secsheet"), 170);
+      lockSheets(false);
+    } finally { fldClosing = false; }
+  }
+  $("sec-title").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); closeField(); } });
+  $("secsheet").querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", closeField));
+  $("sec-delete").addEventListener("click", () => {
+    const n = state.items.filter((it) => it.section_id === fd.id).length;
+    $("sec-confirm-text").textContent = n ? "Удалить поле и " + n + " " + plural(n, "запись", "записи", "записей") + "?" : "Удалить поле?";
+    $("sec-actions").hidden = true; $("sec-confirm").hidden = false; replay($("sec-confirm"));
+  });
+  $("sec-confirm-no").addEventListener("click", () => { $("sec-confirm").hidden = true; $("sec-actions").hidden = false; replay($("sec-actions")); });
+  $("sec-confirm-yes").addEventListener("click", async () => {
+    const id = fd.id;
+    if (!id) return;
+    $("sec-status").textContent = "Удаляю…";
+    const di = await sb.from("items").delete().eq("section_id", id);
+    const del = di.error ? di : await sb.from("sections").delete().eq("id", id);
+    if (del.error) { $("sec-status").textContent = "Не удалось — проверьте интернет"; return; }
+    state.items = state.items.filter((it) => it.section_id !== id);
+    state.sections = state.sections.filter((x) => x.id !== id);
+    $("sec-status").textContent = "";
+    animHide($("secsheet"), 170); lockSheets(false);
+    itemsChanged();
+    toast("Поле удалено");
+  });
 
   async function createItem(row) {
-    const secId = row.section_id || state.inboxId;
-    const r = await sb.from("items").insert(Object.assign({ position: nextPos(secId) }, row, { section_id: secId })).select(ITEM_COLS).single();
-    if (r.error) { console.error(r.error); toast(r.error.message && r.error.message.includes("items_limit") ? "Слишком много записей: удалите ненужные." : "Не сохранилось — проверьте интернет."); return null; }
+    const r = await sb.from("items").insert(Object.assign({ position: row.section_id ? nextPos(row.section_id) : 0 }, row)).select(ITEM_COLS).single();
+    if (r.error) { console.error(r.error); toast(String(r.error.message).includes("items_limit") ? "Слишком много записей: удалите ненужные." : "Не сохранилось — проверьте интернет."); return null; }
     state.items.push(r.data);
     itemsChanged();
     return r.data;
   }
-  async function patchItem(id, patch, quiet) {
+  async function patchItem(id, patch) {
     const it = state.items.find((x) => x.id === id);
     if (!it) return false;
     const prev = Object.assign({}, it);
     Object.assign(it, patch);
-    if (!quiet) itemsChanged();
     const r = await sb.from("items").update(patch).eq("id", id).select(ITEM_COLS).single();
     if (r.error) { console.error(r.error); Object.assign(it, prev); itemsChanged(); toast("Не сохранилось — проверьте интернет."); return false; }
     Object.assign(it, r.data);
-    if (!quiet) itemsChanged();
+    itemsChanged();
     return true;
   }
   async function removeItem(id) {
@@ -743,156 +726,6 @@
     itemsChanged();
     return true;
   }
-  function toggleDone(id) {
-    const it = state.items.find((x) => x.id === id);
-    if (it) patchItem(id, { done: !it.done });
-  }
-
-  /* Перетаскивание: записи — внутри раздела и между разделами; разделы — между собой («Входящие» всегда первые) */
-  async function saveOrder() {
-    const ops = [];
-    $("board").querySelectorAll(".sec-list").forEach((ul) => {
-      const sec = ul.dataset.sec;
-      [...ul.querySelectorAll(":scope > .it[data-id]")].forEach((li, i) => {
-        const it = state.items.find((x) => x.id === li.dataset.id);
-        if (!it || (it.position === i && secOf(it) === sec)) return;
-        it.position = i; it.section_id = sec;
-        ops.push(sb.from("items").update({ position: i, section_id: sec }).eq("id", it.id));
-      });
-    });
-    itemsChanged();
-    const res = await Promise.all(ops);
-    if (res.some((r) => r.error)) { toast("Порядок не сохранился — проверьте интернет."); loadItems(); }
-  }
-  sortable($("board"), {
-    item: ".it", handle: ".it .grip", list: ".sec-list",
-    listFor: (el) => { const s = el.closest(".sec:not(.collapsed)"); return s && s.querySelector(".sec-list"); },
-    onDrop: () => saveOrder(),
-    onKey: (li, dir) => {
-      const sib = dir < 0 ? li.previousElementSibling : li.nextElementSibling;
-      if (!sib || !sib.matches(".it[data-id]")) return;
-      if (dir < 0) sib.before(li); else sib.after(li);
-      const id = li.dataset.id; saveOrder();
-      const g = $("board").querySelector('.it[data-id="' + id + '"] .grip'); if (g) g.focus();
-    },
-  });
-  async function saveSecOrder() {
-    const ops = [];
-    [...$("board").querySelectorAll(":scope > .sec")].forEach((el, i) => {
-      const s = state.sections.find((x) => x.id === el.dataset.id);
-      if (!s || s.position === i) return;
-      s.position = i;
-      ops.push(sb.from("sections").update({ position: i }).eq("id", s.id));
-    });
-    renderBoard();
-    const res = await Promise.all(ops);
-    if (res.some((r) => r.error)) { toast("Порядок разделов не сохранился."); loadItems(); }
-  }
-  sortable($("board"), {
-    item: ".sec", handle: ".sec-grip", list: "#board", fixed: ".sec.inbox",
-    onDrop: () => saveSecOrder(),
-    onKey: (el, dir) => {
-      const sib = dir < 0 ? el.previousElementSibling : el.nextElementSibling;
-      if (!sib || !sib.matches(".sec") || sib.matches(".inbox")) return;
-      if (dir < 0) sib.before(el); else sib.after(el);
-      const id = el.dataset.id; saveSecOrder();
-      const g = $("board").querySelector('.sec[data-id="' + id + '"] .sec-grip'); if (g) g.focus();
-    },
-  });
-  async function toggleCollapse(id, open) {
-    const s = state.sections.find((x) => x.id === id);
-    if (!s) return;
-    s.collapsed = open ? false : !s.collapsed;
-    renderBoard();
-    const { error } = await sb.from("sections").update({ collapsed: s.collapsed }).eq("id", id);
-    if (error) { s.collapsed = !s.collapsed; renderBoard(); toast("Не сохранилось — проверьте интернет."); }
-  }
-
-  /* ---------- Окно раздела: название, цвет, ширина, удаление ---------- */
-  const SEC_COLORS = [[null, "Без цвета"], ["sky", "Синий"], ["mint", "Зелёный"], ["sand", "Жёлтый"], ["rose", "Розовый"], ["violet", "Фиолетовый"], ["ink", "Серый"]];
-  const sd = { id: null, color: null, wide: false };
-  SEC_COLORS.forEach(([c, name]) => {
-    const b = document.createElement("button");
-    b.type = "button"; b.className = "sec-color"; b.setAttribute("role", "radio"); b.dataset.tip = name; b.setAttribute("aria-label", name);
-    if (c) b.dataset.gcolor = c; else b.classList.add("none");
-    b.dataset.c = c || "";
-    b.addEventListener("click", () => { sd.color = c; renderSecForm(); });
-    $("sec-colors").append(b);
-  });
-  function renderSecForm() {
-    document.querySelectorAll("#sec-colors .sec-color").forEach((b) => b.setAttribute("aria-checked", String((b.dataset.c || null) === sd.color)));
-    $("sec-wide").setAttribute("aria-checked", String(sd.wide));
-  }
-  $("sec-wide").addEventListener("click", () => { sd.wide = !sd.wide; renderSecForm(); });
-  function openSection(id) {
-    closeMenus(null); closeAddMenu();
-    const s = id ? state.sections.find((x) => x.id === id) : null;
-    sd.id = s ? s.id : null; sd.color = s ? s.color : null; sd.wide = s ? s.wide : false;
-    $("sec-h").textContent = s ? "Раздел" : "Новый раздел";
-    $("sec-title").value = s ? s.title : "";
-    $("sec-title").disabled = !!(s && s.is_inbox);
-    $("sec-status").textContent = "";
-    $("sec-delete").hidden = !s || s.is_inbox;
-    $("sec-confirm").hidden = true; $("sec-actions").hidden = false;
-    renderSecForm();
-    animShow($("secsheet"));
-    lockSheets(true);
-    if (!s) setTimeout(() => $("sec-title").focus(), 30);
-  }
-  let secClosing = false;
-  async function closeSection() {
-    if (secClosing) return;
-    secClosing = true;
-    try {
-      const s = sd.id ? state.sections.find((x) => x.id === sd.id) : null;
-      const title = $("sec-title").value.trim().slice(0, 40);
-      if (!s && title) {
-        $("sec-status").textContent = "Сохраняю…";
-        const pos = state.sections.reduce((m, x) => Math.max(m, x.position), 0) + 1;
-        const r = await sb.from("sections").insert({ title, color: sd.color, wide: sd.wide, position: pos }).select(SEC_COLS).single();
-        if (r.error) { $("sec-status").textContent = r.error.message.includes("sections_limit") ? "Не больше 30 разделов" : "Не сохранилось — проверьте интернет"; return; }
-        state.sections.push(r.data);
-        renderBoard();
-      } else if (s) {
-        if (!title && !s.is_inbox) { $("sec-title").classList.add("bad"); $("sec-status").textContent = "Введите название"; return; }
-        const patch = {};
-        if (!s.is_inbox && title !== s.title) patch.title = title;
-        if ((s.color || null) !== sd.color) patch.color = sd.color;
-        if (s.wide !== sd.wide) patch.wide = sd.wide;
-        if (Object.keys(patch).length) {
-          $("sec-status").textContent = "Сохраняю…";
-          const { error } = await sb.from("sections").update(patch).eq("id", s.id);
-          if (error) { $("sec-status").textContent = "Не сохранилось — проверьте интернет"; return; }
-          Object.assign(s, patch);
-          renderBoard();
-        }
-      }
-      $("sec-title").classList.remove("bad");
-      $("sec-status").textContent = "";
-      animHide($("secsheet"), 170);
-      lockSheets(false);
-    } finally { secClosing = false; }
-  }
-  $("sec-title").addEventListener("input", () => $("sec-title").classList.remove("bad"));
-  $("sec-title").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); closeSection(); } });
-  $("secsheet").querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", closeSection));
-  $("sec-delete").addEventListener("click", () => { $("sec-actions").hidden = true; $("sec-confirm").hidden = false; replay($("sec-confirm")); });
-  $("sec-confirm-no").addEventListener("click", () => { $("sec-confirm").hidden = true; $("sec-actions").hidden = false; replay($("sec-actions")); });
-  $("sec-confirm-yes").addEventListener("click", async () => {
-    const id = sd.id;
-    if (!id || id === state.inboxId) return;
-    $("sec-status").textContent = "Удаляю…";
-    const mv = await sb.from("items").update({ section_id: state.inboxId }).eq("section_id", id);
-    const del = mv.error ? mv : await sb.from("sections").delete().eq("id", id);
-    if (del.error) { $("sec-status").textContent = "Не удалось — проверьте интернет"; return; }
-    const base = nextPos(state.inboxId);
-    state.items.filter((it) => it.section_id === id).forEach((it, i) => { it.section_id = state.inboxId; it.position = base + i; });
-    state.sections = state.sections.filter((x) => x.id !== id);
-    $("sec-status").textContent = "";
-    animHide($("secsheet"), 170); lockSheets(false);
-    itemsChanged();
-    toast("Раздел удалён, записи — во «Входящих»");
-  });
 
   /* ---------- Окно записи: задача и напоминание ---------- */
   const id_ = { id: null, type: "task", sec: null, date: "", time: "", done: false };
@@ -940,11 +773,11 @@
   $("it-done").addEventListener("click", () => { id_.done = !id_.done; $("it-done").setAttribute("aria-checked", String(id_.done)); });
 
   function openItem(id, type, secId) {
-    closeMenus(null); closeAddMenu();
+    closeMenus(null);
     const it = id ? state.items.find((x) => x.id === id) : null;
     id_.id = it ? it.id : null;
     id_.type = it ? it.type : type || "task";
-    id_.sec = it ? secOf(it) : secId || state.inboxId;
+    id_.sec = it ? it.section_id : secId || null;
     id_.done = !!(it && it.done);
     const isTask = id_.type === "task";
     $("it-h").textContent = (it ? "" : "Новое ") + (isTask ? (it ? "Задача" : "задача").replace(/^Новое з/, "Новая з") : (it ? "Напоминание" : "напоминание"));
@@ -1011,7 +844,7 @@
   });
 
   /* ---------- Заметка: свой редактор, автосохранение ---------- */
-  const ed = { id: null, sec: null, color: "paper", timer: null, saving: null, dirty: false };
+  const ed = { id: null, sec: null, color: "paper", pinned: false, timer: null, saving: null, dirty: false };
 
   function setEdColor(c) {
     ed.color = c;
@@ -1024,10 +857,12 @@
   });
 
   function openEditor(id, secId) {
-    closeMenus(null); closeAddMenu();
+    closeMenus(null);
     const n = id ? state.items.find((x) => x.id === id) : null;
     ed.id = n ? n.id : null;
-    ed.sec = n ? secOf(n) : secId || state.inboxId;
+    ed.sec = n ? n.section_id : secId || (state.sections.find((f) => f.app === "notes") || {}).id || null;
+    ed.pinned = !!(n && n.pinned);
+    $("ed-pin").setAttribute("aria-pressed", String(ed.pinned));
     ed.dirty = false;
     $("ed-body").value = n ? n.body : "";
     $("ed-delete").hidden = !n;
@@ -1056,7 +891,7 @@
     if (!ed.id && !body.trim()) { ed.dirty = false; $("ed-status").textContent = ""; return; }
     ed.dirty = false;
     ed.saving = (async () => {
-      const row = { body, color: ed.color };
+      const row = { body, color: ed.color, pinned: ed.pinned };
       let res;
       if (ed.id) res = await sb.from("items").update(row).eq("id", ed.id).select(ITEM_COLS).single();
       else res = await sb.from("items").insert(Object.assign({ type: "note", section_id: ed.sec, position: nextPos(ed.sec) }, row)).select(ITEM_COLS).single();
@@ -1109,6 +944,11 @@
   }
 
   $("ed-body").addEventListener("input", () => queueSave());
+  $("ed-pin").addEventListener("click", () => {
+    ed.pinned = !ed.pinned;
+    $("ed-pin").setAttribute("aria-pressed", String(ed.pinned));
+    queueSave(0);
+  });
   $("ed-delete").addEventListener("click", () => { $("ed-actions").hidden = true; $("ed-confirm").hidden = false; replay($("ed-confirm")); });
   $("ed-confirm-no").addEventListener("click", () => { $("ed-confirm").hidden = true; $("ed-actions").hidden = false; replay($("ed-actions")); });
   $("ed-confirm-yes").addEventListener("click", () => deleteNote(false));
@@ -1622,7 +1462,7 @@
     if (dt.getTime() < Date.now() - 60000) { setTab("rem"); $("time-status").textContent = "Это время уже прошло — выберите другое"; return false; }
     $("time-status").textContent = "Сохраняю…";
     const ok = await trackTime(async () => {
-      const r = await sb.from("items").insert({ type: "reminder", title: text, remind_at: dt.toISOString(), section_id: state.inboxId, position: nextPos(state.inboxId) }).select(ITEM_COLS).single();
+      const r = await sb.from("items").insert({ type: "reminder", title: text, remind_at: dt.toISOString(), section_id: null, position: 0 }).select(ITEM_COLS).single();
       if (r.error) throw r.error;
       state.items.push(r.data);
       itemsChanged();
@@ -2136,18 +1976,14 @@
     S.items = []; S.active = -1;
     if (!q) { hidePop(); return; }
     const groups = [];
-    // записи всех инструментов, по типам; во второй строке — раздел
-    const secName = (it) => { const s = state.sections.find((x) => x.id === secOf(it)); return s ? s.title : ""; };
-    const byType = { task: "Задачи", note: "Заметки" };
-    Object.keys(byType).forEach((type) => {
-      const T = ITEM_TYPES[type];
-      const found = state.items.filter((it) => it.type === type && norm(T.text(it)).includes(q)).slice(0, 6).map((it) => {
-        const v = T.row(it);
-        const extra = type === "note" ? (norm(v.title).includes(q) ? snippet(noteSub(it), "") : snippet(noteSub(it), q)) : (it.done ? "Сделано" : v.meta);
-        return resultEl(type, v.title, [secName(it), extra].filter(Boolean).join(" · "), q, () => T.open(it));
-      });
-      if (found.length) groups.push([byType[type], found]);
+    // заметки; во второй строке — поле и фрагмент текста
+    const fieldName = (it) => { const s = state.sections.find((x) => x.id === it.section_id); return s ? s.title : ""; };
+    const notes = state.items.filter((it) => it.type === "note" && norm(it.body).includes(q)).slice(0, 6).map((it) => {
+      const title = noteTitle(it);
+      const extra = norm(title).includes(q) ? snippet(noteSub(it), "") : snippet(noteSub(it), q);
+      return resultEl("note", title, [fieldName(it), extra].filter(Boolean).join(" · "), q, () => openEditor(it.id));
     });
+    if (notes.length) groups.push(["Заметки", notes]);
     const rems = (state.reminders || []).filter((r) => norm(r.text).includes(q)).slice(0, 5).map((r) =>
       resultEl("rem", r.text, fmtRem.format(new Date(r.remind_at)) + (r.sent_at ? " · отправлено" : ""), q, () => openItem(r.id)));
     if (rems.length) groups.push(["Напоминания", rems]);
@@ -2220,7 +2056,7 @@
     if (e.key !== "Escape") return;
     if (!$("editor").hidden) closeEditor();
     else if (!$("itemsheet").hidden) closeItem();
-    else if (!$("secsheet").hidden) closeSection();
+    else if (!$("secsheet").hidden) closeField();
     else if (!$("setsheet").hidden) closeSettings();
     else if (!$("timesheet").hidden) closeTime();
   });

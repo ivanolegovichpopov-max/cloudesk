@@ -784,82 +784,37 @@ html:has(.dragging) .fade-scroll { -webkit-mask-image: none; mask-image: none; }
 .weather-now .wn-d { font-size: 13px; color: var(--ink-dim); }
 .weather-now .wn-d b { display: block; font-size: 14px; font-weight: 500; color: var(--ink); }
 
-/* ---------- Стол: разделы по темам, внутри записи разных инструментов ---------- */
-.sections {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 12px;
-  align-items: start; grid-auto-flow: row dense; min-width: 0;
+/* ---------- Стол: сетка из 3 колонок; поле — 1, 2 или 3 колонки, высота фиксированная ---------- */
+:root { --fld-h: 340px; }
+.fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: var(--fld-h); gap: 12px; min-width: 0; grid-auto-flow: row dense; }
+.fields > .empty { grid-column: 1 / -1; }
+.fld {
+  min-width: 0; min-height: 0; display: flex; flex-direction: column;
+  background: var(--glass); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 12px 12px 0;
 }
-.sections > .empty { grid-column: 1 / -1; }
-.sec {
-  min-width: 0; display: flex; flex-direction: column;
-  background: var(--glass); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 6px;
-}
-.sec.wide { grid-column: span 2; }
-@media (max-width: 680px) { .sec.wide { grid-column: auto; } }
-.sec-head { display: flex; align-items: center; gap: 2px; min-height: 40px; }
-.sec-head .sec-grip { margin-left: 0; width: 24px; opacity: 0; }
-.sec:hover .sec-grip:not(:disabled), .sec-grip:focus-visible { opacity: .75; }
-.sec.inbox .sec-grip { visibility: hidden; }
-.sec-title {
-  flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 8px;
+.fld[data-span="1"] { grid-column: span 1; } .fld[data-span="2"] { grid-column: span 2; } .fld[data-span="3"] { grid-column: span 3; }
+.fld-head { flex: none; display: flex; align-items: center; gap: 4px; margin-bottom: 10px; }
+.fld-grip { width: 24px; margin-left: -6px; opacity: 0; }
+.fld:hover .fld-grip, .fld-grip:focus-visible { opacity: .75; }
+.fld-title {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 0; height: 36px; padding: 0 8px; margin-left: -4px;
   border: 0; border-radius: var(--r); background: transparent; color: var(--ink); font-size: 15px; font-weight: 600; text-align: left;
 }
-.sec-title:hover { background: var(--hover); }
-.sec-title .gdot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--gc, var(--accent)); }
-.sec-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sec-title .count { margin-left: 0; }
-.sec-fold svg { transition: transform .15s ease; }
-.sec.collapsed .sec-fold svg { transform: rotate(-90deg); }
-.sec-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; min-width: 0; }
-.sec:not(.collapsed) .sec-list { padding-top: 2px; }
-.sec:not(.collapsed) .sec-list:empty, .sec:not(.collapsed) .sec-list:has(> .drag-ph:only-child) { min-height: 44px; border: 1px dashed var(--line); border-radius: var(--r); }
-.sec:not(.collapsed) .sec-list:empty::before { content: "Перетащите сюда записи"; display: grid; place-items: center; height: 44px; font-size: 12px; color: var(--ink-dim); }
-.sec.collapsed .sec-list { min-height: 6px; }
-.sec.collapsed .sec-list > :not(.drag-ph) { display: none; }
-
-/* строка записи: [ручка] значок/галочка — название и пояснение — время справа */
-.it {
-  position: relative; display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 4px 10px 4px 2px;
-  border-radius: var(--r); cursor: pointer; min-width: 0; outline: none;
+.fld-title:hover { background: var(--hover); }
+.fld-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fld-body { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding-bottom: 12px; }
+.fld-empty { height: 100%; display: grid; place-items: center; font-size: 14px; color: var(--ink-dim); }
+.fld-new {
+  display: grid; place-items: center; border: 1px dashed var(--line); border-radius: var(--r-lg);
+  background: transparent; color: var(--on-wall); opacity: .7; grid-column: span 1;
 }
-.it:hover, .it:focus-visible { background: var(--hover); }
-.it:focus-visible { box-shadow: inset 0 0 0 1px var(--accent); }
-.it .grip { width: 22px; height: 28px; margin: 0; opacity: 0; flex: none; }
-.it:hover .grip, .it .grip:focus-visible { opacity: .7; }
-.it-ico { flex: none; display: grid; place-items: center; width: 20px; height: 20px; color: var(--ink-dim); }
-.it[data-type="reminder"] .it-ico { color: var(--accent); }
-.it-check {
-  flex: none; display: grid; place-items: center; width: 20px; height: 20px; padding: 0;
-  border: 1.5px solid var(--ink-dim); border-radius: 5px; background: transparent; color: transparent; cursor: pointer;
+.fld-new:hover { opacity: 1; border-color: var(--accent); color: var(--accent); background: var(--glass); }
+.fld .notes { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+@media (max-width: 760px) {
+  .fields { grid-template-columns: minmax(0, 1fr); }
+  .fld[data-span] { grid-column: auto; }
 }
-.it-check:hover { border-color: var(--accent); }
-.it-check[aria-checked="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-button.it-check:active:not(:disabled) { transform: scale(.9); }
-.it-main { flex: 1; min-width: 0; display: grid; }
-.it-title { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.it-sub { font-size: 12px; color: var(--ink-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.it-meta { flex: none; font-size: 12px; font-weight: 500; color: var(--ink-dim); font-variant-numeric: tabular-nums; }
-.it-meta.late { color: var(--danger); }
-.it.is-done .it-title { text-decoration: line-through; color: var(--ink-dim); }
-.it.is-done, .it.is-past { opacity: .6; }
-.it[data-color] { background: var(--n-bg); color: var(--n-fg); }
-.it[data-color] .it-sub, .it[data-color] .it-ico { color: inherit; opacity: .7; }
-.it.fade-in { animation: rise-in .2s var(--ease); }
-.it-new { cursor: default; padding-left: 32px; }
-.it-new .it-check { border-style: dashed; cursor: default; }
-.it-new input { flex: 1; min-width: 0; height: 30px; padding: 0 4px; border: 0; background: transparent; font-size: 14px; }
-.it-new input:focus { border: 0; }
-.it-new:hover { background: transparent; }
-
-/* плитка «Новый раздел» */
-.sec-new {
-  min-height: 56px; display: grid; place-items: center; border: 1px dashed var(--line); border-radius: var(--r-lg);
-  background: transparent; color: var(--on-wall); opacity: .7;
-}
-.sec-new:hover { opacity: 1; border-color: var(--accent); color: var(--accent); background: var(--glass); }
-
-/* меню «+»: что добавить */
-.pop.add-pop { position: fixed; z-index: 45; width: 200px; min-width: 0; right: auto; bottom: auto; padding: 6px; }
+.app-tile[disabled] { opacity: .35; }
 
 /* окно записи */
 .it-form, .sec-form { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
@@ -868,6 +823,17 @@ button.it-check:active:not(:disabled) { transform: scale(.9); }
 .it-form .it-body { flex: 1; min-height: 120px; width: 100%; resize: none; padding: 10px; border: 1px solid var(--line); border-radius: var(--r); background: transparent; color: var(--ink); font: inherit; font-size: 14px; line-height: 1.5; }
 .it-form .it-body:focus { outline: none; border-color: var(--accent); }
 input.bad { border-color: var(--danger) !important; }
+.sec-apps { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+.app-tile {
+  display: grid; justify-items: center; gap: 4px; padding: 14px 8px; border: 1px solid var(--line); border-radius: var(--r);
+  background: transparent; color: var(--ink); font-size: 14px; font-weight: 500;
+}
+.app-tile svg { color: var(--accent); }
+.app-tile small { font-size: 11px; color: var(--ink-dim); font-weight: 400; }
+.app-tile:hover:not(:disabled) { border-color: var(--accent); }
+.app-tile[aria-checked="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.sec-span button { flex: 1; height: 32px; font-size: 13px; }
+.sec-span button:disabled { opacity: .35; cursor: default; }
 .sec-colors { display: flex; flex-wrap: wrap; gap: 8px; }
 .sec-color { width: 32px; height: 32px; border-radius: 50%; border: 2px solid transparent; background: var(--gc); padding: 0; }
 .sec-color.none { background: var(--accent); }

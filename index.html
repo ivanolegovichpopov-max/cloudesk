@@ -107,8 +107,8 @@
     </nav>
   </header>
 
-  <!-- Стол: разделы по темам; внутри — записи разных инструментов (задачи, заметки, напоминания…) -->
-  <main id="board" class="sections" aria-label="Разделы">
+  <!-- Стол: сетка из 3 колонок; поле шириной 1–3 колонки, в поле — приложение -->
+  <main id="board" class="fields" aria-label="Стол">
     <div id="board-loading" class="empty"><p>Загрузка…</p></div>
   </main>
 </div>
@@ -136,7 +136,7 @@
         <button type="button" class="dot" data-color="ink" aria-label="Тёмный"></button>
       </div>
       <div id="ed-actions" class="foot-actions">
-        <button id="ed-pin" type="button" class="tool" hidden aria-pressed="false" data-tip="Закрепить сверху" aria-label="Закрепить сверху">
+        <button id="ed-pin" type="button" class="tool" aria-pressed="false" data-tip="Закрепить сверху" aria-label="Закрепить сверху">
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M9 3h6l-1 6 4 4H6l4-4zM12 13v8"/></svg>
         </button>
         <button id="ed-delete" type="button" class="tool" data-tip="Удалить" aria-label="Удалить">
@@ -373,7 +373,7 @@
   </div>
 </div>
 
-<!-- Раздел: название, цвет, ширина -->
+<!-- Поле стола: приложение, ширина, название -->
 <div id="secsheet" class="sheet-wrap" hidden>
   <div class="sheet-backdrop" data-close></div>
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sec-h">
@@ -385,18 +385,23 @@
       </div>
     </div>
     <div class="sec-form">
-      <input id="sec-title" type="text" maxlength="40" autocomplete="off" placeholder="Название" aria-label="Название раздела">
-      <div class="t-head">Цвет</div>
-      <div id="sec-colors" class="sec-colors" role="radiogroup" aria-label="Цвет раздела"></div>
-      <button type="button" id="sec-wide" class="switch-row" role="switch" aria-checked="false"><span>Широкий раздел</span><span class="switch" aria-hidden="true"></span></button>
+      <input id="sec-title" type="text" maxlength="40" autocomplete="off" placeholder="Название" aria-label="Название поля">
+      <div class="t-head">Приложение</div>
+      <div id="sec-apps" class="sec-apps" role="radiogroup" aria-label="Приложение"></div>
+      <div class="t-head">Ширина</div>
+      <div id="sec-span" class="segmented sec-span" role="radiogroup" aria-label="Ширина поля">
+        <button type="button" role="radio" data-span="1">1 колонка</button>
+        <button type="button" role="radio" data-span="2">2 колонки</button>
+        <button type="button" role="radio" data-span="3">3 колонки</button>
+      </div>
     </div>
     <div class="sheet-foot">
       <span class="foot-spacer"></span>
-      <div id="sec-actions" class="foot-actions"><button id="sec-delete" type="button" class="tool" data-tip="Удалить раздел" aria-label="Удалить раздел">
+      <div id="sec-actions" class="foot-actions"><button id="sec-delete" type="button" class="tool" data-tip="Удалить поле" aria-label="Удалить поле">
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>
         </button></div>
       <div id="sec-confirm" class="confirm foot-actions" hidden>
-        <span>Удалить? Записи перейдут во «Входящие»</span>
+        <span id="sec-confirm-text">Удалить поле?</span>
         <button id="sec-confirm-no" type="button" class="tool" data-tip="Отмена" aria-label="Отмена"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M9 14l-4-4 4-4M5 10h9a5 5 0 0 1 0 10h-2"/></svg></button>
         <button id="sec-confirm-yes" type="button" class="tool danger" data-tip="Удалить" aria-label="Удалить"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>
       </div>
@@ -404,8 +409,6 @@
   </div>
 </div>
 
-<!-- меню «+» раздела: какой инструмент добавить (вне разделов, чтобы не обрезалось) -->
-<div id="add-pop" class="pop add-pop" role="menu" hidden></div>
 
 <!-- выбор группы для ссылки (вне окна, чтобы список не обрезался прокруткой) -->
 <div id="lg-pop" class="pop lg-pop" role="listbox" hidden></div>
