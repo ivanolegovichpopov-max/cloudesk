@@ -1029,6 +1029,7 @@
     ed.dirty = false;
     $("ed-head").value = n ? n.title || "" : "";
     $("ed-body").value = n ? n.body : "";
+    edCount();
     $("ed-delete").hidden = !n;
     $("ed-confirm").hidden = true;
     $("ed-actions").hidden = false;
@@ -1051,7 +1052,7 @@
     clearTimeout(ed.timer);
     if (!ed.dirty) return;
     if (ed.saving) await ed.saving;
-    const body = $("ed-body").value, title = $("ed-head").value.trim().slice(0, 500);
+    const body = $("ed-body").value.slice(0, 3000), title = $("ed-head").value.trim().slice(0, 80);
     if (!ed.id && !body.trim() && !title) { ed.dirty = false; $("ed-status").textContent = ""; return; }
     ed.dirty = false;
     ed.saving = (async () => {
@@ -1108,7 +1109,19 @@
   }
 
   $("ed-body").addEventListener("input", () => queueSave());
-  $("ed-head").addEventListener("input", () => queueSave());
+  $("ed-head").addEventListener("input", () => { queueSave(); edCount(); });
+  // ограничения заметки: заголовок 80, текст 3000 символов; счётчик появляется ближе к пределу
+  const ED_LIM = { head: 80, body: 3000 };
+  function edCount() {
+    const h = $("ed-head").value.length, b = $("ed-body").value.length;
+    const parts = [];
+    if (h >= ED_LIM.head * 0.75) parts.push("Заголовок " + h + " / " + ED_LIM.head);
+    if (b >= ED_LIM.body * 0.8) parts.push("Текст " + b.toLocaleString("ru-RU") + " / " + ED_LIM.body.toLocaleString("ru-RU"));
+    const el = $("ed-count");
+    el.textContent = parts.join(" · ");
+    el.classList.toggle("full", h >= ED_LIM.head || b >= ED_LIM.body);
+  }
+  $("ed-body").addEventListener("input", edCount);
   // Enter в заголовке — к тексту
   $("ed-head").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); const t = $("ed-body"); t.focus(); t.selectionStart = t.selectionEnd = 0; } });
   // «Список»: строки с курсором или выделенные становятся пунктами с галочками (и обратно)

@@ -912,3 +912,8 @@ input.bad { border-color: var(--danger) !important; }
 .fld .note.dragging, .fld.dragging { position: fixed; }
 .dragging, .dragging * { pointer-events: none !important; }
 .dragging .note-acts { display: none; }
+
+/* счётчик символов заметки — появляется у предела, на пределе красный */
+.ed-count { flex: none; min-height: 0; text-align: right; font-size: 12px; opacity: .6; font-variant-numeric: tabular-nums; }
+.ed-count:empty { display: none; }
+.ed-count.full { color: var(--danger); opacity: 1; }
