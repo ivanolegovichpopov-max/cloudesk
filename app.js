@@ -755,13 +755,14 @@
       const d = document.createElement("span"); d.className = "tk-due" + (taskGroup(t) === "over" ? " over" : "");
       d.textContent = dueLabel(dt.due, dt.allday); meta.append(d);
     }
+    if (!dt.due && !t.done) { const d = document.createElement("span"); d.className = "tk-due none"; d.textContent = "без срока"; meta.append(d); }
     if (t.done && t.done_at) { const d = document.createElement("span"); d.className = "tk-due"; d.textContent = "выполнено " + dueLabel(t.done_at, true); meta.append(d); }
     if (!t.done && dt.remind != null && dt.due) meta.append(ic("M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4", "Напоминание в Telegram"));
     if (dt.repeat) meta.append(ic("M17 2l4 4-4 4M3 11v-1a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v1a4 4 0 0 1-4 4H3", "Повтор: " + REPEAT_TXT[dt.repeat]));
     const subs = dt.subs || [];
     if (subs.length) { const s = document.createElement("span"); s.className = "tk-subs" + (subs.every((x) => x.done) ? " full" : ""); s.textContent = subs.filter((x) => x.done).length + "/" + subs.length; s.dataset.tip = "Подпункты"; meta.append(s); }
     if ((t.body || "").trim()) meta.append(ic("M5 7h14M5 12h14M5 17h9", "Есть описание"));
-    if (meta.childNodes.length) main.append(meta);
+    main.append(meta); // у всех задач две строки: название и под ним срок — строки одной высоты
     li.append(cb, main);
     // при наведении: срок и удалить
     const acts = document.createElement("div"); acts.className = "tk-acts";

@@ -1022,7 +1022,7 @@ input.bad { border-color: var(--danger) !important; }
 .tk-gc { font-variant-numeric: tabular-nums; opacity: .8; }
 .tk-list { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; }
 .tk {
-  position: relative; display: flex; align-items: flex-start; gap: 8px; min-width: 0;
+  position: relative; display: flex; align-items: center; gap: 8px; min-width: 0;
   /* справа всегда оставлено место под значки «Срок» и «Удалить» — при наведении строка не перестраивается */
   padding: 8px 68px 8px 6px;
   border-radius: var(--r); cursor: pointer; outline: none; color: var(--ink); transition: background-color .12s ease;
@@ -1038,7 +1038,7 @@ input.bad { border-color: var(--danger) !important; }
 @media (hover: none) { .tk .tk-grip { opacity: .6; } }
 .tk.is-done { padding-left: 30px; }
 .tk-check {
-  flex: none; display: grid; place-items: center; width: 18px; height: 18px; margin-top: 1px; padding: 0;
+  flex: none; display: grid; place-items: center; width: 18px; height: 18px; margin: 0; padding: 0;
   border: 1.5px solid currentColor; border-radius: 50%; background: transparent; color: var(--ink-dim); cursor: pointer;
   transition: background .15s ease, border-color .15s ease, color .15s ease;
 }
@@ -1055,6 +1055,8 @@ input.bad { border-color: var(--danger) !important; }
 @keyframes tk-out { to { opacity: 0; transform: translateY(-3px); } }
 .tk-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 12px; line-height: 16px; color: var(--ink-dim); font-variant-numeric: tabular-nums; }
 .tk-due.over { color: var(--danger); font-weight: 600; }
+.tk-due.none { opacity: .7; }
+.tk-meta { min-height: 16px; }
 .tk-ic { display: inline-grid; place-items: center; }
 .tk-subs { padding: 0 5px; border-radius: 4px; background: rgba(127,127,127,.18); font-weight: 600; font-size: 11px; line-height: 16px; }
 .tk-subs.full { background: var(--accent); color: var(--accent-ink); }
