@@ -882,7 +882,9 @@ input.bad { border-color: var(--danger) !important; }
 .fld .note-title { flex: 1; min-width: 0; margin: 0; padding: 0; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
 .fld .note-pin { position: static; flex: none; opacity: .6; display: grid; }
 .note-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 2px; font-size: 13px; line-height: 1.4; overflow: hidden;
-  -webkit-mask-image: linear-gradient(#000 calc(100% - 12px), transparent); mask-image: linear-gradient(#000 calc(100% - 12px), transparent); }
+  -webkit-mask-image: linear-gradient(#000 calc(100% - 12px), transparent); mask-image: linear-gradient(#000 calc(100% - 12px), transparent);
+  /* запас справа: наклонная буква курсива чуть выступает за свою ширину и не должна обрезаться (ширина строки та же) */
+  padding-right: 4px; margin-right: -4px; }
 /* содержимое карточки идёт подряд, как написано: текст переносится на следующие строки, пункты — по порядку;
    что не поместилось по высоте — мягко тает внизу */
 .note-line { flex: none; min-width: 0; opacity: .8; white-space: pre-wrap; overflow-wrap: anywhere; }
