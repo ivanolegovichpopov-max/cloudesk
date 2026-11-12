@@ -444,6 +444,28 @@ mark { background: color-mix(in srgb, var(--accent) 28%, transparent); color: in
 .link-removed-note { grid-column: 1 / -1; font-size: 12px; color: var(--danger); }
 .row-tile { flex: none; flex-direction: row; height: 44px; width: 100%; }
 
+/* ---------- Перетаскивание (общее) ---------- */
+.grip { width: 28px; height: 32px; cursor: grab; touch-action: none; color: var(--ink-dim); flex: none; }
+.grip:active { cursor: grabbing; }
+.grip:disabled { visibility: hidden; }
+.dragging {
+  position: fixed !important; z-index: 70; margin: 0 !important; pointer-events: none;
+  background: var(--sheet); border-color: var(--accent) !important; opacity: .96;
+  box-shadow: 0 6px 18px rgba(0,0,0,.18);
+}
+html:has(.dragging), html:has(.dragging) * { cursor: grabbing !important; user-select: none; }
+html:has(.dragging) [data-tip]::after { display: none !important; }
+.drag-ph { list-style: none; border: 1px dashed var(--accent); border-radius: var(--r); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.dropped { animation: fade-in .2s ease-out; }
+/* пустая группа — место, куда можно перетащить ссылку */
+.lg-links:empty, .lg-links:has(> .drag-ph:only-child) { min-height: 40px; border: 1px dashed var(--line); border-radius: var(--r); }
+.lg-links:empty::before { content: "Перетащите сюда ссылки"; display: grid; place-items: center; height: 40px; font-size: 12px; color: var(--ink-dim); }
+.city-item .grip { margin-left: -6px; }
+.foot-tools { display: inline-flex; align-items: center; gap: 2px; }
+.tool.accent { color: var(--accent); }
+.tool.accent:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.pop.pop-end { left: auto; right: 0; min-width: 220px; }
+
 /* ---------- Всё системное — в стиле стола ---------- */
 html { -webkit-tap-highlight-color: transparent; }
 ::selection { background: var(--accent); color: var(--accent-ink); }

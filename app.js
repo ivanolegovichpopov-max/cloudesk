@@ -134,6 +134,95 @@
     r._cf = setTimeout(() => r.classList.remove("color-fade"), 320);
   }
 
+  // Кнопка-значок: меняем значок и подсказку (например, Старт ⇄ Пауза)
+  const PATHS = { play: "M8 5v14l11-7z", pause: "M9 5v14M15 5v14" };
+  function setIconBtn(btn, path, label) {
+    if (btn.dataset.path === path && btn.dataset.tip === label) return;
+    btn.dataset.path = path; btn.dataset.tip = label; btn.setAttribute("aria-label", label);
+    btn.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="' + path + '"/></svg>';
+  }
+
+  /* ---------- Перетаскивание (общее для всего стола) ----------
+     Тянем за ручку ⋮⋮; работает мышью и пальцем. На месте, куда упадёт элемент, — пунктирная рамка.
+     Клавиатура: ручка в фокусе + стрелки вверх/вниз. Esc во время перетаскивания — отмена. */
+  const GRIP = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" d="M9 6h.01M9 12h.01M9 18h.01M15 6h.01M15 12h.01M15 18h.01"/></svg>';
+  function gripBtn(label) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "tool grip"; b.innerHTML = GRIP;
+    b.dataset.tip = "Перетащите"; b.setAttribute("aria-label", label + " — перетащите или стрелки вверх/вниз");
+    return b;
+  }
+  function sortable(root, o) {
+    // o: item, handle, list (селектор списков, куда можно бросить), listFor(el) (список по элементу под пальцем),
+    //    fixed (элементы, перед которыми бросать нельзя), scroller, onDrop(item), onKey(item, dir)
+    root.addEventListener("keydown", (e) => {
+      const h = e.target.closest && e.target.closest(o.handle);
+      if (!h || !o.onKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+      e.preventDefault(); e.stopPropagation();
+      o.onKey(h.closest(o.item), e.key === "ArrowUp" ? -1 : 1);
+    });
+    root.addEventListener("pointerdown", (e) => {
+      const h = e.target.closest(o.handle);
+      if (!h || h.disabled || !root.contains(h) || e.button > 0) return;
+      const item = h.closest(o.item);
+      if (!item) return;
+      e.preventDefault();
+      closeMenus(null);
+      const r = item.getBoundingClientRect();
+      const home = { parent: item.parentNode, next: item.nextSibling };
+      const ph = document.createElement(item.tagName === "LI" ? "li" : "div");
+      ph.className = "drag-ph"; ph.style.height = r.height + "px";
+      item.after(ph);
+      item.classList.add("dragging");
+      Object.assign(item.style, { width: r.width + "px", left: r.left + "px", top: r.top + "px" });
+      const dy0 = e.clientY - r.top;
+      let lastY = e.clientY, raf = 0, done = false;
+      try { h.setPointerCapture(e.pointerId); } catch (err) {}
+      const scroller = o.scroller ? o.scroller() : null;
+      const place = (x, y) => {
+        item.style.transform = "translateY(" + (y - dy0 - r.top) + "px)";
+        const el = document.elementFromPoint(x, y);
+        if (!el || !root.contains(el)) return;
+        const over = el.closest(o.item);
+        if (over && over !== item && root.contains(over)) {
+          const rr = over.getBoundingClientRect();
+          const before = y < rr.top + rr.height / 2 && !(o.fixed && over.matches(o.fixed));
+          if (before) { if (over.previousSibling !== ph) over.before(ph); }
+          else if (over.nextSibling !== ph) over.after(ph);
+          return;
+        }
+        const list = el.closest(o.list) || (o.listFor && o.listFor(el));
+        if (list && list !== ph.parentNode && root.contains(list)) list.append(ph);
+      };
+      const tick = () => {
+        raf = 0;
+        if (!scroller || done) return;
+        const sr = scroller.getBoundingClientRect();
+        const v = lastY < sr.top + 40 ? -8 : lastY > sr.bottom - 40 ? 8 : 0;
+        if (v) { scroller.scrollTop += v; place(e.clientX, lastY); raf = requestAnimationFrame(tick); }
+      };
+      const move = (ev) => { lastY = ev.clientY; place(ev.clientX, ev.clientY); if (!raf) raf = requestAnimationFrame(tick); };
+      const finish = (cancel) => {
+        if (done) return; done = true;
+        cancelAnimationFrame(raf);
+        h.removeEventListener("pointermove", move);
+        h.removeEventListener("pointerup", up);
+        h.removeEventListener("pointercancel", up);
+        document.removeEventListener("keydown", esc, true);
+        if (cancel) { ph.remove(); home.parent.insertBefore(item, home.next); } else ph.replaceWith(item);
+        item.classList.remove("dragging");
+        item.style.cssText = "";
+        if (!cancel) { item.classList.add("dropped"); setTimeout(() => item.classList.remove("dropped"), 300); o.onDrop(item); }
+      };
+      const up = () => finish(false);
+      const esc = (ev) => { if (ev.key === "Escape") { ev.stopPropagation(); ev.preventDefault(); finish(true); } };
+      h.addEventListener("pointermove", move);
+      h.addEventListener("pointerup", up);
+      h.addEventListener("pointercancel", up);
+      document.addEventListener("keydown", esc, true);
+    });
+  }
+
   let toastTimer;
   function toast(text) {
     const t = $("toast");
@@ -532,7 +621,7 @@
           if (old) await sb.storage.from("wallpapers").remove([old]);
         }, "Заставка не сохранилась. Попробуйте ещё раз.");
       });
-      box.insertBefore(b, box.querySelector(".upload-tile"));
+      box.append(b);
     }
   }
   // превью пресетов: используем те же градиенты, что и для фона
@@ -644,6 +733,7 @@
     document.querySelectorAll("#timesheet [data-tab]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === t)));
     document.querySelectorAll("#timesheet [data-panel]").forEach((p) => { p.hidden = p.dataset.panel !== t; if (!p.hidden) replay(p); });
     $("time-hint").textContent = HINTS[t];
+    document.querySelectorAll("#timesheet .foot-tools").forEach((f) => (f.hidden = f.dataset.for !== t));
     $("time-status").textContent = "";
     if (t === "cal") renderCal();
     if (t === "rem") { loadReminders(); renderBotHint(); }
@@ -745,7 +835,7 @@
   function timerLeft() { return timer.end ? timer.end - Date.now() : timer.left || timer.total; }
   function renderTimer() {
     $("timer-display").textContent = fmtMS(timerLeft());
-    $("timer-go").textContent = timer.end ? "Пауза" : timer.left ? "Продолжить" : "Старт";
+    setIconBtn($("timer-go"), timer.end ? PATHS.pause : PATHS.play, timer.end ? "Пауза" : timer.left ? "Продолжить" : "Старт");
     document.querySelectorAll("#timer-presets button").forEach((b) => b.setAttribute("aria-pressed", String(Number(b.dataset.min) * 60000 === timer.total)));
   }
   $("timer-go").addEventListener("click", () => {
@@ -763,7 +853,7 @@
   const swNow = () => sw.acc + (sw.start ? Date.now() - sw.start : 0);
   function renderSW() {
     $("sw-display").textContent = fmtSW(swNow());
-    $("sw-go").textContent = sw.start ? "Пауза" : sw.acc ? "Продолжить" : "Старт";
+    setIconBtn($("sw-go"), sw.start ? PATHS.pause : PATHS.play, sw.start ? "Пауза" : sw.acc ? "Продолжить" : "Старт");
     $("sw-lap").disabled = !sw.start;
     const ol = $("sw-laps");
     ol.textContent = "";
@@ -924,6 +1014,7 @@
     return true;
   }
   $("rem-form").addEventListener("submit", (e) => { e.preventDefault(); addReminder(); });
+  $("rem-add").addEventListener("click", () => addReminder());
   resetRemForm();
 
   // Если стол открыт в момент напоминания — показываем и здесь
@@ -966,6 +1057,7 @@
       const diff = document.createElement("div"); diff.className = "city-diff";
       name.append(diff);
       const time = document.createElement("div"); time.className = "city-time";
+      if (!local) li.append(gripBtn("Город " + cityName(tz)));
       li.append(name, time);
       if (!local) {
         const del = document.createElement("button");
@@ -1001,6 +1093,16 @@
       li.querySelector(".city-diff").textContent = (d === 0 ? "как у вас" : (d > 0 ? "+" : "−") + Math.abs(d).toString().replace(".", ",") + " ч") + " · " + day;
     });
   }
+  sortable($("city-list"), {
+    item: ".city-item", handle: ".grip", fixed: ".city-item.local",
+    onDrop: () => saveCities([...$("city-list").querySelectorAll(".city-item:not(.local)")].map((li) => li.dataset.tz)),
+    onKey: (li, dir) => {
+      const list = cities().slice(), i = list.indexOf(li.dataset.tz), j = i + dir;
+      if (j < 0 || j >= list.length) return;
+      [list[i], list[j]] = [list[j], list[i]]; saveCities(list);
+      const g = $("city-list").querySelector('.city-item[data-tz="' + li.dataset.tz + '"] .grip'); if (g) g.focus();
+    },
+  });
   function saveCities(list) {
     const prev = cities();
     state.settings = Object.assign({}, state.settings || {}, { cities: list });
@@ -1073,6 +1175,7 @@
     draft = state.links.map((l) => ({ id: l.id, title: l.title, url: l.url, gid: l.group_id || null, removed: false }));
     if (!draft.length && !dgroups.length) { const d = { id: tmp(), title: "", url: "", gid: null, removed: false, isNew: true }; draft.push(d); focusNext = d.id; }
     $("links-status").textContent = "";
+    lastGid = null;
     renderDraft();
     animShow($("linksheet"));
     lockSheets(true);
@@ -1100,6 +1203,7 @@
     sections.forEach((g, gi) => {
       const sec = document.createElement("section");
       sec.className = "lg-sec" + (g.removed ? " removed" : "");
+      sec.dataset.gid = g.id || "";
       const links = draft.filter((d) => d.gid === g.id);
       if (g.id === null && !hasGroups && !links.length) return;
       // заголовок секции
@@ -1108,10 +1212,7 @@
       } else {
         const h = document.createElement("div"); h.className = "lg-head" + (g.bad ? " bad" : "");
         const idx = dgroups.indexOf(g);
-        const move = document.createElement("div"); move.className = "link-move";
-        move.append(
-          tool(P.up, "Группу выше", () => { [dgroups[idx - 1], dgroups[idx]] = [dgroups[idx], dgroups[idx - 1]]; renderDraft(); }, idx === 0 || g.removed),
-          tool(P.down, "Группу ниже", () => { [dgroups[idx + 1], dgroups[idx]] = [dgroups[idx], dgroups[idx + 1]]; renderDraft(); }, idx === dgroups.length - 1 || g.removed));
+        const move = gripBtn("Группа «" + (g.name || "без названия") + "»"); move.classList.add("g-grip"); move.disabled = g.removed;
         const name = document.createElement("input");
         name.type = "text"; name.maxLength = 40; name.placeholder = "Название группы"; name.value = g.name; name.disabled = g.removed;
         name.className = "lg-name"; name.setAttribute("aria-label", "Название группы");
@@ -1132,16 +1233,12 @@
         const ol = document.createElement("ol"); ol.className = "lg-links";
         links.forEach((d, li) => ol.append(linkRow(d, links, li)));
         sec.append(ol);
-        const add = document.createElement("button");
-        add.type = "button"; add.className = "lg-add"; add.innerHTML = ICON(P.plus) + "<span>Ссылка</span>";
-        add.disabled = draft.filter((x) => !x.removed).length >= 30;
-        add.addEventListener("click", () => { const d = { id: tmp(), title: "", url: "", gid: g.id, removed: false, isNew: true }; draft.push(d); focusNext = d.id; renderDraft(); });
-        sec.append(add);
       }
       box.append(sec);
     });
     box.scrollTop = keepScroll;
     $("groups-new").disabled = liveGroups().length >= 15;
+    $("links-new").disabled = draft.filter((x) => !x.removed).length >= 30;
     focusNext = null;
   }
 
@@ -1149,9 +1246,8 @@
     const row = document.createElement("li");
     row.className = "link-row" + (d.removed ? " removed" : "") + (d.bad ? " bad" : "");
     if (d.id === focusNext) row.classList.add("fade-in");
-    const swap = (other) => { const a = draft.indexOf(d), b = draft.indexOf(other); [draft[a], draft[b]] = [draft[b], draft[a]]; renderDraft(); };
-    const move = document.createElement("div"); move.className = "link-move";
-    move.append(tool(P.up, "Выше", () => swap(siblings[li - 1]), li === 0), tool(P.down, "Ниже", () => swap(siblings[li + 1]), li === siblings.length - 1));
+    row.dataset.id = d.id;
+    const move = gripBtn("Ссылка «" + (d.title || d.url || "новая") + "»"); move.classList.add("l-grip");
     const fields = document.createElement("div"); fields.className = "link-fields";
     const t = document.createElement("input"); t.type = "text"; t.maxLength = 40; t.placeholder = "Название"; t.value = d.title; t.disabled = d.removed; t.setAttribute("aria-label", "Название ссылки");
     const u = document.createElement("input"); u.type = "text"; u.maxLength = 500; u.placeholder = "Адрес, например rentikacrm.com"; u.value = d.url; u.disabled = d.removed;
@@ -1207,6 +1303,52 @@
   }
   $("links-list").addEventListener("scroll", () => closeMenus(null), { passive: true });
 
+  // Перетаскивание ссылок (в том числе между группами) и групп
+  function syncFromDom() {
+    const order = [];
+    $("links-list").querySelectorAll(".lg-sec").forEach((sec) => {
+      const gid = sec.dataset.gid || null;
+      sec.querySelectorAll(".link-row").forEach((row) => { const d = draft.find((x) => x.id === row.dataset.id); if (d) { d.gid = gid; order.push(d); } });
+    });
+    draft.filter((d) => !order.includes(d)).forEach((d) => order.push(d));
+    draft = order;
+    const gorder = [...$("links-list").querySelectorAll(".lg-sec")].map((sec) => sec.dataset.gid).filter(Boolean);
+    dgroups.sort((a, b) => gorder.indexOf(a.id) - gorder.indexOf(b.id));
+  }
+  sortable($("links-list"), {
+    item: ".link-row", handle: ".l-grip", list: ".lg-links",
+    listFor: (el) => { const sec = el.closest(".lg-sec:not(.removed)"); return sec && sec.querySelector(".lg-links"); },
+    scroller: () => $("links-list"),
+    onDrop: (row) => { syncFromDom(); lastGid = draft.find((x) => x.id === row.dataset.id).gid; renderDraft(); },
+    onKey: (row, dir) => {
+      const d = draft.find((x) => x.id === row.dataset.id);
+      const sib = draft.filter((x) => x.gid === d.gid);
+      const other = sib[sib.indexOf(d) + dir];
+      if (!other) return;
+      const a = draft.indexOf(d), b = draft.indexOf(other); [draft[a], draft[b]] = [draft[b], draft[a]];
+      renderDraft(); const g = $("links-list").querySelector('.link-row[data-id="' + d.id + '"] .l-grip'); if (g) g.focus();
+    },
+  });
+  sortable($("links-list"), {
+    item: ".lg-sec", handle: ".g-grip", fixed: '.lg-sec[data-gid=""]',
+    scroller: () => $("links-list"),
+    onDrop: () => { syncFromDom(); renderDraft(); },
+    onKey: (sec, dir) => {
+      const i = dgroups.findIndex((g) => g.id === sec.dataset.gid), j = i + dir;
+      if (j < 0 || j >= dgroups.length) return;
+      [dgroups[i], dgroups[j]] = [dgroups[j], dgroups[i]];
+      renderDraft(); const g = $("links-list").querySelector('.lg-sec[data-gid="' + sec.dataset.gid + '"] .g-grip'); if (g) g.focus();
+    },
+  });
+
+  // Новая ссылка — в группу, с которой работали последней (иначе «Без группы»)
+  let lastGid = null;
+  $("links-list").addEventListener("focusin", (e) => { const sec = e.target.closest(".lg-sec"); if (sec) lastGid = sec.dataset.gid || null; });
+  $("links-new").addEventListener("click", () => {
+    const gid = lastGid && liveGroups().some((g) => g.id === lastGid) ? lastGid : null;
+    const d = { id: tmp(), title: "", url: "", gid, removed: false, isNew: true };
+    draft.push(d); focusNext = d.id; renderDraft();
+  });
   $("groups-new").addEventListener("click", () => {
     const g = { id: tmp(), name: "", removed: false, isNew: true };
     dgroups.push(g); focusNext = g.id; renderDraft();

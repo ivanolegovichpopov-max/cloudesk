@@ -197,15 +197,14 @@
       </button>
     </div>
     <div id="presets" class="presets">
-      <label class="upload-tile" for="wall-file">
-        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg>
-        <span>Своё фото</span>
-      </label>
     </div>
     <input id="wall-file" type="file" accept="image/jpeg,image/png,image/webp" class="sr">
     <div class="sheet-foot">
       <p class="hint">Цвет кнопок подстраивается под заставку. Своё фото видно только вам. <span id="wall-status" role="status"></span></p>
-      <div class="foot-actions"><button type="button" class="btn-primary" data-close>Готово</button></div>
+      <div class="foot-actions">
+        <label class="tool" for="wall-file" data-tip="Загрузить своё фото" aria-label="Загрузить своё фото"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg></label>
+        <button type="button" class="btn-primary" data-close>Готово</button>
+      </div>
     </div>
   </div>
 </div>
@@ -236,7 +235,6 @@
         <button type="button" class="tool" id="cal-prev" data-tip="Предыдущий месяц" aria-label="Предыдущий месяц"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M15 6l-6 6 6 6"/></svg></button>
         <div id="cal-title" class="cal-title"></div>
         <button type="button" class="tool" id="cal-next" data-tip="Следующий месяц" aria-label="Следующий месяц"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M9 6l6 6-6 6"/></svg></button>
-        <button type="button" class="btn-ghost" id="cal-today">Сегодня</button>
       </div>
       <div class="cal-grid" id="cal-grid"></div>
     </section>
@@ -248,19 +246,10 @@
         <label for="timer-min">Своё время, мин</label>
         <input id="timer-min" type="number" min="1" max="600" step="1" inputmode="numeric" placeholder="например, 45">
       </div>
-      <div class="ctrl-row">
-        <button type="button" class="btn-ghost" id="timer-reset">Сброс</button>
-        <button type="button" class="btn-primary" id="timer-go">Старт</button>
-      </div>
     </section>
 
     <section class="tab-panel center" data-panel="sw" role="tabpanel" hidden>
       <div id="sw-display" class="big-time">00:00,0</div>
-      <div class="ctrl-row">
-        <button type="button" class="btn-ghost" id="sw-reset">Сброс</button>
-        <button type="button" class="btn-ghost" id="sw-lap" disabled>Круг</button>
-        <button type="button" class="btn-primary" id="sw-go">Старт</button>
-      </div>
       <ol id="sw-laps" class="laps"></ol>
     </section>
 
@@ -295,7 +284,6 @@
               <div class="tp-col"><div class="tp-head">Минуты</div><div id="tp-mins" class="tp-list"></div></div>
             </div>
           </div>
-          <button type="submit" class="btn-primary">Добавить</button>
         </div>
       </form>
       <ul id="rem-list" class="rem-list"></ul>
@@ -304,19 +292,22 @@
 
     <section class="tab-panel" data-panel="cities" role="tabpanel" hidden>
       <ul id="city-list" class="city-list"></ul>
-      <div class="city-add field">
-        <button type="button" id="city-add" class="pick-btn" aria-haspopup="listbox" aria-expanded="false" data-menu="city-pop">
-          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
-          <span>Добавить город</span>
-          <svg class="chev" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M6 15l6-6 6 6"/></svg>
-        </button>
-        <div id="city-pop" class="pop pop-up" role="listbox" hidden></div>
-      </div>
     </section>
 
     <div class="sheet-foot">
       <p id="time-hint" class="hint"></p>
-      <div class="foot-actions"><button type="button" class="btn-primary" data-close>Готово</button></div>
+      <div class="foot-actions">
+        <span class="foot-tools" data-for="cal"><button type="button" id="cal-today" class="tool" data-tip="Сегодня" aria-label="Сегодня"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M4 6h16v14H4zM4 10h16M8 3v4M16 3v4M11 14h2v2h-2z"/></svg></button></span>
+        <span class="foot-tools" data-for="timer" hidden><button type="button" id="timer-reset" class="tool" data-tip="Сброс" aria-label="Сброс"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M4 4v6h6M5.6 15a8 8 0 1 0 1.8-8.4L4 10"/></svg></button><button type="button" id="timer-go" class="tool accent" data-tip="Старт" aria-label="Старт"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M8 5v14l11-7z"/></svg></button></span>
+        <span class="foot-tools" data-for="sw" hidden><button type="button" id="sw-reset" class="tool" data-tip="Сброс" aria-label="Сброс"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M4 4v6h6M5.6 15a8 8 0 1 0 1.8-8.4L4 10"/></svg></button><button type="button" id="sw-lap" class="tool" data-tip="Круг" aria-label="Круг" disabled><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M5 21V4M5 4h11l-2 4 2 4H5"/></svg></button><button type="button" id="sw-go" class="tool accent" data-tip="Старт" aria-label="Старт"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M8 5v14l11-7z"/></svg></button></span>
+        <span class="foot-tools" data-for="rem" hidden><button type="button" id="rem-add" class="tool accent" data-tip="Добавить напоминание" aria-label="Добавить напоминание"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14"/></svg></button></span>
+        <span class="foot-tools" data-for="cities" hidden>
+          <span class="field"><button type="button" id="city-add" class="tool" data-tip="Добавить город" aria-label="Добавить город" aria-haspopup="listbox" aria-expanded="false" data-menu="city-pop"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14"/></svg></button>
+            <div id="city-pop" class="pop pop-up pop-end" role="listbox" hidden></div>
+          </span>
+        </span>
+        <button type="button" class="btn-primary" data-close>Готово</button>
+      </div>
     </div>
   </div>
 </div>
@@ -336,14 +327,14 @@
     </div>
     <div class="links-edit">
       <div id="links-list" class="links-list"></div>
-      <button type="button" id="groups-new" class="upload-tile row-tile">
-        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M3 7h6l2 2h10v10H3zM12 12v5M9.5 14.5h5"/></svg>
-        <span>Добавить группу</span>
-      </button>
     </div>
     <div class="sheet-foot">
-      <p class="hint">Ссылки показываются в списке «Ссылки» по группам и в этом порядке. Перенести ссылку в другую группу — кнопка с папкой. Изменения сохраняются при закрытии.</p>
-      <div class="foot-actions"><button type="button" class="btn-primary" data-close>Готово</button></div>
+      <p class="hint">Новая ссылка добавляется в группу, с которой вы работали последней. Перенести — кнопка с папкой.</p>
+      <div class="foot-actions">
+        <button type="button" id="links-new" class="tool accent" data-tip="Добавить ссылку" aria-label="Добавить ссылку"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14"/></svg></button>
+        <button type="button" id="groups-new" class="tool" data-tip="Добавить группу" aria-label="Добавить группу"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M3 7h6l2 2h10v10H3zM12 12v5M9.5 14.5h5"/></svg></button>
+        <button type="button" class="btn-primary" data-close>Готово</button>
+      </div>
     </div>
   </div>
 </div>
