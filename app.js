@@ -584,12 +584,11 @@
     notes: {
       name: "Заметки", icon: IC.note, spans: [2, 3], addTip: "Новая заметка",
       limit: 20, limitTip: "В поле уже 20 заметок — это предел. Удалите ненужные или создайте ещё одно поле «Заметки»",
-      opts: [{ key: "manual", label: "Свой порядок — перетаскиванием" }],
       add: (f) => openEditor(null, f.id),
       render: (f, body) => {
-        const manual = !!(f.settings && f.settings.manual);
+        const manual = true; // порядок всегда свой: закреплённые сверху, новая — первой, дальше — как расставили
         const list = state.items.filter((it) => it.type === "note" && it.section_id === f.id)
-          .sort((a, b) => (!!b.pinned - !!a.pinned) || (manual ? a.position - b.position : 0) || (new Date(b.edited_at || b.created_at) - new Date(a.edited_at || a.created_at)));
+          .sort((a, b) => (!!b.pinned - !!a.pinned) || a.position - b.position || (new Date(b.created_at) - new Date(a.created_at)));
         if (!list.length) { const e = document.createElement("div"); e.className = "fld-empty"; e.textContent = "Заметок нет"; body.append(e); return; }
         const grid = document.createElement("div"); grid.className = "notes"; grid.dataset.field = f.id;
         const hasPinned = list.some((n) => !!n.pinned), hasOther = list.some((n) => !n.pinned);
@@ -612,7 +611,6 @@
       total: (f) => state.items.filter((it) => it.type === "task" && it.section_id === f.id).length,
       // итог дня в заголовке: «3 из 5» и тонкая полоска
       sub: (f) => { const d = daySummary(f); return d.total ? { text: d.done + " из " + d.total, p: Math.round((d.done / d.total) * 100), full: d.done === d.total, tip: "Сегодня сделано " + d.done + " из " + d.total } : null; },
-      opts: [{ key: "week", label: "В 3 колонки — неделя по дням вместо доски" }],
     },
   };
   const APP_ORDER = ["notes", "tasks"];
@@ -975,7 +973,7 @@
     const byGroup = { over: [], today: [], tomorrow: [], later: [], none: [] };
     live.forEach((t) => byGroup[taskGroup(t, now)].push(t));
     const NAME = Object.fromEntries(TASK_GROUPS);
-    if (f.span === 3 && f.settings && f.settings.week) {
+    if (f.span === 3) {
       // неделя: 7 колонок с сегодняшнего дня; просроченные — в «Сегодня»; дальше недели и без срока — строкой ниже
       const board = document.createElement("div"); board.className = "tk-board week";
       const days = Array.from({ length: 7 }, (_, i) => addDays(now, i));
@@ -991,15 +989,6 @@
       const lastKey = dayKey(days[6]);
       const rest = live.filter((t) => !tData(t).due || keyOf(t) > lastKey);
       if (rest.length) wrap.append(mkGroup("rest", "Позже и без срока", rest, "tk-rest", "none"));
-    } else if (f.span === 3) {
-      // доска: «Сегодня» (с просроченными) · «Завтра» · «Позже» (и «Без срока»); перенос между колонками меняет срок
-      const board = document.createElement("div"); board.className = "tk-board";
-      const c1 = document.createElement("div"); c1.className = "tk-col";
-      if (byGroup.over.length) c1.append(mkGroup("over", NAME.over, byGroup.over, "", "over"));
-      c1.append(mkGroup("today", NAME.today, byGroup.today));
-      const c2 = document.createElement("div"); c2.className = "tk-col"; c2.append(mkGroup("tomorrow", NAME.tomorrow, byGroup.tomorrow));
-      const c3 = document.createElement("div"); c3.className = "tk-col"; c3.append(mkGroup("later", NAME.later, byGroup.later), mkGroup("none", NAME.none, byGroup.none));
-      board.append(c1, c2, c3); wrap.append(board);
     } else if (f.span === 2) {
       // две половины: слева «сегодня» (просроченные и сегодня), справа — всё дальше
       const board = document.createElement("div"); board.className = "tk-board halves";
@@ -2173,7 +2162,7 @@
       const row = { title, body, color: ed.color, pinned: ed.pinned, data, edited_at: new Date().toISOString() };
       let res;
       if (ed.id) res = await sb.from("items").update(row).eq("id", ed.id).select(ITEM_COLS).single();
-      else res = await sb.from("items").insert(Object.assign({ type: "note", section_id: ed.sec, position: nextPos(ed.sec) }, row)).select(ITEM_COLS).single();
+      else res = await sb.from("items").insert(Object.assign({ type: "note", section_id: ed.sec, position: state.items.filter((x) => x.type === "note" && x.section_id === ed.sec).reduce((m, x) => Math.min(m, x.position), 0) - 1 }, row)).select(ITEM_COLS).single();
       if (res.error) {
         console.error(res.error);
         if (String(res.error.message).includes("notes_limit")) { ed.dirty = false; $("ed-status").textContent = "В поле уже 20 заметок — эта не сохранится"; return; }
