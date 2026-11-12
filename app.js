@@ -456,7 +456,7 @@
           if (old) await sb.storage.from("wallpapers").remove([old]);
         } catch (e) { console.error(e); toast("Заставка не сохранилась. Попробуйте ещё раз."); }
       });
-      box.append(b);
+      box.insertBefore(b, box.querySelector(".upload-tile"));
     }
   }
   // превью пресетов: используем те же градиенты, что и для фона

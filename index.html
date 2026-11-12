@@ -131,16 +131,17 @@
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M6 6l12 12M18 6 6 18"/></svg>
       </button>
     </div>
-    <div id="presets" class="presets"></div>
-    <div class="upload-row">
-      <label class="btn-primary upload-btn" for="wall-file">
-        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg>
-        Загрузить своё фото
+    <div id="presets" class="presets">
+      <label class="upload-tile" for="wall-file">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg>
+        <span>Своё фото</span>
       </label>
-      <input id="wall-file" type="file" accept="image/jpeg,image/png,image/webp" class="sr">
+    </div>
+    <input id="wall-file" type="file" accept="image/jpeg,image/png,image/webp" class="sr">
+    <div class="sheet-foot">
+      <p class="hint">Цвет кнопок подстраивается под заставку. Своё фото видно только вам.</p>
       <span id="wall-status" class="ed-status" role="status"></span>
     </div>
-    <p class="hint">Цвет кнопок подстраивается под заставку. Фото уменьшается до размера экрана и хранится в закрытом хранилище: видно только вам.</p>
   </div>
 </div>
 
