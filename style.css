@@ -457,7 +457,6 @@ html:has(.dragging), html:has(.dragging) * { cursor: grabbing !important; user-s
 .dropped { animation: fade-in .2s ease-out; }
 /* пустая группа — место, куда можно перетащить ссылку */
 .lg-links:empty, .lg-links:has(> .drag-ph:only-child) { min-height: 40px; border: 1px dashed var(--line); border-radius: var(--r); }
-.lg-links:empty::before { content: "Перетащите сюда ссылки"; display: grid; place-items: center; height: 40px; font-size: 12px; color: var(--ink-dim); }
 .city-item .grip { margin-left: -6px; }
 .foot-tools { display: inline-flex; align-items: center; gap: 2px; }
 .tool.accent { color: var(--accent); }
@@ -494,6 +493,21 @@ html, body { overflow-x: hidden; }
 .gcolor:hover { background: var(--hover); }
 .gcolor[aria-checked="true"] { border-color: var(--accent); }
 .pop.lg-pop { width: auto; }
+
+/* кнопки-значки без текста */
+.icon-primary {
+  width: 36px; height: 36px; display: grid; place-items: center; border: 0; border-radius: var(--r);
+  background: var(--accent); color: var(--accent-ink);
+}
+.icon-primary:hover { filter: brightness(1.06); }
+.tool.danger { color: var(--danger); }
+.tool.danger:hover { background: color-mix(in srgb, var(--danger) 14%, transparent); }
+.foot-spacer { flex: 1; }
+.tabs button { display: grid; place-items: center; }
+.tabs button svg { width: 18px; height: 18px; }
+.top-btn { width: 38px; padding: 0; }
+.top-chev { display: none; }
+.search-cancel { color: var(--on-wall); }
 
 /* ---------- Всё системное — в стиле стола ---------- */
 html { -webkit-tap-highlight-color: transparent; }

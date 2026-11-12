@@ -651,9 +651,7 @@
       b.className = "preset";
       b.dataset.preset = p.id;
       b.setAttribute("role", "radio");
-      const s = document.createElement("span");
-      s.textContent = p.name;
-      b.append(s);
+      b.dataset.tip = p.name; b.setAttribute("aria-label", p.name);
       b.addEventListener("click", () => {
         const old = state.settings && state.settings.wallpaper_path;
         setWall(p.id, null);
@@ -1074,7 +1072,7 @@
     if (!botUser) {
       try { const r = await fetch(AUTH_FN, { headers: { apikey: SB_KEY } }); const j = await r.json(); botUser = j.username || null; } catch (e) {}
     }
-    if (botUser) $("time-hint").textContent = "Напоминание придёт сообщением от бота @" + botUser + ". Если сообщения не приходят, откройте бота в Telegram и нажмите «Старт».";
+    if (botUser) $("rem-add").dataset.tip = "Добавить — придёт сообщением от @" + botUser;
   }
 
   /* Города */
@@ -1182,7 +1180,7 @@
     if (!state.links.length) {
       const e = document.createElement("div");
       e.className = "menu-empty";
-      e.textContent = "Ссылок пока нет. Добавьте первую в настройке ниже.";
+      e.textContent = "Ссылок нет";
       list.append(e);
       return;
     }
@@ -1278,7 +1276,6 @@
         sw.addEventListener("click", (e) => { e.stopPropagation(); openColorPick(sw, g); });
         h.append(move, sw, name, count, act);
         sec.append(h);
-        if (g.removed) { const n = document.createElement("div"); n.className = "link-removed-note"; n.textContent = "Группа будет удалена при закрытии, её ссылки перейдут в «Без группы»"; sec.append(n); }
         if (g.id === focusNext) setTimeout(() => name.focus(), 20);
       }
       if (!g.removed) {
@@ -1307,8 +1304,7 @@
     t.addEventListener("input", () => { d.title = t.value; });
     u.addEventListener("input", () => { d.url = u.value; d.bad = false; row.classList.remove("bad"); });
     fields.append(t, u);
-    if (d.removed) { const note = document.createElement("div"); note.className = "link-removed-note"; note.textContent = "Будет удалена при закрытии"; fields.append(note); }
-    const acts = document.createElement("div"); acts.className = "link-acts";
+        const acts = document.createElement("div"); acts.className = "link-acts";
     if (!d.removed) {
       acts.append(tool(P.x, "Удалить", () => { if (d.isNew) draft.splice(draft.indexOf(d), 1); else d.removed = true; renderDraft(); }));
     } else acts.append(tool(P.undo, "Вернуть", () => { d.removed = false; renderDraft(); }));
@@ -1543,7 +1539,7 @@
     if (links.length) groups.push(["Ссылки", links]);
     if (!groups.length) {
       const e = document.createElement("div"); e.className = "menu-empty";
-      e.textContent = "Ничего не найдено в заметках, напоминаниях и ссылках";
+      e.textContent = "Ничего не найдено";
       pop.append(e);
     }
     groups.forEach(([name, els]) => {
