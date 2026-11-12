@@ -601,7 +601,7 @@
       count: (f) => state.items.filter((it) => it.type === "note" && it.section_id === f.id).length,
     },
     tasks: {
-      name: "Задачи", icon: IC.task, spans: [1, 2, 3], addTip: "Новая задача",
+      name: "Задачи", icon: IC.task, spans: [1, 2], addTip: "Новая задача",
       limit: 100, limitTip: "В поле уже 100 задач — это предел. Удалите ненужные или создайте ещё одно поле «Задачи»",
       // «+» — как у заметок: сразу полное окно новой задачи (быстрая строка в поле остаётся для коротких)
       add: (f) => openItem(null, "task", f.id),
@@ -816,9 +816,7 @@
     // начало описания — у всех задач, при любой ширине поля (в одну строку с многоточием)
     const desc = (t.body || "").trim();
     if (desc) { const d = document.createElement("span"); d.className = "tk-desc"; d.textContent = desc.split("\n")[0]; meta.append(d); }
-    // в узкой карточке недели описание — отдельной строкой под сроком (в обычной строке — в конце второй строки)
-    const desc2 = desc ? Object.assign(document.createElement("div"), { className: "tk-desc2", textContent: desc.split("\n")[0] }) : null;
-    main.append(meta); if (desc2) main.append(desc2); // у всех задач две строки: название и под ним срок — строки одной высоты
+    main.append(meta); // у всех задач две строки: название и под ним срок — строки одной высоты
     li.append(cb, main);
     // при наведении: срок и удалить
     const acts = document.createElement("div"); acts.className = "tk-acts";
@@ -973,23 +971,7 @@
     const byGroup = { over: [], today: [], tomorrow: [], later: [], none: [] };
     live.forEach((t) => byGroup[taskGroup(t, now)].push(t));
     const NAME = Object.fromEntries(TASK_GROUPS);
-    if (f.span === 3) {
-      // неделя: 7 колонок с сегодняшнего дня; просроченные — в «Сегодня»; дальше недели и без срока — строкой ниже
-      const board = document.createElement("div"); board.className = "tk-board week";
-      const days = Array.from({ length: 7 }, (_, i) => addDays(now, i));
-      const keyOf = (t) => dayKey(new Date(tData(t).due));
-      days.forEach((d, i) => {
-        const k = dayKey(d);
-        let list = live.filter((t) => tData(t).due && keyOf(t) === k && taskGroup(t, now) !== "over");
-        if (i === 0) list = byGroup.over.concat(list);
-        const name = i === 0 ? "Сегодня" : i === 1 ? "Завтра" : fmtWdDate.format(d).replace(/\.$/, "");
-        board.append(mkGroup(i === 0 ? "today" : "d" + i, name, list, "tk-col" + (d.getDay() % 6 === 0 ? " weekend" : ""), "d:" + k));
-      });
-      wrap.append(board);
-      const lastKey = dayKey(days[6]);
-      const rest = live.filter((t) => !tData(t).due || keyOf(t) > lastKey);
-      if (rest.length) wrap.append(mkGroup("rest", "Позже и без срока", rest, "tk-rest", "none"));
-    } else if (f.span === 2) {
+    if (f.span >= 2) {
       // две половины: слева «сегодня» (просроченные и сегодня), справа — всё дальше
       const board = document.createElement("div"); board.className = "tk-board halves";
       const c1 = document.createElement("div"); c1.className = "tk-col";

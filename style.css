@@ -1131,35 +1131,14 @@ input.bad { border-color: var(--danger) !important; }
 #it-prio[aria-pressed="true"], #it-done[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
 .task-due-pop .menu-item { justify-content: flex-start; }
 
-/* ---------- Задачи в широком поле: две половины (2 кол.), доска и неделя (3 кол.), серии, итог дня ---------- */
-.tk-board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: start; min-width: 0; }
+/* ---------- Задачи в 2 колонки: две половины; серии, итог дня ---------- */
+.tk-board { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; min-width: 0; }
 .tk-board.halves { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.tk-board.week { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
-.tk-col, .tk-board.week > .tk-grp { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 /* пустое место под задачу — ровно высотой строки задачи (8 + 20 + 2 + 16 + 8 = 54 px) */
 :root { --tk-row: 54px; }
 .tk-board .tk-list { min-height: var(--tk-row); border-radius: var(--r); }
 /* пустая колонка — пунктирное место, куда можно перетащить задачу */
 .tk-board .tk-list:empty, .tk-board .tk-list:has(> .drag-ph:only-child) { border: 1px dashed var(--line); }
-/* узкие колонки недели: без значков при наведении, название в одну строку с многоточием */
-/* справа у карточки недели узкая полоса под значки: сверху ⋮⋮ (перенос), снизу «Удалить»; срок меняется переносом */
-/* карточка недели — та же задача: справа столбиком ⋮⋮, «Срок», «Удалить» (отступы 6 px) */
-.tk-board.week .tk { padding-right: 30px; gap: 6px; }
-.tk-board.week .tk-acts { top: auto; bottom: 6px; right: 6px; transform: none; flex-direction: column; gap: 9px; }
-.tk-board.week .tk-acts .tool { width: 20px; height: 20px; }
-/* ручка ⋮⋮ в неделе — в правом верхнем углу карточки, место в строке не занимает: берёте и переносите на другой день */
-.tk-board.week .tk .tk-grip { position: absolute; top: 6px; right: 6px; width: 20px; height: 20px; }
-/* в неделе карточки выше: название до двух строк, срок и значки переносятся — ничего не обрезается;
-   все карточки и пустые места одной высоты: 8 + 40 + 2 + 32 + 8 = 90 px */
-.tk-board.week { --tk-row: 90px; }
-.tk-board.week .tk { height: var(--tk-row); }
-/* в узкой карточке: название в одну строку, под ним срок со значками, ещё ниже — строка описания */
-.tk-board.week .tk-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tk-desc2 { display: none; }
-.tk-board.week .tk-meta > .tk-desc { display: none; }
-.tk-board.week .tk-desc2 { display: block; font-size: 12px; line-height: 16px; color: var(--ink-dim); opacity: .85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tk-rest { margin-top: 4px; }
-/* в широком поле вторая строка тоже в одну строку: срок, значки, серия, начало описания */
 .tk-desc { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .85; }
 .tk-streak { display: inline-flex; align-items: center; gap: 2px; color: var(--accent); font-weight: 600; }
 .tk-hist { display: inline-flex; align-items: center; gap: 2px; flex: none; }
@@ -1177,8 +1156,6 @@ input.bad { border-color: var(--danger) !important; }
 .fld-sub.full { color: var(--accent); }
 @media (max-width: 760px) {
   .tk-board, .tk-board.halves { grid-template-columns: minmax(0, 1fr); }
-  .tk-board.week { grid-template-columns: minmax(0, 1fr); }
-  .tk-board.week .tk-grp { gap: 4px; }
 }
 
 /* окно задачи: история повторяющейся задачи — серия и последние 14 раз */
