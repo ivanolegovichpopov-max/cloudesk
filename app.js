@@ -491,6 +491,7 @@
   const APPS = {
     notes: {
       name: "Заметки", icon: IC.note, spans: [2, 3], addTip: "Новая заметка",
+      limit: 20, limitTip: "В поле уже 20 заметок — это предел. Удалите ненужные или создайте ещё одно поле «Заметки»",
       opts: [{ key: "manual", label: "Свой порядок — перетаскиванием" }],
       add: (f) => openEditor(null, f.id),
       render: (f, body) => {
@@ -659,7 +660,7 @@
     });
     renderBoard();
     const res = await Promise.all(ops);
-    if (res.some((r) => r.error)) { toast("Порядок не сохранился — проверьте интернет."); loadItems(); }
+    if (res.some((r) => r.error)) { toast(res.some((r) => r.error && String(r.error.message).includes("notes_limit")) ? "В том поле уже 20 заметок." : "Порядок не сохранился — проверьте интернет."); loadItems(); }
   }
   sortable($("board"), {
     item: ".note", handle: ".note-grip", list: ".notes", grid: true,
@@ -721,7 +722,7 @@
       const tt = document.createElement("span"); tt.className = "fld-name"; tt.textContent = app ? app.name : "Поле";
       title.append(tt);
       const n = app && app.count ? app.count(f) : 0;
-      if (n) { const cnt = document.createElement("span"); cnt.className = "count"; cnt.textContent = String(n); title.append(cnt); }
+      if (n) { const cnt = document.createElement("span"); cnt.className = "count"; cnt.textContent = app && app.limit && n >= app.limit * 0.8 ? n + " / " + app.limit : String(n); title.append(cnt); }
       const set = document.createElement("button");
       set.type = "button"; set.className = "tool fld-set"; set.dataset.tip = "Настройки поля"; set.setAttribute("aria-label", "Настройки поля «" + tt.textContent + "»");
       set.innerHTML = svgIco(IC.set, 18);
@@ -732,7 +733,10 @@
         add.type = "button"; add.className = "icon-primary fld-add";
         add.dataset.tip = app.addTip; add.setAttribute("aria-label", app.addTip);
         add.innerHTML = svgIco(IC.plus, 18, 2.2);
-        add.addEventListener("click", () => app.add(f));
+        // предел записей в поле: «+» бледнеет, подсказка и нажатие объясняют почему
+        const full = app.limit && app.count && app.count(f) >= app.limit;
+        if (full) { add.setAttribute("aria-disabled", "true"); add.classList.add("off"); add.dataset.tip = app.limitTip; }
+        add.addEventListener("click", () => (full ? toast(app.limitTip) : app.add(f)));
         head.append(add);
       }
       const body = document.createElement("div"); body.className = "fld-body";
@@ -921,7 +925,11 @@
     const secIds = [...new Set(((own && own.data) || []).map((r) => r.section_id).filter(Boolean))];
     if (secIds.length) await sb.from("sections").update({ deleted_at: null, deleted_batch: null }).in("id", secIds).not("deleted_at", "is", null);
     const res = await Promise.all(TRASH_TABLES.map((t) => sb.from(t).update({ deleted_at: null, deleted_batch: null }).eq("deleted_batch", batch)));
-    if (res.some((r) => r.error)) { toast("Не получилось вернуть — проверьте интернет."); return false; }
+    if (res.some((r) => r.error)) {
+      const full = res.some((r) => r.error && String(r.error.message).includes("notes_limit"));
+      toast(full ? "Не вернуть: в поле уже 20 заметок. Освободите место." : "Не получилось вернуть — проверьте интернет.");
+      return false;
+    }
     await Promise.all([loadItems(), loadLinks()]);
     if (!$("setsheet").hidden) { if (!linksChanged()) prepareLinks(); renderTrash(); }
     return true;
@@ -1307,6 +1315,7 @@
       else res = await sb.from("items").insert(Object.assign({ type: "note", section_id: ed.sec, position: nextPos(ed.sec) }, row)).select(ITEM_COLS).single();
       if (res.error) {
         console.error(res.error);
+        if (String(res.error.message).includes("notes_limit")) { ed.dirty = false; $("ed-status").textContent = "В поле уже 20 заметок — эта не сохранится"; return; }
         ed.dirty = true;
         $("ed-status").textContent = "Не сохранилось — проверьте интернет";
         return;

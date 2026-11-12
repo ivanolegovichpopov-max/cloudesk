@@ -956,3 +956,6 @@ input.bad { border-color: var(--danger) !important; }
 .note-foot .note-meta { margin-right: auto; }
 .note-line b, .ed-rich b { font-weight: 650; }
 .ed-fmt:disabled { opacity: .3; }
+
+/* кнопка на пределе: видна, но бледная; нажатие объясняет, почему нельзя */
+.icon-primary.off { opacity: .4; cursor: default; filter: none; }
