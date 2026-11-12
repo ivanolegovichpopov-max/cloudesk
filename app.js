@@ -321,6 +321,8 @@
     $("ed-pin").setAttribute("aria-pressed", String(ed.pinned));
     $("ed-delete").hidden = !n;
     $("ed-confirm").hidden = true;
+    $("ed-actions").hidden = false;
+    $("ed-title").textContent = n ? "Заметка" : "Новая заметка";
     $("ed-status").textContent = n ? "Сохранено" : "";
     setEdColor(n ? n.color : "paper");
     $("editor").hidden = false;
@@ -393,8 +395,8 @@
     $("ed-pin").setAttribute("aria-pressed", String(ed.pinned));
     queueSave(0);
   });
-  $("ed-delete").addEventListener("click", () => { $("ed-confirm").hidden = false; });
-  $("ed-confirm-no").addEventListener("click", () => { $("ed-confirm").hidden = true; });
+  $("ed-delete").addEventListener("click", () => { $("ed-confirm").hidden = false; $("ed-actions").hidden = true; });
+  $("ed-confirm-no").addEventListener("click", () => { $("ed-confirm").hidden = true; $("ed-actions").hidden = false; });
   $("ed-confirm-yes").addEventListener("click", () => deleteNote(false));
   $("editor").querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", closeEditor));
 
