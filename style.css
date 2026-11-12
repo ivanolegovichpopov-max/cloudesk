@@ -509,6 +509,10 @@ html, body { overflow-x: hidden; }
 .top-chev { display: none; }
 .search-cancel { color: var(--on-wall); }
 
+/* «Готово» — галочка вверху справа каждого окна: сохраняет и закрывает */
+.tool.done { width: 36px; height: 36px; background: var(--accent); color: var(--accent-ink); opacity: 1; }
+.tool.done:hover { background: var(--accent); filter: brightness(1.06); }
+
 /* ---------- Всё системное — в стиле стола ---------- */
 html { -webkit-tap-highlight-color: transparent; }
 ::selection { background: var(--accent); color: var(--accent-ink); }
