@@ -366,11 +366,16 @@
   });
 
   /* ---------- Пользователь ---------- */
+  $("user-saved").addEventListener("click", () => setTimeout(() => closeMenus(null), 0));
   function renderUser() {
     const p = state.profile || {};
     const name = [p.first_name, p.last_name].filter(Boolean).join(" ") || p.username || "Вы";
     $("user-name").textContent = name;
     $("user-handle").textContent = p.username ? "@" + p.username : "Telegram";
+    // нажатие на себя — «Избранное» в Telegram (чат с самим собой)
+    const tgId = ((state.user && state.user.email) || "").match(/^tg(\d+)@/);
+    const saved = p.username && /^[A-Za-z0-9_]{4,32}$/.test(p.username) ? "https://t.me/" + p.username : tgId ? "tg://user?id=" + tgId[1] : "https://t.me/";
+    $("user-saved").href = saved;
     const ava = $("user-ava");
     ava.textContent = "";
     ava.style.backgroundImage = "";
