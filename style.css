@@ -1006,7 +1006,12 @@ input.bad { border-color: var(--danger) !important; }
 .tk-add-ico { position: absolute; left: 10px; display: grid; color: var(--ink-dim); pointer-events: none; }
 .tk-input { flex: 1; width: 100%; padding-left: 34px !important; }
 .tk-input:focus + .tk-add-ico, .tk-add:focus-within .tk-add-ico { color: var(--accent); }
-.tk-hint { margin-top: -6px; padding: 0 2px 0 34px; font-size: 12px; font-weight: 600; color: var(--accent); }
+.tk-hint {
+  position: absolute; right: 10px; top: 50%; transform: translateY(-50%); max-width: 55%; pointer-events: none;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 600; color: var(--accent);
+}
+.tk-input.nope { animation: tk-nope .5s ease; }
+@keyframes tk-nope { 0%, 100% { border-color: var(--line); } 20%, 60% { border-color: var(--danger); } }
 .tk-hint:not([hidden]) { animation: fade-in .15s ease-out; }
 .tk-grp { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .tk-gh {
@@ -1110,4 +1115,3 @@ input.bad { border-color: var(--danger) !important; }
 .it-sub .cl-box { width: 16px; height: 16px; }
 #it-prio[aria-pressed="true"], #it-done[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
 .task-due-pop .menu-item { justify-content: flex-start; }
-.tk-hint.bad { color: var(--danger); }

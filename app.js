@@ -852,35 +852,52 @@
     const hint = document.createElement("div"); hint.className = "tk-hint"; hint.hidden = true;
     const full = all.length >= TASK_LIM.field;
     if (full) { inp.disabled = true; inp.placeholder = "В поле уже " + TASK_LIM.field + " задач — это предел"; }
+    // распознанный срок — справа внутри строки (форма не раздвигается)
     const showHint = () => {
       const v = inp.value.trim();
-      if (!v) { hint.hidden = true; return; }
+      if (!v) { hint.hidden = true; inp.style.paddingRight = ""; return; }
       const p = parseTask(v), parts = [];
-      const long = p.title.length > TASK_LIM.title;
-      hint.classList.toggle("bad", long);
-      if (long) { hint.textContent = LONG_TITLE + " (сейчас " + p.title.length + ")"; hint.hidden = false; return; }
       if (p.due) parts.push(dueLabel(p.due, p.allday));
       if (p.repeat) parts.push(REPEAT_TXT[p.repeat]);
-      if (p.prio) parts.push("важная");
-      hint.textContent = parts.length ? parts.join(" · ") : "";
+      if (p.prio) parts.push("!");
+      hint.textContent = parts.join(" · ");
       hint.hidden = !parts.length;
+      inp.style.paddingRight = parts.length ? hint.offsetWidth + 18 + "px" : "";
     };
-    inp.addEventListener("input", showHint);
-    inp.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.stopPropagation(); inp.value = ""; showHint(); inp.blur(); } });
+    /* Предел названия — самим полем: лишнее просто не печатается. Слова срока («завтра в 15:00») в название
+       не входят, поэтому недописанное слово, похожее на срок, пропускаем — вдруг это «завтра» */
+    const DATE_WORDS = ["сегодня", "завтра", "послезавтра", "через", "полчаса", "час", "часа", "часов", "минут", "мин", "день", "дня", "дней", "неделю", "недели", "недель",
+      "каждый", "каждую", "каждое", "ежедневно", "еженедельно", "ежемесячно", "по", "будням", "будний", "месяц", "неделю", "важно", "важное", "важная", "на",
+      "в", "во", "к", "утра", "дня", "вечера", "ночи", "ч"].concat(Object.keys(WD), Object.keys(MON));
+    const maybeDate = (w) => !w || /^[\d.:!]+(ч)?$/.test(w) || DATE_WORDS.some((x) => x.startsWith(w.toLowerCase()));
+    const fits = (v) => { const t = parseTask(v.trim() || "").title; return !v.trim() || t.length <= TASK_LIM.title || maybeDate(v.split(" ").pop()); };
+    let lastOk = "";
+    inp.addEventListener("beforeinput", (e) => {
+      if (!/^insert/.test(e.inputType)) return;
+      const add = e.data != null ? e.data : e.dataTransfer ? e.dataTransfer.getData("text/plain") : "";
+      const v = inp.value.slice(0, inp.selectionStart) + add + inp.value.slice(inp.selectionEnd);
+      if (!fits(v)) e.preventDefault();
+    });
+    inp.addEventListener("input", () => {
+      if (!fits(inp.value)) { inp.value = lastOk; } // вставка и автозамена — тоже в пределе
+      lastOk = inp.value; showHint();
+    });
+    inp.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.stopPropagation(); inp.value = ""; lastOk = ""; showHint(); inp.blur(); } });
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       const v = inp.value.trim();
       if (!v) return;
       const p = parseTask(v);
-      if (p.title.length > TASK_LIM.title) { showHint(); return; }
-      inp.value = ""; showHint();
+      // недописанное слово так и не стало сроком — название длиннее предела: строка коротко мигает рамкой
+      if (p.title.length > TASK_LIM.title) { inp.classList.remove("nope"); void inp.offsetWidth; inp.classList.add("nope"); return; }
+      inp.value = ""; lastOk = ""; showHint();
       const minPos = all.reduce((m, x) => Math.min(m, x.position), 0);
       const data = { due: p.due, allday: p.allday, remind: p.due && !p.allday ? 0 : null, repeat: p.repeat, prio: p.prio, subs: [], tz: TZ };
       const r = await createItem({ type: "task", section_id: f.id, position: minPos - 1, title: p.title, body: "", data, remind_at: remindAtFor(data.due, data.allday, data.remind) });
-      if (!r) { inp.value = v; showHint(); }
+      if (!r) { inp.value = v; lastOk = v; showHint(); }
     });
-    form.append(plus, inp);
-    wrap.append(form, hint);
+    form.append(plus, inp, hint);
+    wrap.append(form);
     // группы
     const live = all.filter((t) => !t.done);
     const now = new Date();
