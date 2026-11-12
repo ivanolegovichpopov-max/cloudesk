@@ -548,7 +548,7 @@
     const body = document.createElement("div"); body.className = "note-body";
     const lines = (n.body || "").split("\n");
     let shown = 0;
-    for (let i = 0; i < lines.length && shown < 3; i++) {
+    for (let i = 0; i < lines.length && shown < 12; i++) { // лишнее скроет высота карточки
       if (!lines[i].trim()) continue;
       const pl = parseLine(lines[i]);
       const row = document.createElement("div"); row.className = "note-line";
@@ -583,6 +583,27 @@
     el.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target === el) openEditor(n.id); });
     return el;
   }
+  // Если заметок мало, карточки растягиваются по высоте и заполняют поле; если много — 136 px и прокрутка
+  const NOTE_MIN = 112; // два ряда (и линия закреплённых) помещаются в поле без прокрутки
+  function fitNotes() {
+    document.querySelectorAll(".fld .notes").forEach((grid) => {
+      const body = grid.closest(".fld-body");
+      const cards = grid.querySelectorAll(":scope > .note");
+      if (!body || !cards.length) return;
+      const cs = getComputedStyle(grid);
+      const cols = cs.gridTemplateColumns.split(" ").filter(Boolean).length || 1;
+      const gap = parseFloat(cs.rowGap) || 10;
+      const pinned = grid.querySelectorAll(":scope > .note .note-pin").length;
+      const rows = Math.ceil(pinned / cols) + Math.ceil((cards.length - pinned) / cols);
+      const sep = grid.querySelector(".notes-sep") ? 1 + gap : 0;
+      const bs = getComputedStyle(body);
+      const avail = body.clientHeight - (parseFloat(bs.paddingTop) || 0) - (parseFloat(bs.paddingBottom) || 0);
+      const h = Math.max(NOTE_MIN, Math.floor((avail - sep - gap * (rows - 1)) / rows));
+      grid.style.setProperty("--note-h", h + "px");
+    });
+  }
+  window.addEventListener("resize", () => requestAnimationFrame(fitNotes));
+
   // выбор цвета заметки прямо с карточки
   const ncPop = document.createElement("div");
   ncPop.className = "pop note-color-pop"; ncPop.hidden = true; ncPop.setAttribute("role", "radiogroup"); ncPop.setAttribute("aria-label", "Цвет заметки");
@@ -709,6 +730,7 @@
     frag.append(nb);
     board.append(frag);
     boardFirst = false;
+    requestAnimationFrame(fitNotes);
   }
 
   /* Поля переставляются перетаскиванием за ручку ⋮⋮ */

@@ -868,7 +868,7 @@ input.bad { border-color: var(--danger) !important; }
 @media (max-width: 1100px) { .fld[data-span="3"] .notes { --nc: 4; } .fld[data-span="2"] .notes { --nc: 2; } }
 @media (max-width: 760px) { .fld[data-span] .notes { --nc: 2; } }
 .fld .note {
-  position: relative; min-width: 0; height: 136px; display: flex; flex-direction: column; gap: 4px; padding: 12px 12px 10px;
+  position: relative; min-width: 0; height: var(--note-h, 112px); display: flex; flex-direction: column; gap: 4px; padding: 12px 12px 10px;
   border: 1px solid var(--line); border-radius: var(--r); background: var(--n-bg); color: var(--n-fg);
   text-align: left; cursor: pointer; outline: none; overflow: hidden;
 }
@@ -876,8 +876,9 @@ input.bad { border-color: var(--danger) !important; }
 .note-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .fld .note-title { flex: 1; min-width: 0; margin: 0; padding: 0; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
 .fld .note-pin { position: static; flex: none; opacity: .6; display: grid; }
-.note-body { flex: 1; min-height: 0; display: grid; align-content: start; gap: 2px; font-size: 13px; line-height: 1.4; overflow: hidden; }
-.note-line { min-width: 0; opacity: .8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.note-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 2px; font-size: 13px; line-height: 1.4; overflow: hidden;
+  -webkit-mask-image: linear-gradient(#000 calc(100% - 12px), transparent); mask-image: linear-gradient(#000 calc(100% - 12px), transparent); }
+.note-line { flex: none; min-width: 0; opacity: .8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .note-line.cl { display: flex; align-items: center; gap: 6px; opacity: .9; }
 .note-line.cl span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .note-line.cl.done span { text-decoration: line-through; opacity: .6; }
