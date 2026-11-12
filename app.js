@@ -292,6 +292,7 @@
     state.settings = sets.data || null;
     applyTheme(state.settings && state.settings.theme);
     loadReminders();
+    loadLinks();
     await applyWallFromSettings();
   }
 
@@ -1010,11 +1011,164 @@
     });
   }
 
+  /* ---------- Быстрые ссылки ---------- */
+  state.links = [];
+  function normUrl(u) {
+    u = (u || "").trim();
+    if (!u) return "";
+    if (!/^https?:\/\//i.test(u)) u = "https://" + u;
+    try { const x = new URL(u); return /^https?:$/.test(x.protocol) && x.hostname.includes(".") ? x.href : null; } catch (e) { return null; }
+  }
+  const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch (e) { return u; } };
+  function linkEl(l, cls) {
+    const a = document.createElement("a");
+    a.className = cls;
+    a.href = l.url; a.target = "_blank"; a.rel = "noopener noreferrer";
+    const ico = document.createElement("span"); ico.className = "link-ico"; ico.textContent = (l.title.trim()[0] || "•").toUpperCase();
+    const t = document.createElement("span"); t.className = "link-title"; t.textContent = l.title;
+    a.append(ico, t);
+    a.addEventListener("click", () => closeMenus(null));
+    return a;
+  }
+  // В шапку — сколько помещается, остальное — в список «Ещё»
+  function renderLinks() {
+    const row = $("links-row"), pop = $("links-pop");
+    row.textContent = ""; pop.textContent = "";
+    state.links.forEach((l) => row.append(linkEl(l, "link-chip")));
+    $("links-more-wrap").hidden = true;
+    fitLinks();
+  }
+  function fitLinks() {
+    const row = $("links-row"), pop = $("links-pop");
+    // вернуть всё из «Ещё» обратно и перемерить
+    [...pop.children].forEach((a) => { a.className = "link-chip"; row.append(a); });
+    $("links-more-wrap").hidden = true;
+    const narrow = window.matchMedia("(max-width: 560px)").matches;
+    const chips = [...row.children];
+    if (!chips.length) return;
+    const left = row.getBoundingClientRect().left, avail = row.clientWidth;
+    const rightOf = (c) => c.getBoundingClientRect().right - left;
+    let over = narrow ? chips : chips.filter((c) => rightOf(c) > avail + 1);
+    if (!over.length) return;
+    $("links-more-wrap").hidden = false;
+    // освобождаем место под кнопку «Ещё»
+    if (!narrow) {
+      const moreW = $("links-more-wrap").offsetWidth + 6;
+      over = chips.filter((c) => rightOf(c) > avail - moreW + 1);
+    }
+    over.forEach((a) => { a.className = "menu-item link-item"; pop.append(a); });
+    $("links-more-n").textContent = narrow ? "" : String(over.length);
+    $("links-more").querySelector(".more-label").textContent = narrow ? "Ссылки" : "Ещё";
+  }
+  let fitT;
+  window.addEventListener("resize", () => { clearTimeout(fitT); fitT = setTimeout(fitLinks, 120); });
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => fitLinks());
+
+  async function loadLinks() {
+    const { data, error } = await sb.from("links").select("id,title,url,position").order("position").order("created_at");
+    if (!error) { state.links = data || []; renderLinks(); }
+  }
+
+  // Окно настройки: правим черновик, сохраняем при закрытии
+  let draft = [], linksClosing = false, newSeq = 0;
+  function openLinks() {
+    closeMenus(null);
+    draft = state.links.map((l) => ({ id: l.id, title: l.title, url: l.url, removed: false }));
+    if (!draft.length) draft.push({ id: "new" + ++newSeq, title: "", url: "", removed: false, isNew: true });
+    $("links-status").textContent = "";
+    renderDraft();
+    animShow($("linksheet"));
+    lockSheets(true);
+  }
+  $("links-add").addEventListener("click", openLinks);
+  $("btn-links").addEventListener("click", openLinks);
+
+  const ICON = (d, size = 16) => '<svg viewBox="0 0 24 24" width="' + size + '" height="' + size + '" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="' + d + '"/></svg>';
+  function renderDraft(focusId) {
+    const ol = $("links-list");
+    ol.textContent = "";
+    draft.forEach((d, i) => {
+      const li = document.createElement("li");
+      li.className = "link-row" + (d.removed ? " removed" : "") + (d.bad ? " bad" : "");
+      if (d.isNew && d.id === focusId) li.classList.add("fade-in");
+      const move = document.createElement("div"); move.className = "link-move";
+      const up = document.createElement("button"); up.type = "button"; up.className = "tool"; up.innerHTML = ICON("M6 15l6-6 6 6"); up.dataset.tip = "Выше"; up.setAttribute("aria-label", "Выше"); up.disabled = i === 0;
+      const dn = document.createElement("button"); dn.type = "button"; dn.className = "tool"; dn.innerHTML = ICON("M6 9l6 6 6-6"); dn.dataset.tip = "Ниже"; dn.setAttribute("aria-label", "Ниже"); dn.disabled = i === draft.length - 1;
+      up.addEventListener("click", () => { [draft[i - 1], draft[i]] = [draft[i], draft[i - 1]]; renderDraft(); });
+      dn.addEventListener("click", () => { [draft[i + 1], draft[i]] = [draft[i], draft[i + 1]]; renderDraft(); });
+      move.append(up, dn);
+      const fields = document.createElement("div"); fields.className = "link-fields";
+      const t = document.createElement("input"); t.type = "text"; t.maxLength = 40; t.placeholder = "Название"; t.value = d.title; t.disabled = d.removed;
+      t.setAttribute("aria-label", "Название ссылки");
+      const u = document.createElement("input"); u.type = "text"; u.maxLength = 500; u.placeholder = "Адрес, например rentikacrm.com"; u.value = d.url; u.disabled = d.removed;
+      u.setAttribute("aria-label", "Адрес ссылки"); u.inputMode = "url"; u.autocomplete = "off"; u.spellcheck = false;
+      t.addEventListener("input", () => { d.title = t.value; d.bad = false; li.classList.remove("bad"); });
+      u.addEventListener("input", () => { d.url = u.value; d.bad = false; li.classList.remove("bad");
+        if (!d.title.trim() && !d.titleTouched) { /* название подставим из адреса при сохранении */ } });
+      t.addEventListener("change", () => (d.titleTouched = true));
+      fields.append(t, u);
+      const act = document.createElement("button"); act.type = "button"; act.className = "tool";
+      if (d.removed) { act.innerHTML = ICON("M9 14l-4-4 4-4M5 10h9a5 5 0 0 1 0 10h-2"); act.dataset.tip = "Вернуть"; act.setAttribute("aria-label", "Вернуть"); act.addEventListener("click", () => { d.removed = false; renderDraft(); }); }
+      else { act.innerHTML = ICON("M6 6l12 12M18 6 6 18"); act.dataset.tip = "Удалить"; act.setAttribute("aria-label", "Удалить"); act.addEventListener("click", () => { if (d.isNew) draft.splice(i, 1); else d.removed = true; renderDraft(); }); }
+      li.append(move, fields, act);
+      if (d.removed) { const note = document.createElement("div"); note.className = "link-removed-note"; note.textContent = "Будет удалена при закрытии"; fields.append(note); }
+      ol.append(li);
+      if (d.id === focusId) setTimeout(() => (d.title ? u : t).focus(), 20);
+    });
+    $("links-new").disabled = draft.filter((d) => !d.removed).length >= 30;
+  }
+  $("links-new").addEventListener("click", () => {
+    const d = { id: "new" + ++newSeq, title: "", url: "", removed: false, isNew: true };
+    draft.push(d); renderDraft(d.id);
+    const ol = $("links-list"); ol.scrollTop = ol.scrollHeight;
+  });
+
+  async function closeLinks() {
+    if (linksClosing) return;
+    linksClosing = true;
+    try {
+      // проверка: у каждой заполненной строки должен быть правильный адрес
+      let bad = 0;
+      const keep = [];
+      for (const d of draft) {
+        if (d.removed) continue;
+        if (!d.title.trim() && !d.url.trim()) continue; // пустая строка — просто не сохраняем
+        const url = normUrl(d.url);
+        if (!url) { d.bad = true; bad++; continue; }
+        keep.push({ d, url, title: (d.title.trim() || hostOf(url)).slice(0, 40) });
+      }
+      if (bad) { renderDraft(); $("links-status").textContent = bad === 1 ? "Проверьте адрес ссылки" : "Проверьте адреса ссылок"; return; }
+      $("links-status").textContent = "Сохраняю…";
+      const ops = [];
+      for (const d of draft) if (d.removed && !d.isNew) ops.push(sb.from("links").delete().eq("id", d.id));
+      keep.forEach(({ d, url, title }, i) => {
+        const orig = state.links.find((l) => l.id === d.id);
+        if (d.isNew) ops.push(sb.from("links").insert({ title, url, position: i }));
+        else if (!orig || orig.title !== title || orig.url !== url || orig.position !== i) ops.push(sb.from("links").update({ title, url, position: i }).eq("id", d.id));
+      });
+      const res = await Promise.all(ops);
+      const err = res.find((r) => r.error);
+      await loadLinks();
+      if (err) {
+        console.error(err.error);
+        draft = state.links.map((l) => ({ id: l.id, title: l.title, url: l.url, removed: false }));
+        renderDraft();
+        $("links-status").textContent = "Сохранилось не всё — проверьте интернет и нажмите «Готово» ещё раз";
+        return;
+      }
+      $("links-status").textContent = "";
+      animHide($("linksheet"), 170);
+      lockSheets(false);
+    } finally { linksClosing = false; }
+  }
+  $("linksheet").querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", closeLinks));
+
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
     if (!$("editor").hidden) closeEditor();
     else if (!$("wallsheet").hidden) closeWall();
     else if (!$("timesheet").hidden) closeTime();
+    else if (!$("linksheet").hidden) closeLinks();
   });
 
   // Клик по фону вокруг окна закрывает окно и не доходит до того, что под ним
