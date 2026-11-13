@@ -592,6 +592,9 @@ button:disabled { cursor: default; opacity: .45; }
 .pop-up { top: auto; bottom: calc(100% + 4px); }
 .pop-up .pop-scroll { max-height: 246px; overflow: auto; }
 .pop-cal { width: 280px; display: grid; gap: 6px; }
+/* список внутри окна — поверх окна, своё место считает скрипт (placeSheetPop) */
+.pop.sheet-pop { position: fixed; z-index: 60; right: auto; bottom: auto; margin: 0; min-width: 0; overflow-y: auto; overscroll-behavior: contain; }
+.pop.sheet-pop.pop-time, .pop.sheet-pop.pop-cal { overflow: visible; }
 .dp-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
 .dp-grid .cal-dow { min-height: 22px; font-size: 10px; }
 .dp-day { height: 32px; border: 0; border-radius: 4px; background: transparent; font-size: 13px; font-variant-numeric: tabular-nums; }
@@ -1422,6 +1425,13 @@ input.fs-ren { width: 100%; min-width: 0; height: 22px !important; padding: 0 6p
 #hbsheet .it-form > .ed-head, #hbsheet .hb-when { flex: none; }
 #hbsheet .hb-when { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .menu-sep { height: 1px; margin: 4px 6px; background: var(--line); }
+#hb-days-pop { width: 290px; }
+#hb-count-pop { width: 230px; }
+.hb-num-row { grid-template-columns: repeat(5, 1fr); }
+.hb-wd-row { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; padding: 4px; }
+.hb-wd { height: 32px; padding: 0; border: 1px solid var(--line); border-radius: var(--r); background: transparent; font-size: 12px; font-weight: 600; color: var(--ink-dim); }
+.hb-wd:hover { background: var(--hover); color: var(--ink); }
+.hb-wd[aria-checked="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .hb-remind-pop { width: 200px; }
 .hb-tp { width: auto; padding-top: 4px; }
 .tk-hist i.off { background: transparent; box-shadow: inset 0 0 0 1px rgba(127,127,127,.3); }

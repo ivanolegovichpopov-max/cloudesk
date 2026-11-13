@@ -437,7 +437,31 @@
       const open = m.hidden || m.classList.contains("is-leaving");
       if (open) animShow(m); else animHide(m, 120);
       btn.setAttribute("aria-expanded", String(open));
+      if (open && m.closest(".sheet")) { placeSheetPop(btn, m); requestAnimationFrame(() => placeSheetPop(btn, m)); }
     }));
+  /* Выпадающий список внутри окна лежит поверх окна (position: fixed): окно не растёт и не прокручивается,
+     верх и низ окна стоят на месте. Открывается вниз, а если снизу места мало — вверх; не выходит за край окна и экрана,
+     длинный список прокручивается внутри себя. */
+  function placeSheetPop(btn, m) {
+    if (m.hidden) return;
+    const sheet = btn.closest(".sheet").getBoundingClientRect(), r = btn.getBoundingClientRect(), g = 8;
+    m.classList.add("sheet-pop");
+    m.style.maxHeight = ""; m.style.minWidth = r.width + "px"; // не уже своей кнопки (100% от экрана тут не годится)
+    const top = Math.max(g, sheet.top + g), bottom = Math.min(window.innerHeight - g, sheet.bottom - g);
+    const below = bottom - r.bottom - 4, above = r.top - 4 - top;
+    const h = m.scrollHeight, down = h <= below || below >= above;
+    const room = down ? below : above;
+    m.style.maxHeight = Math.max(120, room) + "px";
+    const hh = Math.min(h, Math.max(120, room));
+    const w = m.offsetWidth, left = Math.min(Math.max(r.left, sheet.left + g), sheet.right - g - w);
+    m.style.left = Math.max(g, left) + "px";
+    m.style.top = (down ? r.bottom + 4 : r.top - 4 - hh) + "px";
+  }
+  // прокрутка содержимого окна закрывает открытый список (он не едет вместе с содержимым)
+  document.addEventListener("scroll", (e) => {
+    const t = e.target; if (!t || !t.closest || !t.closest(".sheet") || t.closest(".pop")) return;
+    if (document.querySelector(".sheet-pop:not([hidden])")) closeMenus(null);
+  }, true);
   document.addEventListener("click", (e) => {
     // путь события запоминается в момент клика — работает, даже если кнопку внутри списка уже перерисовали
     const inside = e.composedPath().some((n) => n.classList && (n.classList.contains("menu") || n.classList.contains("pop")));
@@ -678,7 +702,7 @@
      Привычка — запись items типа habit: название (до 20), data = { days: [0..6] или null — каждый день, target — раз в день (1…20),
      remind: "21:00" или null, log: { "2026-11-13": сколько раз }, tz }. Отметки сами «сбрасываются»: каждый день — свой ключ.
      Напоминание в Telegram — если к своему времени привычка не отмечена (remind_at — ближайший такой момент, сервер переносит дальше). */
-  const HB_LIM = { field: 30, target: 20 };
+  const HB_LIM = { field: 30, target: 30 };
   const HB_WD = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"], HB_WD_ORDER = [1, 2, 3, 4, 5, 6, 0];
   const hbData = (h) => (h.data && typeof h.data === "object" ? h.data : {});
   const hbOn = (d, date) => !Array.isArray(d.days) || !d.days.length || d.days.includes(date.getDay());
@@ -819,7 +843,7 @@
   /* Окно привычки — как окно задачи: крупное название с линией, под ним «чипы» (дни, сколько раз, напоминание),
      ниже серия и 4 недели квадратиками; внизу значками — «Отметить сегодня» и «Удалить». */
   const hb_ = { id: null, sec: null, days: null, target: 1, remind: null, today: false };
-  const HB_COUNTS = [1, 2, 3, 4, 5, 6, 8, 10, 12, 15, 20];
+  const HB_COUNTS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15, 20, 25, 30];
   const HB_CHECK = '<svg class="check" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
   function hbItem(label, checked, onClick, role = "menuitemradio") {
     const b = document.createElement("button"); b.type = "button"; b.className = "menu-item"; b.setAttribute("role", role); b.setAttribute("aria-checked", String(!!checked));
@@ -835,18 +859,36 @@
     const dp = $("hb-days-pop"); dp.textContent = "";
     [["Каждый день", all, null], ["По будням", wk, [1, 2, 3, 4, 5]], ["По выходным", we, [0, 6]]].forEach(([l, on, v]) => dp.append(hbItem(l, on, () => { hb_.days = v; hbRenderForm(); closeMenus(null); })));
     const sep = document.createElement("div"); sep.className = "menu-sep"; dp.append(sep);
-    HB_WD_ORDER.forEach((wd) => dp.append(hbItem(HB_WD[wd], all || hb_.days.includes(wd), () => {
-      let days = hb_.days ? hb_.days.slice() : [0, 1, 2, 3, 4, 5, 6];
-      days = days.includes(wd) ? days.filter((x) => x !== wd) : days.concat(wd);
-      if (!days.length) { toast("Нужен хотя бы один день"); return; }
-      hb_.days = days.length === 7 ? null : days.sort(); hbRenderForm();
-    }, "menuitemcheckbox")));
+    // отдельные дни — одной строкой квадратиков (список не закрывается)
+    const row = document.createElement("div"); row.className = "hb-wd-row"; row.setAttribute("role", "group"); row.setAttribute("aria-label", "Свои дни");
+    HB_WD_ORDER.forEach((wd) => {
+      const on = all || hb_.days.includes(wd), b = document.createElement("button"); b.type = "button"; b.className = "hb-wd"; b.textContent = HB_WD[wd];
+      b.setAttribute("role", "checkbox"); b.setAttribute("aria-checked", String(on));
+      b.addEventListener("click", (e) => {
+        e.stopPropagation();
+        let days = hb_.days ? hb_.days.slice() : [0, 1, 2, 3, 4, 5, 6];
+        days = days.includes(wd) ? days.filter((x) => x !== wd) : days.concat(wd);
+        if (!days.length) { toast("Нужен хотя бы один день"); return; }
+        hb_.days = days.length === 7 ? null : days.sort(); hbRenderForm();
+      });
+      row.append(b);
+    });
+    dp.append(row);
     // сколько раз в день: 1 — чип только значком
     const cl = $("hb-count-label"), cb = $("hb-count-btn"), cOn = hb_.target > 1;
     cl.textContent = cOn ? hb_.target + " " + plural(hb_.target, "раз", "раза", "раз") + " в день" : ""; cl.hidden = !cOn; cb.classList.toggle("on", cOn);
     cb.dataset.tip = "Сколько раз в день"; cb.setAttribute("aria-label", "Сколько раз в день: " + hb_.target);
     const cp = $("hb-count-pop"); cp.textContent = "";
-    HB_COUNTS.forEach((n) => cp.append(hbItem(n === 1 ? "Один раз в день" : n + " " + plural(n, "раз", "раза", "раз") + " в день", n === hb_.target, () => { hb_.target = n; hbRenderForm(); closeMenus(null); })));
+    // сколько раз — сеткой чисел, как дни недели
+    const lab = document.createElement("div"); lab.className = "menu-label"; lab.textContent = "Раз в день"; cp.append(lab);
+    const grid = document.createElement("div"); grid.className = "hb-wd-row hb-num-row";
+    HB_COUNTS.forEach((n) => {
+      const b = document.createElement("button"); b.type = "button"; b.className = "hb-wd"; b.textContent = n;
+      b.setAttribute("role", "menuitemradio"); b.setAttribute("aria-checked", String(n === hb_.target)); b.setAttribute("aria-label", n + " " + plural(n, "раз", "раза", "раз") + " в день");
+      b.addEventListener("click", (e) => { e.stopPropagation(); hb_.target = n; hbRenderForm(); closeMenus(null); });
+      grid.append(b);
+    });
+    cp.append(grid);
     // напоминание: выключено — чип только значком
     const rl = $("hb-remind-label"), rb = $("hb-remind-btn");
     rl.textContent = hb_.remind || ""; rl.hidden = !hb_.remind; rb.classList.toggle("on", !!hb_.remind);
@@ -871,13 +913,6 @@
   }
   $("hb-remind-off").addEventListener("click", (e) => { e.stopPropagation(); hb_.remind = null; hbRenderForm(); closeMenus(null); });
   $("hb-remind-btn").addEventListener("click", () => setTimeout(hbRenderTP, 0));
-  // списки чипов прижимаются к той стороне, где есть место
-  ["hb-days", "hb-count", "hb-remind"].forEach((k) => $(k + "-btn").addEventListener("click", () => {
-    const pop = $(k + "-pop"); if (pop.hidden) return;
-    pop.style.left = ""; pop.style.right = "";
-    const sheet = pop.closest(".sheet").getBoundingClientRect(), r = pop.getBoundingClientRect();
-    if (r.left < sheet.left + 8) { pop.style.left = "0"; pop.style.right = "auto"; }
-  }));
   $("hb-today").addEventListener("click", () => { hb_.today = !hb_.today; hbRenderForm(); });
   function openHabit(id, secId) {
     closeMenus(null);
@@ -3291,13 +3326,6 @@
     e.stopImmediatePropagation(); closeMenus(null); toast("Сначала выберите дату");
   }, true));
   $("it-prio").addEventListener("click", () => { id_.prio = !id_.prio; renderItTask(); });
-  // список открывается под чипом и не выходит за край окна: прижимается к той стороне, где есть место
-  ["it-remind", "it-repeat"].forEach((k) => $(k + "-btn").addEventListener("click", () => {
-    const pop = $(k + "-pop"); if (pop.hidden) return;
-    pop.style.left = ""; pop.style.right = "";
-    const sheet = pop.closest(".sheet").getBoundingClientRect(), r = pop.getBoundingClientRect();
-    if (r.left < sheet.left + 8) { pop.style.left = "0"; pop.style.right = "auto"; }
-  }));
   function renderSubs(focusIdx) {
     const ol = $("it-subs"); ol.textContent = "";
     $("it-subs-box").hidden = !id_.subs.length; // сначала показать список — иначе новый подпункт не получит курсор
