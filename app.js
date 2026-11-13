@@ -578,6 +578,7 @@
     contacts: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0",
     game: "M5 20c0-4 2-7 7-7s7 3 7 7zM6 13 5 5l4 3M18 13l1-8-4 3M12 13a5 5 0 0 0 0-10 5 5 0 0 0 0 10z",
     files: "M3 7h6l2 2h10v10H3zM12 12v5M9.5 14.5h5",
+    habits: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM8 12.5l2.5 2.5L16 9.5",
     music: "M9 18V6l10-2v12M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM19 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0z",
     web: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18",
     tools: "M5 3h14v18H5zM8 7h8M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01M8 18h.01M12 18h.01M16 18h.01",
@@ -644,6 +645,15 @@
       // место на столе: «2,4 МБ из 10 МБ» и полоска (общее для всех полей «Файлы» этого стола)
       sub: (f) => { const u = deskUsed(f.desk_id); if (!u) return null; const p = Math.min(100, Math.round((u / FS_QUOTA) * 100)); return { text: fmtSize(u) + " из 10 МБ", p, warn: p >= 90, tip: "Файлы на этом столе занимают " + fmtSize(u) + " из 10 МБ" }; },
     },
+    habits: {
+      name: "Привычки", icon: IC.habits, spans: [1, 2], addTip: "Новая привычка",
+      limit: 30, limitTip: "В поле уже 30 привычек — это предел",
+      add: (f) => openHabit(null, f.id),
+      render: (f, body) => renderHabits(f, body),
+      count: (f) => state.items.filter((it) => it.type === "habit" && it.section_id === f.id).length,
+      // итог дня в заголовке: «3 из 5» и полоска
+      sub: (f) => { const d = hbSummary(f); return d.total ? { text: d.done + " из " + d.total, p: Math.round((d.done / d.total) * 100), full: d.done === d.total, tip: "Сегодня отмечено " + d.done + " из " + d.total } : null; },
+    },
     music: {
       name: "Музыка", icon: IC.music, spans: [1],
       render: (f, body) => renderMusic(f, body),
@@ -657,7 +667,212 @@
       render: (f, body) => renderGame(f, body),
     },
   };
-  const APP_ORDER = ["notes", "tasks", "tools", "contacts", "files", "web", "music", "game"];
+  const APP_ORDER = ["notes", "tasks", "habits", "tools", "contacts", "files", "web", "music", "game"];
+  /* ---------- Приложение «Привычки» (1 или 2 колонки) ----------
+     Привычка — запись items типа habit: название (до 20), data = { days: [0..6] или null — каждый день, target — раз в день (1…20),
+     remind: "21:00" или null, log: { "2026-11-13": сколько раз }, tz }. Отметки сами «сбрасываются»: каждый день — свой ключ.
+     Напоминание в Telegram — если к своему времени привычка не отмечена (remind_at — ближайший такой момент, сервер переносит дальше). */
+  const HB_LIM = { field: 30, target: 20 };
+  const HB_WD = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"], HB_WD_ORDER = [1, 2, 3, 4, 5, 6, 0];
+  const hbData = (h) => (h.data && typeof h.data === "object" ? h.data : {});
+  const hbOn = (d, date) => !Array.isArray(d.days) || !d.days.length || d.days.includes(date.getDay());
+  const hbCount = (d, key) => Number((d.log || {})[key]) || 0;
+  const hbTarget = (d) => Math.min(HB_LIM.target, Math.max(1, Number(d.target) || 1));
+  function hbStreak(h, now = new Date()) {
+    const d = hbData(h), t = hbTarget(d), born = new Date(h.created_at || now); born.setHours(0, 0, 0, 0);
+    const x = new Date(now); x.setHours(0, 0, 0, 0);
+    if (!(hbOn(d, x) && hbCount(d, dayKey(x)) >= t)) x.setDate(x.getDate() - 1); // сегодня ещё не отмечено — серия не рвётся
+    let n = 0;
+    for (let i = 0; i < 400 && x >= born; i++, x.setDate(x.getDate() - 1)) {
+      if (!hbOn(d, x)) continue;
+      if (hbCount(d, dayKey(x)) >= t) n++; else break;
+    }
+    return n;
+  }
+  // ближайший момент напоминания: запланированный день, время ещё не прошло, и в этот день не отмечено
+  function hbNextRemind(d, now = new Date()) {
+    const m = String(d.remind || "").match(/^(\d{1,2}):(\d{2})$/);
+    if (!m) return null;
+    for (let i = 0; i < 8; i++) {
+      const x = new Date(now); x.setDate(x.getDate() + i); x.setHours(Number(m[1]), Number(m[2]), 0, 0);
+      if (x <= now || !hbOn(d, x) || hbCount(d, dayKey(x)) >= hbTarget(d)) continue;
+      return x.toISOString();
+    }
+    return null;
+  }
+  const hbDaysText = (d) => (!Array.isArray(d.days) || !d.days.length || d.days.length === 7 ? "" : d.days.length === 5 && [1, 2, 3, 4, 5].every((x) => d.days.includes(x)) ? "будни" : HB_WD_ORDER.filter((x) => d.days.includes(x)).map((x) => HB_WD[x].toLowerCase()).join(", "));
+  function hbSummary(f) {
+    const now = new Date(), key = dayKey(now);
+    const list = state.items.filter((it) => it.type === "habit" && it.section_id === f.id && hbOn(hbData(it), now));
+    const done = list.filter((h) => hbCount(hbData(h), key) >= hbTarget(hbData(h))).length;
+    return { done, total: list.length };
+  }
+  // отметка: +1 до цели; на выполненной — сброс дня (с «Вернуть»)
+  async function hbTick(h) {
+    const d = hbData(h), key = dayKey(new Date()), t = hbTarget(d), cur = hbCount(d, key);
+    const log = Object.assign({}, d.log || {});
+    // старше 400 дней не храним
+    const cut = dayKey(new Date(Date.now() - 400 * 86400000));
+    Object.keys(log).forEach((k) => { if (k < cut) delete log[k]; });
+    const next = cur >= t ? 0 : cur + 1;
+    if (next) log[key] = next; else delete log[key];
+    const data = Object.assign({}, d, { log, tz: TZ });
+    const ok = await patchItem(h.id, { data, remind_at: hbNextRemind(data), sent_at: null, failed_at: null });
+    if (ok && next === 0 && cur) toast("Отметка за сегодня снята", "Вернуть", () => { const l2 = Object.assign({}, hbData(h).log || {}, { [key]: cur }); const d2 = Object.assign({}, hbData(h), { log: l2 }); patchItem(h.id, { data: d2, remind_at: hbNextRemind(d2), sent_at: null, failed_at: null }); });
+  }
+  const HB_ICO = { bell: "M6 10a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6zM10 20a2 2 0 0 0 4 0", check: "M5 12.5l4.5 4.5L19 7.5" };
+  // кружок отметки: одна отметка — галочка, несколько — кольцо «2/3»
+  function hbMark(h) {
+    const d = hbData(h), t = hbTarget(d), c = Math.min(t, hbCount(d, dayKey(new Date()))), full = c >= t;
+    const b = document.createElement("button"); b.type = "button"; b.className = "hb-mark" + (full ? " full" : "");
+    const tip = full ? "Сделано — нажмите, чтобы снять" : t > 1 ? "Отметить: " + (c + 1) + " из " + t : "Отметить";
+    b.dataset.tip = tip; b.setAttribute("aria-label", tip + ": «" + h.title + "»");
+    if (t > 1 && !full) {
+      const r = 15, L = 2 * Math.PI * r, p = c / t;
+      b.innerHTML = '<svg viewBox="0 0 36 36" width="32" height="32" aria-hidden="true"><circle cx="18" cy="18" r="' + r + '" fill="none" stroke="currentColor" stroke-opacity=".3" stroke-width="2.5"/><circle cx="18" cy="18" r="' + r + '" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="' + (L * p) + " " + L + '" transform="rotate(-90 18 18)"/></svg>';
+      const n = document.createElement("span"); n.className = "hb-n"; n.textContent = c + "/" + t; b.append(n);
+    } else b.innerHTML = svgIco(HB_ICO.check, 16, 2.4);
+    b.addEventListener("click", (e) => { e.stopPropagation(); if (!full) b.classList.add("pop"); hbTick(h); });
+    return b;
+  }
+  // неделя квадратиками (в 2 колонки): последние 7 дней, сегодня — справа
+  function hbWeek(h, n = 7) {
+    const d = hbData(h), t = hbTarget(d), wrap = document.createElement("div"); wrap.className = "hb-week";
+    const now = new Date(); now.setHours(0, 0, 0, 0);
+    for (let i = n - 1; i >= 0; i--) {
+      const x = new Date(now); x.setDate(x.getDate() - i);
+      const c = hbCount(d, dayKey(x)), cell = document.createElement("span");
+      cell.className = "hb-day" + (!hbOn(d, x) ? " off" : c >= t ? " on" : c ? " part" : "") + (i === 0 ? " today" : "");
+      cell.dataset.tip = fmtWdDate.format(x) + (!hbOn(d, x) ? " — не по плану" : " — " + (c >= t ? "сделано" : c ? c + " из " + t : "нет"));
+      const l = document.createElement("i"); l.textContent = HB_WD[x.getDay()].toLowerCase(); cell.append(l);
+      wrap.append(cell);
+    }
+    return wrap;
+  }
+  const hbSeen = new Set();
+  function renderHabits(f, body) {
+    const all = state.items.filter((it) => it.type === "habit" && it.section_id === f.id).sort((a, b) => a.position - b.position || (new Date(a.created_at) - new Date(b.created_at)));
+    if (!all.length) { const e = document.createElement("div"); e.className = "tk-empty"; e.textContent = "Привычек нет — нажмите «+»"; body.append(e); return; }
+    const now = new Date(), key = dayKey(now), wide = f.span >= 2;
+    const today = all.filter((h) => hbOn(hbData(h), now)), rest = all.filter((h) => !hbOn(hbData(h), now));
+    const wrap = document.createElement("div"); wrap.className = "habits" + (wide ? " wide" : "");
+    const row = (h) => {
+      const d = hbData(h), t = hbTarget(d), c = hbCount(d, key), on = hbOn(d, now);
+      const li = document.createElement("li"); li.className = "hb" + (on && c >= t ? " is-done" : "") + (on ? "" : " not-today"); li.tabIndex = 0; li.dataset.id = h.id;
+      li.setAttribute("aria-label", "Привычка «" + h.title + "»");
+      if (!hbSeen.has(h.id)) { hbSeen.add(h.id); if (!boardFirst) li.classList.add("fade-in"); }
+      const main = document.createElement("div"); main.className = "hb-main";
+      const nm = document.createElement("div"); nm.className = "hb-name"; nm.textContent = h.title;
+      const sub = document.createElement("div"); sub.className = "hb-sub";
+      const st = hbStreak(h), parts = [];
+      if (!on) parts.push("не сегодня");
+      if (st) parts.push(st + " " + plural(st, "день", "дня", "дней") + " подряд");
+      else if (on) parts.push(c >= t ? "сделано" : "сегодня");
+      const dt = hbDaysText(d); if (dt) parts.push(dt);
+      sub.textContent = parts.join(" · ");
+      if (d.remind) { const bl = document.createElement("span"); bl.className = "hb-bell"; bl.innerHTML = svgIco(HB_ICO.bell, 12, 2); bl.append(d.remind); sub.append(bl); }
+      main.append(nm, sub);
+      if (on) li.append(hbMark(h)); else { const sp = document.createElement("span"); sp.className = "hb-mark off"; sp.setAttribute("aria-hidden", "true"); li.append(sp); }
+      li.append(main);
+      if (wide) li.append(hbWeek(h));
+      li.addEventListener("click", () => openHabit(h.id));
+      li.addEventListener("keydown", (e) => { if (e.target !== li) return; if (e.key === "Enter") { e.preventDefault(); openHabit(h.id); } else if (e.key === " " && on) { e.preventDefault(); hbTick(h); } });
+      return li;
+    };
+    const ol = document.createElement("ol"); ol.className = "hb-ol";
+    today.forEach((h) => ol.append(row(h)));
+    wrap.append(ol);
+    if (rest.length) {
+      const hd = document.createElement("div"); hd.className = "tk-gh"; hd.textContent = "Не сегодня"; const cnt = document.createElement("span"); cnt.className = "count"; cnt.textContent = rest.length; hd.append(cnt);
+      const ol2 = document.createElement("ol"); ol2.className = "hb-ol"; rest.forEach((h) => ol2.append(row(h)));
+      wrap.append(hd, ol2);
+    }
+    body.append(wrap);
+  }
+
+  /* Окно привычки: название, дни недели, сколько раз в день, напоминание, история за 4 недели, удалить */
+  const hb_ = { id: null, sec: null, days: null, target: 1 };
+  function hbParseTime(v) {
+    const s = String(v || "").trim().replace(/[.\s-]/g, ":");
+    if (!s) return "";
+    let m = s.match(/^(\d{1,2})(?::?(\d{2}))?$/);
+    if (!m) return null;
+    const h = Number(m[1]), mi = Number(m[2] || 0);
+    if (h > 23 || mi > 59) return null;
+    return String(h).padStart(2, "0") + ":" + String(mi).padStart(2, "0");
+  }
+  function hbRenderForm() {
+    document.querySelectorAll("#hb-days [data-wd]").forEach((b) => b.setAttribute("aria-checked", String(!hb_.days || hb_.days.includes(Number(b.dataset.wd)))));
+    $("hb-target").textContent = hb_.target;
+    $("hb-minus").disabled = hb_.target <= 1; $("hb-plus").disabled = hb_.target >= HB_LIM.target;
+    $("hb-target-l").textContent = plural(hb_.target, "раз", "раза", "раз") + " в день";
+  }
+  document.querySelectorAll("#hb-days [data-wd]").forEach((b) => b.addEventListener("click", () => {
+    const wd = Number(b.dataset.wd);
+    let days = hb_.days ? hb_.days.slice() : [0, 1, 2, 3, 4, 5, 6];
+    days = days.includes(wd) ? days.filter((x) => x !== wd) : days.concat(wd);
+    if (!days.length) { toast("Нужен хотя бы один день"); return; }
+    hb_.days = days.length === 7 ? null : days.sort();
+    hbRenderForm();
+  }));
+  $("hb-minus").addEventListener("click", () => { hb_.target = Math.max(1, hb_.target - 1); hbRenderForm(); });
+  $("hb-plus").addEventListener("click", () => { hb_.target = Math.min(HB_LIM.target, hb_.target + 1); hbRenderForm(); });
+  function openHabit(id, secId) {
+    closeMenus(null);
+    const h = id ? state.items.find((x) => x.id === id) : null;
+    if (id && !h) return;
+    const d = h ? hbData(h) : {};
+    Object.assign(hb_, { id: h ? h.id : null, sec: h ? h.section_id : secId, days: Array.isArray(d.days) && d.days.length && d.days.length < 7 ? d.days.slice() : null, target: hbTarget(d) });
+    $("hb-h").textContent = h ? "Привычка" : "Новая привычка";
+    $("hb-name").value = h ? h.title : ""; $("hb-name").classList.remove("bad");
+    $("hb-time").value = d.remind || ""; $("hb-time-row").classList.remove("bad");
+    $("hb-status").textContent = "";
+    $("hb-delete").hidden = !h;
+    const hist = $("hb-hist"); hist.textContent = ""; hist.hidden = !h;
+    if (h) {
+      const w = hbWeek(h, 28); w.classList.add("hb-month");
+      const st = hbStreak(h), lab = document.createElement("div"); lab.className = "hb-hist-l";
+      const t = hbTarget(d), now = new Date(); let done = 0, plan = 0;
+      const born = new Date(h.created_at || now); born.setHours(0, 0, 0, 0);
+      for (let i = 0; i < 28; i++) { const x = new Date(now); x.setDate(x.getDate() - i); if (x < born && dayKey(x) !== dayKey(born)) break; if (!hbOn(d, x)) continue; plan++; if (hbCount(d, dayKey(x)) >= t) done++; }
+      lab.textContent = "За 4 недели: " + done + " из " + plan + (st ? " · " + st + " " + plural(st, "день", "дня", "дней") + " подряд" : "");
+      hist.append(lab, w);
+    }
+    hbRenderForm();
+    animShow($("hbsheet")); lockSheets(true);
+    setTimeout(() => $("hb-name").focus(), 30);
+  }
+  let hbClosing = false;
+  async function closeHabit() {
+    if (hbClosing) return;
+    hbClosing = true;
+    try {
+      const name = $("hb-name").value.trim();
+      const h = hb_.id ? state.items.find((x) => x.id === hb_.id) : null;
+      if (!h && !name) { animHide($("hbsheet"), 170); lockSheets(false); return; }
+      if (!name) { $("hb-name").classList.add("bad"); $("hb-status").textContent = "Напишите название"; $("hb-name").focus(); return; }
+      const remind = hbParseTime($("hb-time").value);
+      if (remind === null) { $("hb-time-row").classList.add("bad"); $("hb-status").textContent = "Время — например 21:00"; return; }
+      const data = Object.assign({}, h ? hbData(h) : {}, { days: hb_.days, target: hb_.target, remind: remind || null, tz: TZ });
+      const row = { title: name.slice(0, LIM.title), data, remind_at: hbNextRemind(data), sent_at: null, failed_at: null };
+      $("hb-status").textContent = "Сохраняю…";
+      let ok;
+      if (h) ok = await patchItem(h.id, row);
+      else {
+        const n = state.items.filter((x) => x.type === "habit" && x.section_id === hb_.sec).length;
+        if (n >= HB_LIM.field) { $("hb-status").textContent = "В поле уже " + HB_LIM.field + " привычек — это предел"; return; }
+        ok = !!(await createItem(Object.assign({ type: "habit", section_id: hb_.sec }, row)));
+      }
+      if (!ok) { $("hb-status").textContent = "Не сохранилось — проверьте интернет"; return; }
+      animHide($("hbsheet"), 170); lockSheets(false);
+    } finally { hbClosing = false; }
+  }
+  $("hbsheet").querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", closeHabit));
+  $("hbsheet").querySelector("[data-cancel]").addEventListener("click", () => { animHide($("hbsheet"), 170); lockSheets(false); });
+  $("hb-delete").addEventListener("click", async () => { if (hb_.id && await removeItem(hb_.id, "Привычка удалена")) { animHide($("hbsheet"), 170); lockSheets(false); } });
+  $("hb-name").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); closeHabit(); } });
+  $("hb-time").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); closeHabit(); } });
+  $("hb-time").addEventListener("input", () => $("hb-time-row").classList.remove("bad"));
   /* ---------- Приложение «Музыка»: плеер Яндекс Музыки (1 колонка) ----------
      Яндекс разрешает встраивать плейлисты, альбомы и треки (Поделиться → HTML-код). Ссылка хранится в настройках поля. */
   function musicSrc(raw) {
@@ -2391,7 +2606,7 @@
     if ($("desk").hidden || !state.items) return;
     const now = new Date();
     const sig = state.items.filter((t) => t.type === "task" && !t.done).map((t) => t.id + taskGroup(t, now)).join("|") + dayKey(now);
-    if (taskSig && sig !== taskSig) renderBoard(state.sections.filter((x) => x.app === "tasks").map((x) => x.id));
+    if (taskSig && sig !== taskSig) renderBoard(state.sections.filter((x) => x.app === "tasks" || (x.app === "habits" && !taskSig.endsWith(dayKey(now)))).map((x) => x.id));
     taskSig = sig;
   }, 30000);
 
@@ -2741,7 +2956,7 @@
       const name = document.createElement("div"); name.className = "sec-info-name"; name.textContent = a.name;
       const n = a.total ? a.total(f) : a.count ? a.count(f) : 0;
       const sub = document.createElement("div"); sub.className = "sec-info-sub";
-      const W = { notes: ["заметка", "заметки", "заметок", "Заметок нет"], tasks: ["задача", "задачи", "задач", "Задач нет"], contacts: ["контакт", "контакта", "контактов", "Контактов нет"], files: ["файл", "файла", "файлов", "Файлов нет"] }[fd.app];
+      const W = { notes: ["заметка", "заметки", "заметок", "Заметок нет"], tasks: ["задача", "задачи", "задач", "Задач нет"], contacts: ["контакт", "контакта", "контактов", "Контактов нет"], files: ["файл", "файла", "файлов", "Файлов нет"], habits: ["привычка", "привычки", "привычек", "Привычек нет"] }[fd.app];
       sub.textContent = !W ? "" : n ? n + " " + plural(n, W[0], W[1], W[2]) + (fd.app === "files" && n ? " · на столе " + fmtSize(deskUsed(f.desk_id)) + " из 10 МБ" : "") : W[3];
       info.append(ico, name, sub);
     }
@@ -4849,7 +5064,7 @@
 
   /* ---------- Корзина: удалённое за 30 дней, восстановление пачкой ---------- */
   const TRASH_DAYS = 30;
-  const TRASH_ICO = { field: "M4 5h16v14H4zM4 10h16", note: "M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 16h5", reminder: "M6 10a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6zM10 20a2 2 0 0 0 4 0", link: "M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1", group: "M3 7h6l2 2h10v10H3z", task: "M4 5h16v14H4zM8 12l3 3 5-6", contact: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0", desk: "M3 5h8v6H3zM13 5h8v6h-8zM3 13h8v6H3zM13 13h8v6h-8z", file: "M6 3h9l4 4v14H6zM14 3v5h5", folder: "M3 7h6l2 2h10v10H3z" };
+  const TRASH_ICO = { field: "M4 5h16v14H4zM4 10h16", note: "M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 16h5", reminder: "M6 10a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6zM10 20a2 2 0 0 0 4 0", link: "M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1", group: "M3 7h6l2 2h10v10H3z", task: "M4 5h16v14H4zM8 12l3 3 5-6", contact: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0", desk: "M3 5h8v6H3zM13 5h8v6h-8zM3 13h8v6H3zM13 13h8v6h-8z", file: "M6 3h9l4 4v14H6zM14 3v5h5", folder: "M3 7h6l2 2h10v10H3z", habit: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM8 12.5l2.5 2.5L16 9.5" };
   const UNDO_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M9 14 4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3"/></svg>';
   const q_ = (s) => "«" + (s.length > 40 ? s.slice(0, 40) + "…" : s) + "»";
   async function renderTrash() {
@@ -4868,8 +5083,8 @@
     const list = [...batches.entries()].sort((a, b) => (a[1].at < b[1].at ? 1 : -1));
     for (const [batch, b] of list) {
       const by = (k) => b.rows.filter((r) => r.kind === k);
-      const f = by("field"), notes = by("note"), rems = by("reminder"), links = by("link"), groups = by("group"), desks = by("desk"), tasks = by("task"), contacts = by("contact"), files = by("file"), folders = by("folder");
-      const recs = () => { const p = []; if (notes.length) p.push(notes.length + " " + plural(notes.length, "заметка", "заметки", "заметок")); if (tasks.length) p.push(tasks.length + " " + plural(tasks.length, "задача", "задачи", "задач")); if (contacts.length) p.push(contacts.length + " " + plural(contacts.length, "контакт", "контакта", "контактов")); if (folders.length) p.push(folders.length + " " + plural(folders.length, "папка", "папки", "папок")); if (files.length) p.push(files.length + " " + plural(files.length, "файл", "файла", "файлов")); return p; };
+      const f = by("field"), notes = by("note"), rems = by("reminder"), links = by("link"), groups = by("group"), desks = by("desk"), tasks = by("task"), contacts = by("contact"), files = by("file"), folders = by("folder"), habits = by("habit");
+      const recs = () => { const p = []; if (notes.length) p.push(notes.length + " " + plural(notes.length, "заметка", "заметки", "заметок")); if (tasks.length) p.push(tasks.length + " " + plural(tasks.length, "задача", "задачи", "задач")); if (contacts.length) p.push(contacts.length + " " + plural(contacts.length, "контакт", "контакта", "контактов")); if (folders.length) p.push(folders.length + " " + plural(folders.length, "папка", "папки", "папок")); if (files.length) p.push(files.length + " " + plural(files.length, "файл", "файла", "файлов")); if (habits.length) p.push(habits.length + " " + plural(habits.length, "привычка", "привычки", "привычек")); return p; };
       let kind, title;
       if (desks.length) {
         kind = "desk"; title = "Стол " + q_(desks[0].title || "");
@@ -4882,6 +5097,7 @@
       else if (notes.length) { kind = "note"; title = notes.length === 1 ? "Заметка " + q_(noteTitle(notes[0])) : notes.length + " " + plural(notes.length, "заметка", "заметки", "заметок"); }
       else if (folders.length) { kind = "folder"; const top = folders[0]; title = "Папка " + q_(top.title || "") + (folders.length + files.length > 1 ? " и " + [folders.length > 1 ? (folders.length - 1) + " " + plural(folders.length - 1, "папка", "папки", "папок") : "", files.length ? files.length + " " + plural(files.length, "файл", "файла", "файлов") : ""].filter(Boolean).join(", ") : ""); }
       else if (files.length) { kind = "file"; title = files.length === 1 ? "Файл " + q_(files[0].title || "") : files.length + " " + plural(files.length, "файл", "файла", "файлов"); }
+      else if (habits.length) { kind = "habit"; title = habits.length === 1 ? "Привычка " + q_(habits[0].title || "") : habits.length + " " + plural(habits.length, "привычка", "привычки", "привычек"); }
       else if (contacts.length) { kind = "contact"; title = contacts.length === 1 ? "Контакт " + q_(contacts[0].title || "") : contacts.length + " " + plural(contacts.length, "контакт", "контакта", "контактов"); }
       else if (tasks.length) { kind = "task"; title = tasks.length === 1 ? "Задача " + q_(tasks[0].title || "") : tasks.length + " " + plural(tasks.length, "задача", "задачи", "задач"); }
       else if (rems.length) { kind = "reminder"; title = rems.length === 1 ? "Напоминание " + q_(rems[0].title || "") : "Напоминаний: " + rems.length; }
@@ -5087,6 +5303,8 @@
     if (e.key !== "Escape") return;
     if (!$("editor").hidden) closeEditor();
     else if (!$("itemsheet").hidden) closeItem();
+    else if (!$("ctsheet").hidden) closeContact();
+    else if (!$("hbsheet").hidden) closeHabit();
     else if (!$("secsheet").hidden) closeField();
     else if (!$("setsheet").hidden) closeSettings();
     else if (!$("timesheet").hidden) closeTime();

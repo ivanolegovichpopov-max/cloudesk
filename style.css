@@ -1392,3 +1392,53 @@ input.fs-ren { width: 100%; min-width: 0; height: 22px !important; padding: 0 6p
 .mu-empty { display: flex; flex-direction: column; gap: 8px; }
 .mu-hint { padding: 0 2px; font-size: 12px; line-height: 16px; color: var(--ink-dim); }
 .mu-hint.bad { color: var(--danger); }
+
+/* ---------- Приложение «Привычки» (1 или 2 колонки): строки как у задач, кружок отметки, серия, неделя квадратиками ---------- */
+.habits { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.hb-ol { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; }
+.hb {
+  display: flex; align-items: center; gap: 10px; min-width: 0; height: var(--tk-row, 54px); padding: 0 8px 0 6px;
+  border-radius: var(--r); cursor: pointer; outline: none; color: var(--ink); transition: background-color .12s ease;
+}
+.hb:hover, .hb:focus-visible { background: var(--hover); }
+.hb.not-today { opacity: .55; }
+.hb-mark {
+  position: relative; flex: none; width: 32px; height: 32px; display: grid; place-items: center; padding: 0; border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--ink) 35%, transparent); background: transparent; color: transparent;
+  transition: background-color .15s ease, border-color .15s ease, color .15s ease, transform .15s ease;
+}
+.hb-mark:has(svg circle) { border: 0; color: var(--ink-dim); }
+.hb-mark:hover { border-color: var(--accent); color: color-mix(in srgb, var(--accent) 60%, transparent); }
+.hb-mark.full { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); }
+.hb-mark.pop { transform: scale(.88); }
+.hb-mark.off { border-style: dashed; cursor: default; }
+.hb-mark svg { position: absolute; inset: 0; margin: auto; }
+.hb-n { position: relative; font-size: 10px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+.hb-main { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.hb-name { font-size: 14px; line-height: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hb.is-done .hb-name { color: var(--ink-dim); }
+.hb-sub { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 12px; line-height: 16px; color: var(--ink-dim); white-space: nowrap; overflow: hidden; }
+.hb-bell { display: inline-flex; align-items: center; gap: 3px; font-variant-numeric: tabular-nums; }
+.hb-week { flex: none; display: flex; gap: 4px; }
+.hb-day { position: relative; width: 24px; height: 22px; border-radius: 5px; background: rgba(127,127,127,.18); display: grid; place-items: center; }
+.hb-day i { font-style: normal; font-size: 9px; letter-spacing: -.02em; font-weight: 600; color: var(--ink-dim); }
+.hb-day.on { background: var(--accent); }
+.hb-day.on i { color: var(--accent-ink); }
+.hb-day.part { background: color-mix(in srgb, var(--accent) 40%, transparent); }
+.hb-day.off { background: transparent; box-shadow: inset 0 0 0 1px rgba(127,127,127,.25); }
+.hb-day.today { box-shadow: inset 0 0 0 1.5px var(--ink-dim); }
+.hb-day.on.today { box-shadow: none; }
+/* окно привычки */
+.hb-form { gap: 12px; }
+.hb-line { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
+.hb-line-ico { flex: none; display: grid; place-items: center; width: 24px; color: var(--ink-dim); }
+.hb-days { flex-wrap: wrap; }
+.hb-days button { min-width: 36px; }
+.hb-target { min-width: 24px; text-align: center; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.hb-target-l { font-size: 14px; color: var(--ink-dim); }
+.hb-time.bad input { border-color: var(--danger) !important; }
+.hb-hist { display: grid; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
+.hb-hist[hidden] { display: none; }
+.hb-hist-l { font-size: 12px; color: var(--ink-dim); }
+.hb-month { display: grid; grid-template-columns: repeat(14, 24px); gap: 4px; }
+@media (max-width: 420px) { .hb-month { grid-template-columns: repeat(7, 24px); } }
