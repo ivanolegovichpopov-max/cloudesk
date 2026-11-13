@@ -1126,6 +1126,44 @@
   const mnSeen = new Set();
   const mnFresh = (id) => { if (mnSeen.has(id)) return false; mnSeen.add(id); return !boardFirst; };
 
+  function mnSide(f, s, side) {
+    if (s.tab === "pay") {
+      const pays = mnOf(f.id, "payment").sort((a, b) => (mnData(a).next || "9").localeCompare(mnData(b).next || "9"));
+      if (!pays.length) { const e = document.createElement("div"); e.className = "tk-empty mn-tip"; e.textContent = "Аренда, связь, подписки, зарплата — с датой и напоминанием в Telegram"; side.append(e); }
+      else {
+        const sumOut = pays.filter((p) => mnData(p).kind !== "in").reduce((a, p) => a + (Number(mnData(p).amount) || 0), 0);
+        const h = document.createElement("div"); h.className = "tk-gh mn-day"; const l = document.createElement("span"); l.textContent = "Ближайшие"; const r = document.createElement("span"); r.className = "mn-day-sum"; r.textContent = sumOut ? "−" + rub(sumOut) : ""; r.dataset.tip = "Все регулярные расходы за один раз"; h.append(l, r);
+        const ol3 = document.createElement("ol"); ol3.className = "mn-ol";
+        const EV = { month: "каждый месяц", week: "каждую неделю", year: "каждый год" };
+        pays.forEach((p) => {
+          const d = mnData(p), over = mnOver(d.next);
+          ol3.append(mnRow({ title: p.title, sub: (d.next ? (over ? "просрочен · " : "") + mnDayLabel(d.next) : "без даты") + (d.every ? " · " + EV[d.every] : "") + (d.project ? " · #" + d.project : ""),
+            subCls: over ? "over" : "", amount: (d.kind === "in" ? "+" : "−") + rub(d.amount), amountCls: d.kind === "in" ? "in" : "", fresh: mnFresh(p.id),
+            check: false, checkTip: d.kind === "in" ? "Получено — записать доход" : "Оплачено — записать расход", onCheck: () => mnPay(p),
+            onOpen: () => openMoney("payment", p.id), onDel: () => removeItem(p.id, "Платёж удалён") }));
+        });
+        side.append(h, ol3);
+      }
+    } else {
+      const debts = mnOf(f.id, "debt").filter((x) => !x.done);
+      if (!debts.length) { const e = document.createElement("div"); e.className = "tk-empty mn-tip"; e.textContent = "Кто должен вам и кому должны вы — с напоминанием в день возврата"; side.append(e); }
+      [["they", "Мне должны"], ["me", "Я должен"]].forEach(([dir, label]) => {
+        const g = debts.filter((x) => (mnData(x).dir || "they") === dir).sort((a, b) => (mnData(a).due || "9").localeCompare(mnData(b).due || "9"));
+        if (!g.length) return;
+        const sum = g.reduce((a, x) => a + (Number(mnData(x).amount) || 0), 0);
+        const h = document.createElement("div"); h.className = "tk-gh mn-day"; const l = document.createElement("span"); l.textContent = label; const r = document.createElement("span"); r.className = "mn-day-sum"; r.textContent = rub(sum); h.append(l, r);
+        const ol4 = document.createElement("ol"); ol4.className = "mn-ol";
+        g.forEach((x) => {
+          const d = mnData(x), over = d.due && mnOver(d.due);
+          ol4.append(mnRow({ title: x.title, sub: d.due ? (over ? "просрочен · " : "вернуть ") + mnDayLabel(d.due) : (x.body || "").split("\n")[0] || "без срока", subCls: over ? "over" : "",
+            amount: rub(d.amount), amountCls: dir === "they" ? "in" : "", fresh: mnFresh(x.id),
+            check: false, checkTip: dir === "they" ? "Вернули — закрыть долг" : "Отдал — закрыть долг", onCheck: () => mnDebtDone(x),
+            onOpen: () => openMoney("debt", x.id), onDel: () => removeItem(x.id, "Долг удалён") }));
+        });
+        side.append(h, ol4);
+      });
+    }
+  }
   function renderMoney(f, body) {
     const s = mnState(f.id), now = new Date();
     body.classList.add("mn-body");
@@ -1178,12 +1216,12 @@
     const c2 = col("mn-sum");
     const nav = document.createElement("div"); nav.className = "mn-nav";
     const isCur = s.y === now.getFullYear() && s.m === now.getMonth();
-    const go = (dm) => { const d = new Date(s.y, s.m + dm, 1); s.y = d.getFullYear(); s.m = d.getMonth(); renderBoard([f.id]); };
+    const go = (dm) => { const d = new Date(s.y, s.m + dm, 1); s.y = d.getFullYear(); s.m = d.getMonth(); s.anim = true; renderBoard([f.id]); };
     const prevB = tool(MN_ICO.prev, "Предыдущий месяц", () => go(-1));
     const nextB = tool(MN_ICO.next, "Следующий месяц", () => go(1)); nextB.disabled = isCur;
     const mt = document.createElement("button"); mt.type = "button"; mt.className = "mn-month"; mt.textContent = MONTHS[s.m].charAt(0).toUpperCase() + MONTHS[s.m].slice(1) + (s.y !== now.getFullYear() ? " " + s.y : "");
     mt.dataset.tip = isCur ? "Текущий месяц" : "Вернуться к текущему месяцу"; mt.disabled = isCur;
-    mt.addEventListener("click", () => { s.y = now.getFullYear(); s.m = now.getMonth(); renderBoard([f.id]); });
+    mt.addEventListener("click", () => { s.y = now.getFullYear(); s.m = now.getMonth(); s.anim = true; renderBoard([f.id]); });
     nav.append(prevB, mt, nextB);
     const monthAll = mnMonth(f.id, s.y, s.m), tot = mnTotals(monthAll.filter((it) => !s.proj || mnData(it).project === s.proj));
     const big = document.createElement("div"); big.className = "mn-big";
@@ -1201,7 +1239,7 @@
       prows.forEach(([k, v]) => {
         const on = s.proj === k && k;
         const li = mnRow({ cls: "mn-proj" + (on ? " on" : ""), title: k ? "#" + k : "Без проекта", sub: [v.inc ? "+" + rub(v.inc) : "", v.out ? "−" + rub(v.out) : ""].filter(Boolean).join(" · "), amount: rub(v.inc - v.out, true), amountCls: v.inc - v.out >= 0 ? "in" : "",
-          onOpen: () => { if (!k) return; s.proj = s.proj === k ? null : k; renderBoard([f.id]); } });
+          onOpen: () => { if (!k) return; s.proj = s.proj === k ? null : k; s.anim = true; renderBoard([f.id]); } });
         li.dataset.tip = k ? (on ? "Показать все операции" : "Показать только #" + k) : "";
         ol2.append(li);
       });
@@ -1209,55 +1247,29 @@
     }
     c2.append(nav, big, ph, plist);
 
-    // 3. Платежи и долги — вкладками
+    // 3. Платежи и долги — вкладками, как в «Инструментах»: подсветка переезжает плавно, содержимое проявляется
     const c3 = col("mn-side");
     const bar = document.createElement("div"); bar.className = "mn-tabs";
-    const seg = document.createElement("div"); seg.className = "segmented"; seg.setAttribute("role", "tablist");
+    const tabs = document.createElement("div"); tabs.className = "tabs"; tabs.setAttribute("role", "tablist"); tabs.setAttribute("aria-label", "Платежи и долги");
+    const panel = document.createElement("div"); panel.className = "mn-list";
+    const addB = tool(MN_ICO.plus, "", () => openMoney(s.tab === "pay" ? "payment" : "debt", null, f.id));
+    const setAdd = () => { const t = s.tab === "pay" ? "Новый регулярный платёж" : "Новый долг"; addB.dataset.tip = t; addB.setAttribute("aria-label", t); };
     [["pay", "Платежи"], ["debt", "Долги"]].forEach(([k, l]) => {
-      const b = document.createElement("button"); b.type = "button"; b.setAttribute("role", "tab"); b.setAttribute("aria-checked", String(s.tab === k)); b.setAttribute("aria-selected", String(s.tab === k)); b.textContent = l;
-      b.addEventListener("click", () => { s.tab = k; store.set("cloudesk-mn-tab-" + f.id, k); renderBoard([f.id]); });
-      seg.append(b);
-    });
-    const addB = tool(MN_ICO.plus, s.tab === "pay" ? "Новый регулярный платёж" : "Новый долг", () => openMoney(s.tab === "pay" ? "payment" : "debt", null, f.id));
-    bar.append(seg, addB);
-    const side = document.createElement("div"); side.className = "mn-list";
-    if (s.tab === "pay") {
-      const pays = mnOf(f.id, "payment").sort((a, b) => (mnData(a).next || "9").localeCompare(mnData(b).next || "9"));
-      if (!pays.length) { const e = document.createElement("div"); e.className = "tk-empty mn-tip"; e.textContent = "Аренда, связь, подписки, зарплата — с датой и напоминанием в Telegram"; side.append(e); }
-      else {
-        const sumOut = pays.filter((p) => mnData(p).kind !== "in").reduce((a, p) => a + (Number(mnData(p).amount) || 0), 0);
-        const h = document.createElement("div"); h.className = "tk-gh mn-day"; const l = document.createElement("span"); l.textContent = "Ближайшие"; const r = document.createElement("span"); r.className = "mn-day-sum"; r.textContent = sumOut ? "−" + rub(sumOut) : ""; r.dataset.tip = "Все регулярные расходы за один раз"; h.append(l, r);
-        const ol3 = document.createElement("ol"); ol3.className = "mn-ol";
-        const EV = { month: "каждый месяц", week: "каждую неделю", year: "каждый год" };
-        pays.forEach((p) => {
-          const d = mnData(p), over = mnOver(d.next);
-          ol3.append(mnRow({ title: p.title, sub: (d.next ? (over ? "просрочен · " : "") + mnDayLabel(d.next) : "без даты") + (d.every ? " · " + EV[d.every] : "") + (d.project ? " · #" + d.project : ""),
-            subCls: over ? "over" : "", amount: (d.kind === "in" ? "+" : "−") + rub(d.amount), amountCls: d.kind === "in" ? "in" : "", fresh: mnFresh(p.id),
-            check: false, checkTip: d.kind === "in" ? "Получено — записать доход" : "Оплачено — записать расход", onCheck: () => mnPay(p),
-            onOpen: () => openMoney("payment", p.id), onDel: () => removeItem(p.id, "Платёж удалён") }));
-        });
-        side.append(h, ol3);
-      }
-    } else {
-      const debts = mnOf(f.id, "debt").filter((x) => !x.done);
-      if (!debts.length) { const e = document.createElement("div"); e.className = "tk-empty mn-tip"; e.textContent = "Кто должен вам и кому должны вы — с напоминанием в день возврата"; side.append(e); }
-      [["they", "Мне должны"], ["me", "Я должен"]].forEach(([dir, label]) => {
-        const g = debts.filter((x) => (mnData(x).dir || "they") === dir).sort((a, b) => (mnData(a).due || "9").localeCompare(mnData(b).due || "9"));
-        if (!g.length) return;
-        const sum = g.reduce((a, x) => a + (Number(mnData(x).amount) || 0), 0);
-        const h = document.createElement("div"); h.className = "tk-gh mn-day"; const l = document.createElement("span"); l.textContent = label; const r = document.createElement("span"); r.className = "mn-day-sum"; r.textContent = rub(sum); h.append(l, r);
-        const ol4 = document.createElement("ol"); ol4.className = "mn-ol";
-        g.forEach((x) => {
-          const d = mnData(x), over = d.due && mnOver(d.due);
-          ol4.append(mnRow({ title: x.title, sub: d.due ? (over ? "просрочен · " : "вернуть ") + mnDayLabel(d.due) : (x.body || "").split("\n")[0] || "без срока", subCls: over ? "over" : "",
-            amount: rub(d.amount), amountCls: dir === "they" ? "in" : "", fresh: mnFresh(x.id),
-            check: false, checkTip: dir === "they" ? "Вернули — закрыть долг" : "Отдал — закрыть долг", onCheck: () => mnDebtDone(x),
-            onOpen: () => openMoney("debt", x.id), onDel: () => removeItem(x.id, "Долг удалён") }));
-        });
-        side.append(h, ol4);
+      const b = document.createElement("button"); b.type = "button"; b.setAttribute("role", "tab"); b.setAttribute("aria-selected", String(s.tab === k)); b.textContent = l;
+      b.addEventListener("click", () => {
+        if (s.tab === k) return;
+        s.tab = k; store.set("cloudesk-mn-tab-" + f.id, k);
+        tabs.querySelectorAll("[role=tab]").forEach((x) => x.setAttribute("aria-selected", String(x === b)));
+        setAdd(); panel.textContent = ""; mnSide(f, s, panel); panel.scrollTop = 0; replay(panel);
       });
-    }
-    c3.append(bar, side);
+      tabs.append(b);
+    });
+    setAdd();
+    bar.append(tabs, addB);
+    mnSide(f, s, panel);
+    c3.append(bar, panel);
+    // месяц или проект сменились — содержимое колонок проявляется
+    if (s.anim) { s.anim = false; requestAnimationFrame(() => { replay(list); replay(big); replay(plist); }); }
     wrap.append(c1, c2, c3);
     body.append(wrap);
   }
@@ -1265,22 +1277,35 @@
   /* Окно операции / платежа / долга — как окно задачи: крупное название, сумма, «чипы», заметка; внизу значками действия */
   const mn_ = { type: "money", id: null, sec: null, kind: "out", date: "", project: null, every: "month", remind: "before", dir: "they" };
   const MN_TITLE = { money: ["Операция", "Новая операция"], payment: ["Регулярный платёж", "Новый платёж"], debt: ["Долг", "Новый долг"] };
-  function mnDays(box, from, count, sel, onPick, allowNone) {
+  // календарь — тот же, что в окне задачи: месяц стрелками, сетка 6 недель, сегодня обведено, выбранный — акцентом
+  let mnCalMonth = new Date();
+  function mnCal(box, sel, opts, onPick) {
     box.textContent = "";
-    if (allowNone) { const b = document.createElement("button"); b.type = "button"; b.className = "menu-item"; b.setAttribute("role", "menuitemradio"); b.setAttribute("aria-checked", String(!sel)); const t = document.createElement("span"); t.textContent = "Без срока"; b.append(t); b.insertAdjacentHTML("beforeend", HB_CHECK); b.addEventListener("click", (e) => { e.stopPropagation(); onPick(""); closeMenus(null); }); box.append(b); }
-    const head = document.createElement("div"); head.className = "hb-wd-row mn-wd-head"; HB_WD_ORDER.forEach((wd) => { const s = document.createElement("span"); s.textContent = HB_WD[wd]; head.append(s); }); box.append(head);
-    const grid = document.createElement("div"); grid.className = "hb-wd-row mn-days";
-    const start = new Date(from); start.setHours(0, 0, 0, 0);
-    const lead = (start.getDay() + 6) % 7; for (let i = 0; i < lead; i++) grid.append(document.createElement("span"));
+    if (opts.none) {
+      const b = document.createElement("button"); b.type = "button"; b.className = "menu-item mn-cal-none"; b.setAttribute("role", "menuitemradio"); b.setAttribute("aria-checked", String(!sel));
+      const t = document.createElement("span"); t.textContent = "Без срока"; b.append(t); b.insertAdjacentHTML("beforeend", HB_CHECK);
+      b.addEventListener("click", (e) => { e.stopPropagation(); onPick(""); closeMenus(null); });
+      box.append(b);
+    }
+    const head = document.createElement("div"); head.className = "cal-head";
+    const title = document.createElement("div"); title.className = "cal-title"; title.textContent = fmtMonth.format(mnCalMonth).replace(" г.", "");
+    const grid = document.createElement("div"); grid.className = "dp-grid";
+    const nav = (dm) => { mnCalMonth.setMonth(mnCalMonth.getMonth() + dm); mnCal(box, sel, opts, onPick); replay(box.querySelector(".dp-grid")); };
+    const prev = tool(MN_ICO.prev, "Предыдущий месяц", (e) => { e.stopPropagation(); nav(-1); });
+    const next = tool(MN_ICO.next, "Следующий месяц", (e) => { e.stopPropagation(); nav(1); });
+    head.append(prev, title, next);
+    ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].forEach((d) => { const el = document.createElement("div"); el.className = "cal-dow"; el.textContent = d; grid.append(el); });
+    const m0 = new Date(mnCalMonth.getFullYear(), mnCalMonth.getMonth(), 1), start = new Date(m0); start.setDate(1 - ((m0.getDay() + 6) % 7));
     const today = mnKey(new Date());
-    for (let i = 0; i < count; i++) {
-      const d = new Date(start); d.setDate(d.getDate() + i);
-      const k = mnKey(d), b = document.createElement("button"); b.type = "button"; b.className = "hb-wd" + (k === today ? " today" : ""); b.textContent = d.getDate();
-      b.setAttribute("aria-checked", String(k === sel)); b.dataset.tip = fmtWdDate.format(d).replace(/\.$/, "");
+    for (let i = 0; i < 42; i++) {
+      const d = new Date(start); d.setDate(start.getDate() + i);
+      const k = mnKey(d), b = document.createElement("button"); b.type = "button";
+      b.className = "dp-day" + (d.getMonth() !== m0.getMonth() ? " other" : "") + (k === today ? " today" : "") + (k === sel ? " sel" : "");
+      b.textContent = d.getDate(); b.disabled = (opts.max && k > opts.max) || (opts.min && k < opts.min);
       b.addEventListener("click", (e) => { e.stopPropagation(); onPick(k); closeMenus(null); });
       grid.append(b);
     }
-    box.append(grid);
+    box.append(head, grid);
   }
   function mnRenderForm() {
     const T = mn_.type;
@@ -1294,8 +1319,8 @@
     dl.hidden = !dl.textContent; db.classList.toggle("on", !!mn_.date && T !== "money");
     db.dataset.tip = T === "money" ? "Дата операции" : T === "payment" ? "Дата следующей оплаты" : "Когда вернуть";
     const today = new Date();
-    if (T === "money") { const f0 = new Date(today); f0.setDate(f0.getDate() - 34); mnDays($("mn-date-pop"), f0, 35, mn_.date, (k) => { mn_.date = k; mnRenderForm(); }); }
-    else mnDays($("mn-date-pop"), today, 42, mn_.date, (k) => { mn_.date = k; mnRenderForm(); }, T === "debt");
+    // операция — сегодня и раньше; платёж и долг — сегодня и позже
+    mnCal($("mn-date-pop"), mn_.date, T === "money" ? { max: mnKey(today) } : { min: mnKey(today), none: T === "debt" }, (k) => { mn_.date = k; mnRenderForm(); });
     // повтор — только у платежа
     $("mn-every-f").hidden = T !== "payment";
     const EV = [["month", "Каждый месяц"], ["week", "Каждую неделю"], ["year", "Каждый год"]];
@@ -1348,6 +1373,7 @@
       every: d.every || "month", remind: it ? (d.remind || null) : type === "payment" ? "before" : "day", dir: d.dir || "they" });
     if (!it && type === "money") { const s = mnState(secId); if (s.proj) mn_.project = s.proj; }
     $("mn-h").textContent = MN_TITLE[type][it ? 0 : 1];
+    mnCalMonth = mnDate(mn_.date) || new Date(); mnCalMonth.setDate(1);
     $("mn-name").value = it ? it.title : ""; $("mn-name").classList.remove("bad");
     $("mn-amount").value = d.amount ? Number(d.amount).toLocaleString("ru-RU", { maximumFractionDigits: 2 }) : ""; $("mn-amount-row").classList.remove("bad");
     $("mn-note").value = it ? it.body || "" : "";
