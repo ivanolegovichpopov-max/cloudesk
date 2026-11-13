@@ -1068,7 +1068,7 @@
     // запись — в выбранный месяц: в текущем — сегодня, в другом — его последний день
     const date = isCur ? mnKey(now) : mnKey(new Date(s.y, s.m + 1, 0));
     const t = what.value.trim();
-    const row = await createItem({ type: "money", section_id: f.id, title: (t ? t.charAt(0).toUpperCase() + t.slice(1) : s.kind === "in" ? "Доход" : "Расход").slice(0, LIM.title), data: { amount: Math.round(amount * 100) / 100, kind: s.kind, date, project: s.proj || null } });
+    const row = await createItem({ type: "money", section_id: f.id, title: (t ? t.charAt(0).toUpperCase() + t.slice(1) : s.kind === "in" ? "Доход" : "Расход").slice(0, LIM.title), data: { amount: Math.round(amount * 100) / 100, kind: s.kind, date } });
     if (row) {
       const a2 = document.querySelector('[data-keep="' + f.id + ':mna"]'), w2 = document.querySelector('[data-keep="' + f.id + ':mnw"]');
       if (a2) { a2.value = ""; a2.focus({ preventScroll: true }); }
@@ -1132,7 +1132,7 @@
         const EV = { month: "каждый месяц", week: "каждую неделю", year: "каждый год" };
         pays.forEach((p) => {
           const d = mnData(p), over = mnOver(d.next);
-          ol3.append(mnRow({ title: p.title, sub: (d.next ? (over ? "просрочен · " : "") + mnDayLabel(d.next) : "без даты") + (d.every ? " · " + EV[d.every] : "") + (d.project ? " · #" + d.project : ""),
+          ol3.append(mnRow({ title: p.title, sub: (d.next ? (over ? "просрочен · " : "") + mnDayLabel(d.next) : "без даты") + (d.every ? " · " + EV[d.every] : ""),
             subCls: over ? "over" : "", amount: (d.kind === "in" ? "+" : "−") + rub(d.amount), amountCls: d.kind === "in" ? "in" : "", fresh: mnFresh(p.id),
             check: false, checkTip: d.kind === "in" ? "Получено — записать доход" : "Оплачено — записать расход", onCheck: () => mnPay(p),
             onOpen: () => openMoney("payment", p.id), onDel: () => removeItem(p.id, "Платёж удалён") }));
@@ -1186,9 +1186,9 @@
     form.addEventListener("submit", (e) => { e.preventDefault(); mnQuick(f, amt, what); });
 
     const list = document.createElement("div"); list.className = "mn-list";
-    const ops = mnMonth(f.id, s.y, s.m).filter((it) => (!s.proj || mnData(it).project === s.proj))
+    const ops = mnMonth(f.id, s.y, s.m)
       .sort((a, b) => (mnData(b).date || "").localeCompare(mnData(a).date || "") || (new Date(b.created_at) - new Date(a.created_at)));
-    if (!ops.length) { const e = document.createElement("div"); e.className = "tk-empty"; e.textContent = s.proj ? "В этом месяце по #" + s.proj + " ничего" : "Операций в этом месяце нет"; list.append(e); }
+    if (!ops.length) { const e = document.createElement("div"); e.className = "tk-empty"; e.textContent = "Операций в этом месяце нет"; list.append(e); }
     let curDay = null, ol = null;
     ops.forEach((it) => {
       const d = mnData(it);
@@ -1203,7 +1203,7 @@
         list.append(h, ol);
       }
       const note = (it.body || "").trim().split("\n")[0];
-      ol.append(mnRow({ title: it.title || (d.kind === "in" ? "Доход" : "Расход"), sub: [d.project ? "#" + d.project : "", note].filter(Boolean).join(" · "),
+      ol.append(mnRow({ title: it.title || (d.kind === "in" ? "Доход" : "Расход"), sub: note,
         amount: (d.kind === "in" ? "+" : "−") + rub(d.amount), amountCls: d.kind === "in" ? "in" : "", fresh: mnFresh(it.id),
         onOpen: () => openMoney("money", it.id), onDel: () => removeItem(it.id, "Операция удалена") }));
     });
@@ -1220,29 +1220,12 @@
     mt.dataset.tip = isCur ? "Текущий месяц" : "Вернуться к текущему месяцу"; mt.disabled = isCur;
     mt.addEventListener("click", () => { s.y = now.getFullYear(); s.m = now.getMonth(); s.anim = true; renderBoard([f.id]); });
     nav.append(prevB, mt, nextB);
-    const monthAll = mnMonth(f.id, s.y, s.m), tot = mnTotals(monthAll.filter((it) => !s.proj || mnData(it).project === s.proj));
+    const tot = mnTotals(mnMonth(f.id, s.y, s.m));
     const big = document.createElement("div"); big.className = "mn-big";
     // итог — три строки в одной рамке: подпись слева, сумма справа
     const cell = (label, val, cls) => { const c = document.createElement("div"); c.className = "mn-cell " + (cls || ""); const l = document.createElement("div"); l.className = "mn-cell-l"; l.textContent = label; const v = document.createElement("div"); v.className = "mn-cell-v"; v.textContent = val; c.append(l, v); return c; };
     big.append(cell("Доходы", rub(tot.inc), "in"), cell("Расходы", rub(tot.out)), cell("Итог", rub(tot.net, true), tot.net < 0 ? "neg" : "net"));
-    const plist = document.createElement("div"); plist.className = "mn-list";
-    const byP = new Map();
-    monthAll.forEach((it) => { const d = mnData(it), k = d.project || ""; const v = byP.get(k) || { inc: 0, out: 0 }; if (d.kind === "in") v.inc += Number(d.amount) || 0; else v.out += Number(d.amount) || 0; byP.set(k, v); });
-    const prows = [...byP.entries()].sort((a, b) => (a[0] ? 0 : 1) - (b[0] ? 0 : 1) || (b[1].inc + b[1].out) - (a[1].inc + a[1].out));
-    if (!prows.length || (prows.length === 1 && !prows[0][0])) {
-      const e = document.createElement("div"); e.className = "tk-empty mn-tip"; e.textContent = "Проект операции можно выбрать в её окне — здесь будет, сколько он принёс и стоил"; plist.append(e);
-    } else {
-      const ol2 = document.createElement("ol"); ol2.className = "mn-ol";
-      prows.forEach(([k, v]) => {
-        const on = s.proj === k && k;
-        const li = mnRow({ cls: "mn-proj" + (on ? " on" : ""), title: k ? "#" + k : "Без проекта", sub: [v.inc ? "+" + rub(v.inc) : "", v.out ? "−" + rub(v.out) : ""].filter(Boolean).join(" · "), amount: rub(v.inc - v.out, true), amountCls: v.inc - v.out >= 0 ? "in" : "",
-          onOpen: () => { if (!k) return; s.proj = s.proj === k ? null : k; s.anim = true; renderBoard([f.id]); } });
-        li.dataset.tip = k ? (on ? "Показать все операции" : "Показать только #" + k) : "";
-        ol2.append(li);
-      });
-      plist.append(ol2);
-    }
-    c2.append(nav, big, plist);
+    c2.append(nav, big);
 
     // 3. Платежи и долги — вкладками, как в «Инструментах»: подсветка переезжает плавно, содержимое проявляется
     const c3 = col("mn-side");
@@ -1266,7 +1249,7 @@
     mnSide(f, s, panel);
     c3.append(bar, panel);
     // месяц или проект сменились — содержимое колонок проявляется
-    if (s.anim) { s.anim = false; requestAnimationFrame(() => { replay(list); replay(big); replay(plist); }); }
+    if (s.anim) { s.anim = false; requestAnimationFrame(() => { replay(list); replay(big); }); }
     wrap.append(c2, c1, c3); // слева итог месяца, посередине операции, справа платежи и долги
     body.append(wrap);
   }
@@ -1332,7 +1315,7 @@
     rb.dataset.tip = "Напоминание в Telegram";
     pickList($("mn-remind-pop"), RM, mn_.remind, (v) => { mn_.remind = v; mnRenderForm(); });
     // проект — у операции и платежа
-    $("mn-proj-f").hidden = T === "debt";
+    $("mn-proj-f").hidden = true; // проекты убраны
     const pl = $("mn-proj-label"), pb = $("mn-proj-btn");
     pl.textContent = mn_.project ? "#" + mn_.project : ""; pl.hidden = !mn_.project; pb.classList.toggle("on", !!mn_.project); pb.dataset.tip = "Проект";
     const pp = $("mn-proj-pop"); pp.textContent = "";
@@ -1368,7 +1351,6 @@
     Object.assign(mn_, { type, id: it ? it.id : null, sec: it ? it.section_id : secId, kind: d.kind || "out", project: d.project || null,
       date: type === "money" ? d.date || mnKey(new Date()) : type === "payment" ? d.next || "" : d.due || "",
       every: d.every || "month", remind: it ? (d.remind || null) : type === "payment" ? "before" : "day", dir: d.dir || "they" });
-    if (!it && type === "money") { const s = mnState(secId); if (s.proj) mn_.project = s.proj; }
     $("mn-h").textContent = MN_TITLE[type][it ? 0 : 1];
     mnCalMonth = mnDate(mn_.date) || new Date(); mnCalMonth.setDate(1);
     $("mn-name").value = it ? it.title : ""; $("mn-name").classList.remove("bad");
