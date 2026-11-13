@@ -692,7 +692,6 @@
     const av = document.createElement("span"); av.className = "ct-av"; av.textContent = initials(c.title); av.style.setProperty("--h", hueOf(c.title));
     const main = document.createElement("div"); main.className = "ct-main";
     const nm = document.createElement("div"); nm.className = "ct-name"; nm.textContent = c.title;
-    if (c.pinned) { const s = document.createElement("span"); s.className = "ct-star"; s.innerHTML = svgIco(CT_ICO.star, 12, 2); nm.append(s); }
     const sub = document.createElement("div"); sub.className = "ct-sub";
     const b = bdayNext(d.bday);
     if (b && b.days <= 7) { sub.classList.add("bday"); sub.textContent = bdayLabel(b); }

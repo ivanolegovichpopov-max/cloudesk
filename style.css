@@ -1253,7 +1253,6 @@ input.bad { border-color: var(--danger) !important; }
 }
 .ct-main { flex: 1; min-width: 0; display: grid; gap: 2px; }
 .ct-name { display: flex; align-items: center; gap: 4px; min-width: 0; font-size: 14px; line-height: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ct-star { display: inline-grid; color: var(--accent); }
 .ct-sub { font-size: 12px; line-height: 16px; color: var(--ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
 .ct-sub.bday { color: var(--accent); font-weight: 600; }
 .ct-acts { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); display: flex; gap: 2px; opacity: 0; pointer-events: none; transition: opacity .12s ease; }
