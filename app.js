@@ -576,6 +576,7 @@
     note: "M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 16h5",
     task: "M4 5h16v14H4zM8 12l3 3 5-6",
     contacts: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0",
+    game: "M5 20c0-4 2-7 7-7s7 3 7 7zM6 13 5 5l4 3M18 13l1-8-4 3M12 13a5 5 0 0 0 0-10 5 5 0 0 0 0 10z",
     tools: "M5 3h14v18H5zM8 7h8M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01M8 18h.01M12 18h.01M16 18h.01",
     plus: "M12 5v14M5 12h14",
     pin: "M9 3h6l-1 6 4 4H6l4-4zM11 13h2v8h-2z",
@@ -632,8 +633,220 @@
       render: (f, body) => renderContacts(f, body),
       count: (f) => state.items.filter((it) => it.type === "contact" && it.section_id === f.id).length,
     },
+    game: {
+      name: "Игра", icon: IC.game, spans: [1],
+      render: (f, body) => renderGame(f, body),
+    },
   };
-  const APP_ORDER = ["notes", "tasks", "tools", "contacts"];
+  const APP_ORDER = ["notes", "tasks", "tools", "contacts", "game"];
+  /* ---------- Приложение «Игра»: котик-бегун (1 колонка) ----------
+     Котик бежит, препятствия едут навстречу: прыжок — пробел / ↑ / нажатие (дольше держите — выше), ↓ — пригнуться.
+     Скорость растёт, рекорд запоминается. Холст создаётся один раз на поле и переживает перерисовку стола. */
+  const games = {};
+  function gameOf(fid) {
+    if (games[fid]) return games[fid];
+    const g = { fid, state: "ready", score: 0, best: Number(store.get("cloudesk-cat-best") || 0) || 0, t: 0, speed: 0, obs: [], dots: [],
+      cat: { y: 0, vy: 0, duck: false, hold: false, holdT: 0, onGround: true }, next: 0, last: 0, raf: 0, W: 300, H: 200, colors: null, colorAt: 0 };
+    const wrap = document.createElement("div"); wrap.className = "cat-game";
+    const cv = document.createElement("canvas"); cv.className = "cat-cv"; cv.tabIndex = 0; cv.dataset.keep = fid + ":game";
+    cv.setAttribute("aria-label", "Игра «Котик-бегун»: пробел или стрелка вверх — прыжок, стрелка вниз — пригнуться");
+    const ov = document.createElement("div"); ov.className = "cat-ov";
+    const hud = document.createElement("div"); hud.className = "cat-hud";
+    wrap.append(cv, hud, ov);
+    Object.assign(g, { wrap, cv, ov, hud, ctx: cv.getContext("2d") });
+    const fit = () => {
+      const r = wrap.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 2);
+      if (!r.width || !r.height) return;
+      g.W = r.width; g.H = r.height;
+      cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr);
+      g.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      draw(g);
+    };
+    if (window.ResizeObserver) new ResizeObserver(fit).observe(wrap);
+    g.fit = fit;
+    // управление
+    const press = (e) => {
+      if (g.state === "ready" || g.state === "over") { start(g); return; }
+      if (g.state === "pause") { resume(g); return; }
+      jump(g);
+    };
+    cv.addEventListener("keydown", (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.code === "Space" || e.key === "ArrowUp" || e.key === "w" || e.key === "ц") { e.preventDefault(); e.stopPropagation(); if (!e.repeat) press(); }
+      else if (e.key === "ArrowDown" || e.key === "s" || e.key === "ы") { e.preventDefault(); e.stopPropagation(); if (g.state === "run") g.cat.duck = true; }
+      else if (e.key === "Escape" && g.state === "run") { e.stopPropagation(); pause(g); }
+    });
+    cv.addEventListener("keyup", (e) => {
+      if (e.code === "Space" || e.key === "ArrowUp" || e.key === "w" || e.key === "ц") g.cat.hold = false;
+      if (e.key === "ArrowDown" || e.key === "s" || e.key === "ы") g.cat.duck = false;
+    });
+    cv.addEventListener("pointerdown", (e) => { e.preventDefault(); cv.focus({ preventScroll: true }); press(); });
+    cv.addEventListener("pointerup", () => { g.cat.hold = false; });
+    cv.addEventListener("pointercancel", () => { g.cat.hold = false; });
+    cv.addEventListener("blur", () => { if (g.state === "run") pause(g); });
+    games[fid] = g;
+    overlay(g);
+    return g;
+  }
+  document.addEventListener("visibilitychange", () => { if (document.hidden) Object.values(games).forEach((g) => { if (g.state === "run") pause(g); }); });
+
+  const GROUND = 26; // высота земли от низа поля
+  function start(g) {
+    Object.assign(g, { state: "run", score: 0, t: 0, speed: 260, obs: [], next: 0.9 });
+    Object.assign(g.cat, { y: 0, vy: 0, duck: false, hold: false, onGround: true });
+    overlay(g); loop(g);
+  }
+  function pause(g) { g.state = "pause"; cancelAnimationFrame(g.raf); overlay(g); draw(g); }
+  function resume(g) { g.state = "run"; overlay(g); loop(g); }
+  function jump(g) {
+    const c = g.cat;
+    if (!c.onGround) return;
+    c.vy = 520; c.onGround = false; c.hold = true; c.holdT = 0; c.duck = false;
+  }
+  function loop(g) {
+    g.last = performance.now();
+    cancelAnimationFrame(g.raf);
+    const step = (now) => {
+      if (g.state !== "run") return;
+      if (!g.cv.isConnected) { pause(g); return; }
+      const dt = Math.min(0.033, (now - g.last) / 1000); g.last = now;
+      update(g, dt); draw(g);
+      if (g.state === "run") g.hud.textContent = (g.best ? "Рекорд " + g.best + "   " : "") + String(Math.floor(g.score)).padStart(5, "0");
+      g.raf = requestAnimationFrame(step);
+    };
+    g.raf = requestAnimationFrame(step);
+  }
+  function update(g, dt) {
+    const c = g.cat;
+    g.t += dt;
+    g.speed = Math.min(720, 260 + g.t * 9);
+    g.score += dt * g.speed / 40;
+    // прыжок: пока держите — тяжесть меньше (до 0,22 с), потом обычная; пригнуться в воздухе — быстрее вниз
+    let grav = 1700;
+    if (!c.onGround) { c.holdT += dt; if (c.hold && c.vy > 0 && c.holdT < 0.22) grav = 650; if (c.duck) grav = 3400; }
+    c.vy -= grav * dt; c.y += c.vy * dt;
+    if (c.y <= 0) { c.y = 0; c.vy = 0; c.onGround = true; }
+    // препятствия: коробки (1–3), горшок, высокая стопка, птица (над землёй — пригнуться или перепрыгнуть)
+    g.next -= dt;
+    if (g.next <= 0) {
+      const r = Math.random(), lvl = Math.min(1, g.t / 60);
+      let o;
+      if (g.t > 12 && r < 0.18 + lvl * 0.1) o = { kind: "bird", w: 30, h: 18, y: Math.random() < 0.5 ? 30 : 46 };
+      else if (r < 0.45) o = { kind: "box", n: 1 + Math.floor(Math.random() * (1 + lvl * 2.2)), w: 0, h: 18, y: 0 };
+      else if (r < 0.75) o = { kind: "pot", w: 18, h: 26, y: 0 };
+      else o = { kind: "tall", w: 16, h: 36 + lvl * 8, y: 0 };
+      if (o.kind === "box") o.w = 18 * Math.min(3, o.n);
+      o.x = g.W + 20; o.flap = 0;
+      g.obs.push(o);
+      g.next = (0.75 + Math.random() * 0.9) * (380 / g.speed) + 0.25;
+    }
+    g.obs.forEach((o) => { o.x -= g.speed * dt * (o.kind === "bird" ? 1.08 : 1); o.flap += dt; });
+    g.obs = g.obs.filter((o) => o.x + o.w > -10);
+    // столкновение (с небольшим запасом — честнее)
+    const cb = catBox(g);
+    for (const o of g.obs) {
+      const ox = o.x + 3, ow = o.w - 6, oy = o.y + 2, oh = o.h - 4;
+      if (cb.x < ox + ow && cb.x + cb.w > ox && cb.y < oy + oh && cb.y + cb.h > oy) { over(g); break; }
+    }
+  }
+  const catBox = (g) => { const c = g.cat, h = c.duck && c.onGround ? 16 : 26; return { x: 42, w: c.duck && c.onGround ? 38 : 30, y: c.y + 2, h: h - 4 }; };
+  function over(g) {
+    g.state = "over";
+    const s = Math.floor(g.score);
+    g.newBest = s > g.best;
+    if (g.newBest) { g.best = s; store.set("cloudesk-cat-best", String(s)); }
+    cancelAnimationFrame(g.raf);
+    overlay(g); draw(g);
+  }
+  function overlay(g) {
+    const s = Math.floor(g.score);
+    g.hud.textContent = (g.best ? "Рекорд " + g.best + "   " : "") + String(s).padStart(5, "0");
+    g.hud.hidden = g.state === "ready";
+    const title = { ready: "Котик-бегун", pause: "Пауза", over: g.newBest ? "Новый рекорд!" : "Ой!" }[g.state];
+    const sub = { ready: "Пробел, ↑ или нажатие — прыжок, ↓ — пригнуться", pause: "Нажмите или пробел — продолжить", over: s + (g.best && !g.newBest ? " · рекорд " + g.best : "") + " · ещё раз — пробел или нажатие" }[g.state];
+    g.ov.hidden = g.state === "run";
+    g.ov.textContent = "";
+    if (title) { const t = document.createElement("div"); t.className = "cat-ov-t"; t.textContent = title; const u = document.createElement("div"); u.className = "cat-ov-s"; u.textContent = sub; g.ov.append(t, u); }
+    if (g.state === "ready" && g.best) { const b = document.createElement("div"); b.className = "cat-ov-s"; b.textContent = "Рекорд " + g.best; g.ov.append(b); }
+  }
+  function colorsOf(g) {
+    const now = performance.now();
+    if (!g.colors || now - g.colorAt > 1000) {
+      const cs = getComputedStyle(g.wrap);
+      g.colors = { ink: cs.getPropertyValue("--ink").trim() || "#ddd", dim: cs.getPropertyValue("--ink-dim").trim() || "#999", acc: cs.getPropertyValue("--accent").trim() || "#e8a" };
+      g.colorAt = now;
+    }
+    return g.colors;
+  }
+  // котик: кругленькое тело, голова с ушками, хвост; на бегу перебирает лапами, в прыжке поджимает
+  function drawCat(ctx, g, col) {
+    const c = g.cat, gy = g.H - GROUND, duck = c.duck && c.onGround;
+    const x = 42, y = gy - c.y;
+    const frame = c.onGround ? Math.floor(g.t * 12) % 2 : 2;
+    ctx.save();
+    ctx.fillStyle = col; ctx.strokeStyle = col; ctx.lineWidth = 3; ctx.lineCap = "round";
+    if (duck) {
+      ctx.beginPath(); ctx.ellipse(x + 17, y - 8, 17, 7, 0, 0, Math.PI * 2); ctx.fill();         // тело приплюснуто
+      ctx.beginPath(); ctx.arc(x + 34, y - 9, 7, 0, Math.PI * 2); ctx.fill();                     // голова
+      ctx.beginPath(); ctx.moveTo(x + 30, y - 14); ctx.lineTo(x + 32, y - 20); ctx.lineTo(x + 35, y - 15); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(x + 36, y - 14); ctx.lineTo(x + 39, y - 19); ctx.lineTo(x + 40, y - 13); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(x + 1, y - 9); ctx.quadraticCurveTo(x - 9, y - 10, x - 10, y - 4); ctx.stroke(); // хвост
+    } else {
+      ctx.beginPath(); ctx.ellipse(x + 14, y - 13, 14, 9, 0, 0, Math.PI * 2); ctx.fill();         // тело
+      ctx.beginPath(); ctx.arc(x + 27, y - 22, 8, 0, Math.PI * 2); ctx.fill();                    // голова
+      ctx.beginPath(); ctx.moveTo(x + 21, y - 27); ctx.lineTo(x + 22, y - 35); ctx.lineTo(x + 27, y - 29); ctx.fill(); // ушки
+      ctx.beginPath(); ctx.moveTo(x + 28, y - 29); ctx.lineTo(x + 33, y - 35); ctx.lineTo(x + 34, y - 26); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(x + 1, y - 15); ctx.bezierCurveTo(x - 8, y - 18, x - 10, y - 28, x - 4, y - 32); ctx.stroke(); // хвост трубой
+      // лапы: два кадра бега, в прыжке поджаты
+      const legs = frame === 2 ? [[6, 4], [10, 4], [18, 4], [22, 4]] : frame === 0 ? [[5, 6], [11, 3], [18, 6], [24, 3]] : [[7, 3], [12, 6], [19, 3], [23, 6]];
+      ctx.lineWidth = 3;
+      legs.forEach(([lx, lh]) => { ctx.beginPath(); ctx.moveTo(x + lx, y - 7); ctx.lineTo(x + lx, y - 7 + lh); ctx.stroke(); });
+    }
+    // глаз
+    ctx.fillStyle = getComputedStyle(g.wrap).getPropertyValue("--sheet").trim() || "#222";
+    ctx.beginPath(); ctx.arc(x + (duck ? 37 : 30), y - (duck ? 10 : 23), g.state === "over" ? 0.1 : 1.6, 0, Math.PI * 2); ctx.fill();
+    if (g.state === "over") { ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = 1.5; const ex = x + (duck ? 37 : 30), ey = y - (duck ? 10 : 23); ctx.beginPath(); ctx.moveTo(ex - 2, ey - 2); ctx.lineTo(ex + 2, ey + 2); ctx.moveTo(ex + 2, ey - 2); ctx.lineTo(ex - 2, ey + 2); ctx.stroke(); }
+    ctx.restore();
+  }
+  function drawObs(ctx, g, o, col) {
+    const gy = g.H - GROUND;
+    ctx.save(); ctx.fillStyle = col; ctx.strokeStyle = col; ctx.lineWidth = 2;
+    if (o.kind === "box") {
+      for (let i = 0; i < Math.min(3, o.n); i++) { ctx.strokeRect(o.x + i * 18 + 1, gy - 17, 16, 16); ctx.beginPath(); ctx.moveTo(o.x + i * 18 + 1, gy - 9); ctx.lineTo(o.x + i * 18 + 17, gy - 9); ctx.stroke(); }
+    } else if (o.kind === "pot") {
+      ctx.beginPath(); ctx.moveTo(o.x + 2, gy - 12); ctx.lineTo(o.x + 16, gy - 12); ctx.lineTo(o.x + 14, gy); ctx.lineTo(o.x + 4, gy); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(o.x + 9, gy - 12); ctx.lineTo(o.x + 9, gy - 24); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(o.x + 5, gy - 20, 4, 2, -0.6, 0, Math.PI * 2); ctx.ellipse(o.x + 13, gy - 23, 4, 2, 0.6, 0, Math.PI * 2); ctx.fill();
+    } else if (o.kind === "tall") {
+      ctx.fillRect(o.x + 2, gy - o.h, o.w - 4, o.h);
+      ctx.clearRect(o.x + 6, gy - o.h + 6, o.w - 12, 3); ctx.clearRect(o.x + 6, gy - o.h + 14, o.w - 12, 3);
+    } else {
+      const by = gy - o.y - 9, up = Math.sin(o.flap * 14) > 0;
+      ctx.beginPath(); ctx.ellipse(o.x + 15, by, 8, 4, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(o.x + 6, by); ctx.lineTo(o.x + 15, up ? by - 10 : by + 9); ctx.lineTo(o.x + 22, by); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(o.x + 7, by - 1); ctx.lineTo(o.x + 1, by + 1); ctx.lineTo(o.x + 7, by + 2); ctx.fill();
+    }
+    ctx.restore();
+  }
+  function draw(g) {
+    const ctx = g.ctx, { ink, dim, acc } = colorsOf(g), gy = g.H - GROUND;
+    ctx.clearRect(0, 0, g.W, g.H);
+    // земля: тонкая линия и бегущие точки-камешки
+    ctx.strokeStyle = dim; ctx.lineWidth = 1; ctx.globalAlpha = 0.7;
+    ctx.beginPath(); ctx.moveTo(0, gy + 0.5); ctx.lineTo(g.W, gy + 0.5); ctx.stroke();
+    ctx.fillStyle = dim;
+    const off = (g.t * (g.speed || 260)) % 40;
+    for (let x = -off; x < g.W; x += 40) { ctx.fillRect(x, gy + 7, 3, 1); ctx.fillRect(x + 21, gy + 13, 2, 1); }
+    ctx.globalAlpha = 1;
+    g.obs.forEach((o) => drawObs(ctx, g, o, ink));
+    drawCat(ctx, g, acc);
+  }
+  function renderGame(f, body) {
+    const g = gameOf(f.id);
+    body.append(g.wrap);
+    requestAnimationFrame(() => { g.fit(); if (g.state === "pause" || g.state === "over" || g.state === "ready") draw(g); });
+  }
+
   /* ---------- Приложение «Контакты» (1 колонка) ----------
      Контакт — запись items (type "contact"): title — имя, body — заметка, pinned — избранный,
      data: { phones: [], emails: [], socials: [], bday: "дд.мм" | "дд.мм.гггг", bdayRemind }; title — наименование (человек или компания) */
