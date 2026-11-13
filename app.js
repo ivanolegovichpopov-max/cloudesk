@@ -655,7 +655,7 @@
     wrap.append(cv, hud, ov);
     Object.assign(g, { wrap, cv, ov, hud, ctx: cv.getContext("2d") });
     const fit = () => {
-      const r = wrap.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const r = wrap.getBoundingClientRect(), dpr = g.lowRes ? 1 : Math.min(window.devicePixelRatio || 1, 1.5);
       if (!r.width || !r.height) return;
       g.W = r.width; g.H = r.height;
       cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr);
@@ -711,7 +711,11 @@
       if (!g.cv.isConnected) { pause(g); return; }
       const dt = Math.min(0.033, (now - g.last) / 1000); g.last = now;
       update(g, dt); draw(g);
-      if (g.state === "run") g.hud.textContent = (g.best ? "Рекорд " + g.best + "   " : "") + String(Math.floor(g.score)).padStart(5, "0");
+      const sc = Math.floor(g.score);
+      if (g.state === "run" && sc !== g.shown) { g.shown = sc; g.hud.textContent = (g.best ? "Рекорд " + g.best + "   " : "") + String(sc).padStart(5, "0"); }
+      // слабый компьютер: если кадры долгие, холст переходит на обычную чёткость (меньше точек — быстрее)
+      g.slow = (g.slow || 0) * 0.95 + (dt > 0.02 ? 1 : 0) * 0.05;
+      if (g.slow > 0.5 && !g.lowRes) { g.lowRes = true; g.fit(); }
       g.raf = requestAnimationFrame(step);
     };
     g.raf = requestAnimationFrame(step);
@@ -771,9 +775,9 @@
   }
   function colorsOf(g) {
     const now = performance.now();
-    if (!g.colors || now - g.colorAt > 1000) {
+    if (!g.colors || now - g.colorAt > 3000) {
       const cs = getComputedStyle(g.wrap);
-      g.colors = { ink: cs.getPropertyValue("--ink").trim() || "#ddd", dim: cs.getPropertyValue("--ink-dim").trim() || "#999", acc: cs.getPropertyValue("--accent").trim() || "#e8a" };
+      g.colors = { ink: cs.getPropertyValue("--ink").trim() || "#ddd", dim: cs.getPropertyValue("--ink-dim").trim() || "#999", acc: cs.getPropertyValue("--accent").trim() || "#e8a", bg: cs.getPropertyValue("--sheet").trim() || "#222" };
       g.colorAt = now;
     }
     return g.colors;
@@ -803,7 +807,7 @@
       legs.forEach(([lx, lh]) => { ctx.beginPath(); ctx.moveTo(x + lx, y - 7); ctx.lineTo(x + lx, y - 7 + lh); ctx.stroke(); });
     }
     // глаз
-    ctx.fillStyle = getComputedStyle(g.wrap).getPropertyValue("--sheet").trim() || "#222";
+    ctx.fillStyle = g.colors.bg;
     ctx.beginPath(); ctx.arc(x + (duck ? 37 : 30), y - (duck ? 10 : 23), g.state === "over" ? 0.1 : 1.6, 0, Math.PI * 2); ctx.fill();
     if (g.state === "over") { ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = 1.5; const ex = x + (duck ? 37 : 30), ey = y - (duck ? 10 : 23); ctx.beginPath(); ctx.moveTo(ex - 2, ey - 2); ctx.lineTo(ex + 2, ey + 2); ctx.moveTo(ex + 2, ey - 2); ctx.lineTo(ex - 2, ey + 2); ctx.stroke(); }
     ctx.restore();
