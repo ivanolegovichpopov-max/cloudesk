@@ -187,7 +187,7 @@
       ph.className = "drag-ph"; ph.style.height = r.height + "px";
       if (o.grid) { const cs = getComputedStyle(item); ph.style.gridColumn = cs.gridColumnStart + " / " + cs.gridColumnEnd; }
       item.after(ph);
-      item.classList.add("dragging");
+      item.classList.add("dragging"); document.documentElement.classList.add("is-dragging");
       Object.assign(item.style, { width: r.width + "px", left: r.left + "px", top: r.top + "px" });
       const dy0 = e.clientY - r.top, dx0 = e.clientX - r.left;
       let lastY = e.clientY, raf = 0, done = false;
@@ -228,7 +228,7 @@
         h.removeEventListener("pointercancel", up);
         document.removeEventListener("keydown", esc, true);
         if (cancel) { ph.remove(); home.parent.insertBefore(item, home.next); } else ph.replaceWith(item);
-        item.classList.remove("dragging");
+        item.classList.remove("dragging"); document.documentElement.classList.remove("is-dragging");
         item.style.cssText = "";
         if (!cancel) { item.classList.add("dropped"); setTimeout(() => item.classList.remove("dropped"), 300); o.onDrop(item); }
       };
