@@ -568,6 +568,7 @@
   const IC = {
     note: "M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 16h5",
     task: "M4 5h16v14H4zM8 12l3 3 5-6",
+    contacts: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0",
     tools: "M5 3h14v18H5zM8 7h8M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01M8 18h.01M12 18h.01M16 18h.01",
     plus: "M12 5v14M5 12h14",
     pin: "M9 3h6l-1 6 4 4H6l4-4zM11 13h2v8h-2z",
@@ -617,8 +618,251 @@
       name: "Инструменты", icon: IC.tools, spans: [1],
       render: (f, body) => renderTools(f, body),
     },
+    contacts: {
+      name: "Контакты", icon: IC.contacts, spans: [1], addTip: "Новый контакт",
+      limit: 500, limitTip: "В поле уже 500 контактов — это предел",
+      add: (f) => openContact(null, f.id),
+      render: (f, body) => renderContacts(f, body),
+      count: (f) => state.items.filter((it) => it.type === "contact" && it.section_id === f.id).length,
+    },
   };
-  const APP_ORDER = ["notes", "tasks", "tools"];
+  const APP_ORDER = ["notes", "tasks", "tools", "contacts"];
+  /* ---------- Приложение «Контакты» (1 колонка) ----------
+     Контакт — запись items (type "contact"): title — имя, body — заметка, pinned — избранный,
+     data: { company, phones: [], emails: [], socials: [], bday: "дд.мм" | "дд.мм.гггг", bdayRemind } */
+  const CT_LIM = { field: 500, phones: 5, emails: 5, socials: 10, phone: 30, email: 100, social: 200 };
+  const CT_ICO = {
+    phone: "M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2",
+    mail: "M3 6h18v12H3zM3 7l9 6 9-6",
+    link: "M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1",
+    cake: "M4 21h16M5 21v-7h14v7M5 16c2 1.5 4.5 1.5 7 0s5-1.5 7 0M12 14v-3M12 8a1.5 1.5 0 0 0 1.5-1.5C13.5 5 12 3 12 3s-1.5 2-1.5 3.5A1.5 1.5 0 0 0 12 8",
+    chat: "M4 5h16v11H9l-5 4z",
+    send: "M21 3 3 10.5l7 2.5 2.5 7zM10 13l11-10",
+    copy: "M8 8h12v12H8zM4 16V4h12",
+    star: "M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z",
+    bell: "M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4",
+  };
+  const cData = (c) => c.data || {};
+  // соцсеть узнаётся по ссылке: свой значок-подпись и куда вести
+  const SOCIALS = [
+    [/(^@|t\.me\/|telegram\.(me|org)\/)/i, "Telegram"], [/(wa\.me\/|whatsapp\.com)/i, "WhatsApp"], [/vk\.(com|ru)\//i, "ВКонтакте"],
+    [/instagram\.com\//i, "Instagram"], [/(facebook\.com|fb\.com)\//i, "Facebook"], [/(x\.com|twitter\.com)\//i, "X"],
+    [/linkedin\.com\//i, "LinkedIn"], [/youtube\.com|youtu\.be/i, "YouTube"], [/tiktok\.com/i, "TikTok"], [/github\.com\//i, "GitHub"],
+    [/ok\.ru\//i, "Одноклассники"], [/(avito\.ru)/i, "Авито"], [/kwork\.ru/i, "Kwork"],
+  ];
+  const socialName = (u) => { const m = SOCIALS.find(([re]) => re.test(u)); return m ? m[1] : "Ссылка"; };
+  function socialUrl(u) {
+    u = String(u || "").trim();
+    if (!u) return "";
+    if (/^@[\w.]{3,}$/.test(u)) return "https://t.me/" + u.slice(1);
+    if (!/^https?:\/\//i.test(u)) u = "https://" + u;
+    try { const x = new URL(u); return x.protocol === "https:" || x.protocol === "http:" ? x.href : ""; } catch (e) { return ""; }
+  }
+  const telOf = (p) => String(p || "").replace(/[^\d+]/g, "");
+  // день рождения: «дд.мм» или «дд.мм.гггг» → ближайшая дата и сколько дней до неё
+  function bdayNext(s) {
+    const m = String(s || "").match(/^(\d{1,2})\.(\d{1,2})(?:\.(\d{4}))?$/);
+    if (!m) return null;
+    const now = new Date(); now.setHours(0, 0, 0, 0);
+    let d = new Date(now.getFullYear(), Number(m[2]) - 1, Number(m[1]));
+    if (d.getMonth() !== Number(m[2]) - 1) return null;
+    if (d < now) d = new Date(now.getFullYear() + 1, Number(m[2]) - 1, Number(m[1]));
+    return { date: d, days: Math.round((d - now) / 86400000), age: m[3] ? d.getFullYear() - Number(m[3]) : null };
+  }
+  const bdayLabel = (b) => (b.days === 0 ? "день рождения сегодня" : b.days === 1 ? "день рождения завтра" : "день рождения через " + b.days + " " + plural(b.days, "день", "дня", "дней")) + (b.age ? " · " + b.age : "");
+  function initials(name) { const w = String(name || "?").trim().split(/\s+/); return ((w[0] || "?")[0] + (w[1] ? w[1][0] : "")).toUpperCase(); }
+  const hueOf = (s) => { let h = 0; for (const ch of String(s)) h = (h * 31 + ch.codePointAt(0)) % 360; return h; };
+  const letterOf = (name) => { const c = (String(name || "").trim()[0] || "#").toUpperCase(); return /[А-ЯЁ]/.test(c) ? [0, c] : /[A-Z]/.test(c) ? [1, c] : [2, "#"]; };
+  const ctSort = (a, b) => { const la = letterOf(a.title), lb = letterOf(b.title); return la[0] - lb[0] || a.title.localeCompare(b.title, "ru", { sensitivity: "base" }); };
+
+  // строка контакта: кружок с буквами, имя; ниже компания или телефон (или ближайший день рождения); при наведении — позвонить, написать, скопировать
+  const seenCt = new Set();
+  function contactRow(c) {
+    const d = cData(c), phone = (d.phones || [])[0], tg = (d.socials || []).find((s) => /Telegram/.test(socialName(s)));
+    const li = document.createElement("li"); li.className = "ct"; li.dataset.id = c.id; li.tabIndex = 0;
+    li.setAttribute("aria-label", "Контакт «" + c.title + "»");
+    if (!seenCt.has(c.id)) { seenCt.add(c.id); if (!boardFirst) li.classList.add("fade-in"); }
+    const av = document.createElement("span"); av.className = "ct-av"; av.textContent = initials(c.title); av.style.setProperty("--h", hueOf(c.title));
+    const main = document.createElement("div"); main.className = "ct-main";
+    const nm = document.createElement("div"); nm.className = "ct-name"; nm.textContent = c.title;
+    if (c.pinned) { const s = document.createElement("span"); s.className = "ct-star"; s.innerHTML = svgIco(CT_ICO.star, 12, 2); nm.append(s); }
+    const sub = document.createElement("div"); sub.className = "ct-sub";
+    const b = bdayNext(d.bday);
+    if (b && b.days <= 7) { sub.classList.add("bday"); sub.textContent = bdayLabel(b); }
+    else sub.textContent = [d.company, phone || (d.emails || [])[0]].filter(Boolean).join(" · ") || "нет данных";
+    main.append(nm, sub);
+    const acts = document.createElement("div"); acts.className = "ct-acts";
+    const act = (tip, path, href, fn) => {
+      const a = document.createElement(href ? "a" : "button"); a.className = "tool"; a.dataset.tip = tip; a.setAttribute("aria-label", tip); a.innerHTML = svgIco(path, 15);
+      if (href) { a.href = href; if (!href.startsWith("tel:")) { a.target = "_blank"; a.rel = "noopener noreferrer"; } } else a.type = "button";
+      a.addEventListener("click", (e) => { e.stopPropagation(); if (fn) { e.preventDefault(); fn(); } });
+      return a;
+    };
+    if (phone) acts.append(act("Позвонить " + phone, CT_ICO.phone, "tel:" + telOf(phone)));
+    if (tg) acts.append(act("Написать в Telegram", CT_ICO.send, socialUrl(tg)));
+    else if (phone) acts.append(act("Написать в WhatsApp", CT_ICO.chat, "https://wa.me/" + telOf(phone).replace("+", "")));
+    if (phone) acts.append(act("Скопировать номер", CT_ICO.copy, null, () => copyText(phone)));
+    li.append(av, main, acts);
+    li.addEventListener("click", () => openContact(c.id));
+    li.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target === li) openContact(c.id); });
+    return li;
+  }
+  // поле «Контакты»: поиск, избранные сверху, дальше по алфавиту с буквами-разделителями
+  const ctQuery = {};
+  function renderContacts(f, body) {
+    const all = state.items.filter((it) => it.type === "contact" && it.section_id === f.id);
+    const wrap = document.createElement("div"); wrap.className = "contacts";
+    const sf = document.createElement("label"); sf.className = "ct-search";
+    sf.innerHTML = svgIco("M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4", 16, 2);
+    const q = document.createElement("input"); q.type = "text"; q.placeholder = "Поиск"; q.autocomplete = "off"; q.maxLength = 40;
+    q.setAttribute("aria-label", "Поиск по контактам: имя, компания, телефон, почта, заметка"); q.dataset.keep = f.id + ":ctq"; q.value = ctQuery[f.id] || "";
+    sf.append(q);
+    const list = document.createElement("div"); list.className = "ct-list";
+    const draw = () => {
+      const s = norm(q.value.trim());
+      ctQuery[f.id] = q.value;
+      const hay = (c) => { const d = cData(c); return norm([c.title, d.company, c.body, ...(d.phones || []), ...(d.phones || []).map(telOf), ...(d.emails || []), ...(d.socials || [])].join(" ")); };
+      const found = all.filter((c) => !s || hay(c).includes(s) || (/\d{3,}/.test(s) && (cData(c).phones || []).some((p) => telOf(p).includes(s.replace(/\D/g, "")))));
+      list.textContent = "";
+      if (!found.length) { const e = document.createElement("div"); e.className = "tk-empty"; e.textContent = all.length ? "Никого не нашлось" : "Контактов нет"; list.append(e); return; }
+      const fav = found.filter((c) => c.pinned).sort(ctSort), rest = found.filter((c) => !c.pinned).sort(ctSort);
+      const group = (name, items, star) => {
+        const h = document.createElement("div"); h.className = "tk-gh ct-letter";
+        if (star) h.innerHTML = svgIco(CT_ICO.star, 12, 2);
+        h.append(name);
+        const ol = document.createElement("ol"); ol.className = "ct-ol";
+        items.forEach((c) => ol.append(contactRow(c)));
+        list.append(h, ol);
+      };
+      if (fav.length) group("Избранные", fav, true);
+      let cur = null, buf = [];
+      rest.forEach((c) => { const L = letterOf(c.title)[1]; if (L !== cur) { if (buf.length) group(cur, buf); cur = L; buf = []; } buf.push(c); });
+      if (buf.length) group(cur, buf);
+    };
+    q.addEventListener("input", draw);
+    q.addEventListener("keydown", (e) => { if (e.key === "Escape" && q.value) { e.stopPropagation(); q.value = ""; draw(); } });
+    wrap.append(sf, list);
+    body.append(wrap);
+    draw();
+  }
+
+  /* Окно контакта: имя (до 20), компания (до 20), строки «телефон / почта / соцсеть / день рождения»,
+     заметка (до 1000); внизу слева — добавить строку нужного вида, справа — избранный и удалить */
+  const ct_ = { id: null, sec: null, fav: false, phones: [], emails: [], socials: [], bday: null, bdayRemind: false };
+  function ctRow(kind, i) {
+    const row = document.createElement("div"); row.className = "ct-row"; row.dataset.kind = kind;
+    const val = kind === "bday" ? ct_.bday : ct_[kind][i];
+    const ico = document.createElement("span"); ico.className = "ct-row-ico";
+    const path = kind === "phones" ? CT_ICO.phone : kind === "emails" ? CT_ICO.mail : kind === "bday" ? CT_ICO.cake : CT_ICO.link;
+    ico.innerHTML = svgIco(path, 16);
+    const inp = document.createElement("input"); inp.type = kind === "emails" ? "email" : "text"; inp.autocomplete = "off"; inp.value = val || "";
+    inp.maxLength = kind === "phones" ? CT_LIM.phone : kind === "emails" ? CT_LIM.email : kind === "bday" ? 10 : CT_LIM.social;
+    inp.inputMode = kind === "phones" ? "tel" : kind === "bday" ? "numeric" : kind === "emails" ? "email" : "url";
+    inp.placeholder = { phones: "+7 900 000-00-00", emails: "name@mail.ru", socials: "Ссылка или @ник в Telegram", bday: "дд.мм или дд.мм.гггг" }[kind];
+    inp.setAttribute("aria-label", { phones: "Телефон", emails: "Почта", socials: "Соцсеть", bday: "День рождения" }[kind]);
+    const tag = document.createElement("span"); tag.className = "ct-row-tag";
+    const upd = () => {
+      if (kind === "socials") { tag.textContent = inp.value.trim() ? socialName(inp.value) : ""; }
+      if (kind === "bday") { const b = bdayNext(inp.value); tag.textContent = b ? (b.days === 0 ? "сегодня" : "через " + b.days + " дн.") : ""; }
+    };
+    inp.addEventListener("input", () => { if (kind === "bday") ct_.bday = inp.value; else ct_[kind][i] = inp.value; row.classList.remove("bad"); upd(); });
+    upd();
+    row.append(ico, inp, tag);
+    if (kind === "bday") {
+      const bell = tool(CT_ICO.bell, "Напомнить в Telegram в день рождения", () => { ct_.bdayRemind = !ct_.bdayRemind; bell.setAttribute("aria-pressed", String(ct_.bdayRemind)); });
+      bell.classList.add("ct-bell"); bell.setAttribute("aria-pressed", String(!!ct_.bdayRemind));
+      row.append(bell);
+    }
+    row.append(tool(P.x, "Убрать", () => { if (kind === "bday") { ct_.bday = null; ct_.bdayRemind = false; } else ct_[kind].splice(i, 1); renderCtRows(); }));
+    return row;
+  }
+  function renderCtRows(focusKind) {
+    const box = $("ct-rows"); box.textContent = "";
+    ["phones", "emails", "socials"].forEach((k) => ct_[k].forEach((_, i) => box.append(ctRow(k, i))));
+    if (ct_.bday !== null) box.append(ctRow("bday"));
+    box.hidden = !box.children.length;
+    document.querySelectorAll("#ct-add [data-add]").forEach((b) => {
+      const k = b.dataset.add, full = k === "bday" ? ct_.bday !== null : ct_[k].length >= CT_LIM[k];
+      b.classList.toggle("off", full); if (full) b.setAttribute("aria-disabled", "true"); else b.removeAttribute("aria-disabled");
+    });
+    if (focusKind) { const r = [...box.querySelectorAll('.ct-row[data-kind="' + focusKind + '"] input')].pop(); if (r) r.focus(); }
+  }
+  document.querySelectorAll("#ct-add [data-add]").forEach((b) => b.addEventListener("click", () => {
+    const k = b.dataset.add;
+    if (k === "bday") { if (ct_.bday !== null) return; ct_.bday = ""; }
+    else { if (ct_[k].length >= CT_LIM[k]) { toast("Это предел для одного контакта"); return; } ct_[k].push(""); }
+    renderCtRows(k);
+  }));
+  $("ct-fav").addEventListener("click", () => { ct_.fav = !ct_.fav; $("ct-fav").setAttribute("aria-pressed", String(ct_.fav)); });
+  function openContact(id, secId) {
+    closeMenus(null);
+    const c = id ? state.items.find((x) => x.id === id) : null;
+    if (id && !c) return;
+    const d = c ? cData(c) : {};
+    Object.assign(ct_, { id: c ? c.id : null, sec: c ? c.section_id : secId, fav: c ? !!c.pinned : false,
+      phones: (d.phones || []).slice(), emails: (d.emails || []).slice(), socials: (d.socials || []).slice(),
+      bday: d.bday || null, bdayRemind: !!d.bdayRemind });
+    if (!c) ct_.phones = [""]; // новый контакт — сразу строка для телефона
+    $("ct-h").textContent = c ? "Контакт" : "Новый контакт";
+    $("ct-name").value = c ? c.title : ""; $("ct-name").classList.remove("bad");
+    $("ct-company").value = d.company || "";
+    $("ct-note").value = c ? c.body || "" : "";
+    $("ct-fav").setAttribute("aria-pressed", String(ct_.fav));
+    $("ct-delete").hidden = !c;
+    $("ct-status").textContent = "";
+    renderCtRows();
+    animShow($("ctsheet")); lockSheets(true);
+    setTimeout(() => $("ct-name").focus(), 30);
+  }
+  let ctClosing = false;
+  async function closeContact() {
+    if (ctClosing) return;
+    ctClosing = true;
+    try {
+      const name = $("ct-name").value.trim();
+      const c = ct_.id ? state.items.find((x) => x.id === ct_.id) : null;
+      const clean = (a) => a.map((x) => String(x || "").trim()).filter(Boolean);
+      const phones = clean(ct_.phones), emails = clean(ct_.emails), socials = clean(ct_.socials);
+      const bday = ct_.bday && ct_.bday.trim() ? ct_.bday.trim() : null;
+      const empty = !name && !phones.length && !emails.length && !socials.length && !$("ct-note").value.trim();
+      if (!c && empty) { animHide($("ctsheet"), 170); lockSheets(false); return; }
+      if (!name) { $("ct-name").classList.add("bad"); $("ct-status").textContent = "Напишите имя"; $("ct-name").focus(); return; }
+      if (name.length > LIM.title && (!c || name !== c.title)) { $("ct-name").classList.add("bad"); $("ct-status").textContent = LONG_TITLE; return; }
+      // проверка: телефон — цифры, почта — с «@», ссылка — открывается, день рождения — дата
+      let bad = false;
+      document.querySelectorAll("#ct-rows .ct-row").forEach((r) => {
+        const v = r.querySelector("input").value.trim(), k = r.dataset.kind;
+        const ok = !v || (k === "phones" ? telOf(v).replace("+", "").length >= 5 : k === "emails" ? /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) : k === "bday" ? !!bdayNext(v) : !!socialUrl(v));
+        r.classList.toggle("bad", !ok); if (!ok) bad = true;
+      });
+      if (bad) { $("ct-status").textContent = "Проверьте отмеченное красным"; return; }
+      const data = Object.assign({}, c ? cData(c) : {}, { company: $("ct-company").value.trim(), phones, emails, socials, bday, bdayRemind: !!(bday && ct_.bdayRemind), tz: TZ });
+      // напоминание в день рождения — в 9 утра (письмо в Telegram отправляет сервер)
+      const nb = data.bdayRemind ? bdayNext(bday) : null;
+      const remind_at = nb ? new Date(nb.date.getFullYear(), nb.date.getMonth(), nb.date.getDate(), 9).toISOString() : null;
+      const row = { title: name, body: $("ct-note").value.slice(0, LIM.desc), pinned: ct_.fav, data, remind_at };
+      $("ct-status").textContent = "Сохраняю…";
+      let ok;
+      if (c) {
+        const patch = {};
+        Object.keys(row).forEach((k) => { if (JSON.stringify(row[k] ?? null) !== JSON.stringify(c[k] ?? null)) patch[k] = row[k]; });
+        ok = Object.keys(patch).length ? await patchItem(c.id, patch) : true;
+      } else {
+        const n = state.items.filter((x) => x.type === "contact" && x.section_id === ct_.sec).length;
+        if (n >= CT_LIM.field) { $("ct-status").textContent = "В поле уже " + CT_LIM.field + " контактов — это предел"; return; }
+        ok = !!(await createItem(Object.assign({ type: "contact", section_id: ct_.sec }, row)));
+      }
+      if (!ok) { $("ct-status").textContent = "Не сохранилось — проверьте интернет"; return; }
+      $("ct-status").textContent = "";
+      animHide($("ctsheet"), 170); lockSheets(false);
+    } finally { ctClosing = false; }
+  }
+  $("ct-name").addEventListener("input", () => $("ct-name").classList.remove("bad"));
+  $("ct-name").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("ct-company").focus(); } });
+  $("ctsheet").querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", closeContact));
+  $("ctsheet").querySelector("[data-cancel]").addEventListener("click", () => { closeMenus(null); animHide($("ctsheet"), 170); lockSheets(false); });
+  $("ct-delete").addEventListener("click", async () => { if (ct_.id && await removeItem(ct_.id, "Контакт удалён")) { animHide($("ctsheet"), 170); lockSheets(false); } });
+
   /* ---------- Приложение «Инструменты» (1 колонка): калькулятор, проценты и НДС, валюты, даты, текст ----------
      Вкладки-значки сверху, как в окне «Время». Всё, что введено, хранится в браузере для каждого поля,
      поэтому перерисовка стола (автосохранение и т. п.) ничего не сбрасывает. */
@@ -3805,7 +4049,7 @@
 
   /* ---------- Корзина: удалённое за 30 дней, восстановление пачкой ---------- */
   const TRASH_DAYS = 30;
-  const TRASH_ICO = { field: "M4 5h16v14H4zM4 10h16", note: "M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 16h5", reminder: "M6 10a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6zM10 20a2 2 0 0 0 4 0", link: "M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1", group: "M3 7h6l2 2h10v10H3z", task: "M4 5h16v14H4zM8 12l3 3 5-6", desk: "M3 5h8v6H3zM13 5h8v6h-8zM3 13h8v6H3zM13 13h8v6h-8z" };
+  const TRASH_ICO = { field: "M4 5h16v14H4zM4 10h16", note: "M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 16h5", reminder: "M6 10a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6zM10 20a2 2 0 0 0 4 0", link: "M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1", group: "M3 7h6l2 2h10v10H3z", task: "M4 5h16v14H4zM8 12l3 3 5-6", contact: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0", desk: "M3 5h8v6H3zM13 5h8v6h-8zM3 13h8v6H3zM13 13h8v6h-8z" };
   const UNDO_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M9 14 4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3"/></svg>';
   const q_ = (s) => "«" + (s.length > 40 ? s.slice(0, 40) + "…" : s) + "»";
   async function renderTrash() {
@@ -3824,8 +4068,8 @@
     const list = [...batches.entries()].sort((a, b) => (a[1].at < b[1].at ? 1 : -1));
     for (const [batch, b] of list) {
       const by = (k) => b.rows.filter((r) => r.kind === k);
-      const f = by("field"), notes = by("note"), rems = by("reminder"), links = by("link"), groups = by("group"), desks = by("desk"), tasks = by("task");
-      const recs = () => { const p = []; if (notes.length) p.push(notes.length + " " + plural(notes.length, "заметка", "заметки", "заметок")); if (tasks.length) p.push(tasks.length + " " + plural(tasks.length, "задача", "задачи", "задач")); return p; };
+      const f = by("field"), notes = by("note"), rems = by("reminder"), links = by("link"), groups = by("group"), desks = by("desk"), tasks = by("task"), contacts = by("contact");
+      const recs = () => { const p = []; if (notes.length) p.push(notes.length + " " + plural(notes.length, "заметка", "заметки", "заметок")); if (tasks.length) p.push(tasks.length + " " + plural(tasks.length, "задача", "задачи", "задач")); if (contacts.length) p.push(contacts.length + " " + plural(contacts.length, "контакт", "контакта", "контактов")); return p; };
       let kind, title;
       if (desks.length) {
         kind = "desk"; title = "Стол " + q_(desks[0].title || "");
@@ -3836,6 +4080,7 @@
         if (parts.length) title += " · " + parts.join(", ");
       } else if (f.length) { kind = "field"; const app = APPS[f[0].app]; title = "Поле " + q_(app ? app.name : "Поле") + (recs().length ? " и " + recs().join(", ") : ""); }
       else if (notes.length) { kind = "note"; title = notes.length === 1 ? "Заметка " + q_(noteTitle(notes[0])) : notes.length + " " + plural(notes.length, "заметка", "заметки", "заметок"); }
+      else if (contacts.length) { kind = "contact"; title = contacts.length === 1 ? "Контакт " + q_(contacts[0].title || "") : contacts.length + " " + plural(contacts.length, "контакт", "контакта", "контактов"); }
       else if (tasks.length) { kind = "task"; title = tasks.length === 1 ? "Задача " + q_(tasks[0].title || "") : tasks.length + " " + plural(tasks.length, "задача", "задачи", "задач"); }
       else if (rems.length) { kind = "reminder"; title = rems.length === 1 ? "Напоминание " + q_(rems[0].title || "") : "Напоминаний: " + rems.length; }
       else if (links.length || groups.length) {
@@ -3900,6 +4145,7 @@
     return (from ? "…" : "") + flat.slice(from, from + 90) + (flat.length > from + 90 ? "…" : "");
   }
   const ICO = {
+    contact: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0",
     note: "M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 16h5",
     rem: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7v5l3 2",
     task: "M4 5h16v14H4zM8 12l3 3 5-6",
@@ -3946,6 +4192,10 @@
         return resultEl("task", it.title, sub, q, async () => { const d = deskOf(it.section_id); if (d && d.id !== state.desk) await switchDesk(d.id); openItem(it.id); });
       });
     if (tasks.length) groups.push(["Задачи", tasks]);
+    const cts = state.items.filter((it) => it.type === "contact" && norm([it.title, cData(it).company, it.body, ...(cData(it).phones || []), ...(cData(it).emails || [])].join(" ")).includes(q))
+      .sort(ctSort).slice(0, 6).map((it) => resultEl("contact", it.title, [fieldName(it), cData(it).company, (cData(it).phones || [])[0]].filter(Boolean).join(" · "), q,
+        async () => { const d = deskOf(it.section_id); if (d && d.id !== state.desk) await switchDesk(d.id); openContact(it.id); }));
+    if (cts.length) groups.push(["Контакты", cts]);
     const rems = (state.reminders || []).filter((r) => norm(r.text).includes(q)).slice(0, 5).map((r) =>
       resultEl("rem", r.text, fmtRem.format(new Date(r.remind_at)) + (r.sent_at ? " · отправлено" : ""), q, () => openItem(r.id)));
     if (rems.length) groups.push(["Напоминания", rems]);

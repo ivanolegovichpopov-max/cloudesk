@@ -1230,3 +1230,54 @@ input.bad { border-color: var(--danger) !important; }
 .tl-lim.over { background: color-mix(in srgb, var(--danger) 18%, transparent); color: var(--danger); }
 
 .tools { overflow: hidden; }
+
+/* ---------- Приложение «Контакты» (1 колонка): поиск, избранные, буквы, строки как у задач ---------- */
+.contacts { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.ct-search { position: relative; display: flex; align-items: center; color: var(--ink-dim); }
+.ct-search > svg { position: absolute; left: 10px; pointer-events: none; }
+.ct-search input { width: 100%; height: 36px !important; padding-left: 34px !important; }
+.ct-search:focus-within > svg { color: var(--accent); }
+.ct-list { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ct-letter { padding: 6px 6px 2px; }
+.ct-letter svg { color: var(--accent); }
+.ct-ol { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; }
+/* строка контакта — та же высота и подсветка, что у задачи (54 px), значки справа без рамки, место под них оставлено */
+.ct {
+  position: relative; display: flex; align-items: center; gap: 10px; min-width: 0; height: var(--tk-row, 54px);
+  padding: 0 100px 0 6px; border-radius: var(--r); cursor: pointer; outline: none; color: var(--ink); transition: background-color .12s ease;
+}
+.ct:hover, .ct:focus-visible { background: var(--hover); }
+.ct-av {
+  flex: none; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%;
+  background: color-mix(in srgb, hsl(var(--h, 200) 55% 55%) 32%, transparent); color: var(--ink); font-size: 12px; font-weight: 600; letter-spacing: .02em;
+}
+.ct-main { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.ct-name { display: flex; align-items: center; gap: 4px; min-width: 0; font-size: 14px; line-height: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ct-star { display: inline-grid; color: var(--accent); }
+.ct-sub { font-size: 12px; line-height: 16px; color: var(--ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.ct-sub.bday { color: var(--accent); font-weight: 600; }
+.ct-acts { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); display: flex; gap: 2px; opacity: 0; pointer-events: none; transition: opacity .12s ease; }
+.ct:hover .ct-acts, .ct:focus-within .ct-acts { opacity: 1; pointer-events: auto; }
+.ct-acts .tool { width: 28px; height: 28px; padding: 0; display: grid; place-items: center; color: var(--ink-dim); }
+.ct-acts .tool:hover, .ct-acts .tool:focus-visible { color: var(--ink); background: transparent; }
+@media (hover: none) { .ct-acts { opacity: 1; pointer-events: auto; } }
+
+/* окно контакта */
+.ct-form { gap: 10px; }
+.ct-company { flex: none; height: 32px !important; border: 0 !important; border-radius: 0 !important; padding: 0 4px !important; background: transparent !important; font-size: 14px !important; color: var(--ink-dim) !important; }
+.ct-company:focus { color: var(--ink) !important; }
+.ct-rows { flex: none; display: grid; gap: 4px; max-height: 50%; overflow-y: auto; }
+.ct-rows[hidden] { display: none; }
+.ct-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ct-row-ico { flex: none; display: grid; place-items: center; width: 24px; color: var(--ink-dim); }
+.ct-row input { flex: 1; min-width: 0; height: 36px !important; }
+.ct-row.bad input { border-color: var(--danger) !important; }
+.ct-row-tag { flex: none; font-size: 12px; font-weight: 600; color: var(--accent); white-space: nowrap; }
+.ct-row-tag:empty { display: none; }
+.ct-row .tool { width: 30px; height: 30px; }
+.ct-bell[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+#ctsheet .ct-note { flex: 1 1 auto; min-height: 70px; padding: 6px 4px; border: 0; border-radius: 0; background: transparent; font: 400 15px/1.6 var(--font); color: inherit; border-top: 1px solid var(--line); }
+#ctsheet .ct-note:focus { border-color: var(--line); }
+.ct-add { display: flex; gap: 6px; }
+.ct-add .tool.off { opacity: .35; }
+#ct-fav[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
