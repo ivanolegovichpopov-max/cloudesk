@@ -79,8 +79,10 @@
 }
 
 * { box-sizing: border-box; }
-html { height: 100%; }
-body { min-height: 100vh; min-height: 100dvh; }
+/* прокручивается только body (html стоит): его тонкая прозрачная полоса лежит поверх заставки, а не чёрной полосой сбоку;
+   место под неё зарезервировано — при открытии окна (прокрутка выключается) ничего не сдвигается */
+html { height: 100%; overflow: clip; }
+body { height: 100%; overflow-x: clip; overflow-y: auto; scrollbar-gutter: stable; }
 body {
   margin: 0;
   font: 400 15px/1.5 var(--font);
@@ -513,6 +515,7 @@ html.is-dragging, html.is-dragging * { cursor: grabbing !important; user-select:
 /* Горизонтальной прокрутки нет нигде. Именно clip, а не hidden: hidden делал body вторым прокручиваемым блоком высотой
    в экран — страница прокручивалась «мимо» него, и всё ниже первого экрана переставало рисоваться */
 html, body { overflow-x: clip; }
+body.locked { overflow-y: hidden; }
 .sheet, .tab-panel, .links-list, .t-list, .pop, .menu, .search-pop, .lg-links, .notes, .board { overflow-x: hidden; }
 /* списки-сетки не растягиваются шире окна: колонка не шире контейнера */
 .links-list, .lg-sec, .lg-links, .t-list, .wn-list { grid-template-columns: minmax(0, 1fr); }

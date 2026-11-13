@@ -341,7 +341,7 @@
     if (typeof renderNextRem === "function" && state.reminders) renderNextRem();
   }
 
-  function lockSheets(open) { document.documentElement.style.overflow = open ? "hidden" : ""; }
+  function lockSheets(open) { document.body.classList.toggle("locked", !!open); }
 
   /* ---------- Экраны ---------- */
   function showLogin(msg) {
