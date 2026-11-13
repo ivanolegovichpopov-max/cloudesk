@@ -578,6 +578,7 @@
     contacts: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0",
     game: "M5 20c0-4 2-7 7-7s7 3 7 7zM6 13 5 5l4 3M18 13l1-8-4 3M12 13a5 5 0 0 0 0-10 5 5 0 0 0 0 10z",
     files: "M3 7h6l2 2h10v10H3zM12 12v5M9.5 14.5h5",
+    web: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18",
     tools: "M5 3h14v18H5zM8 7h8M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01M8 18h.01M12 18h.01M16 18h.01",
     plus: "M12 5v14M5 12h14",
     pin: "M9 3h6l-1 6 4 4H6l4-4zM11 13h2v8h-2z",
@@ -642,12 +643,79 @@
       // место на столе: «2,4 МБ из 10 МБ» и полоска (общее для всех полей «Файлы» этого стола)
       sub: (f) => { const u = deskUsed(f.desk_id); if (!u) return null; const p = Math.min(100, Math.round((u / FS_QUOTA) * 100)); return { text: fmtSize(u) + " из 10 МБ", p, warn: p >= 90, tip: "Файлы на этом столе занимают " + fmtSize(u) + " из 10 МБ" }; },
     },
+    web: {
+      name: "Поиск", icon: IC.web, spans: [1],
+      render: (f, body) => renderWeb(f, body),
+    },
     game: {
       name: "Игра", icon: IC.game, spans: [1],
       render: (f, body) => renderGame(f, body),
     },
   };
-  const APP_ORDER = ["notes", "tasks", "tools", "contacts", "files", "game"];
+  const APP_ORDER = ["notes", "tasks", "tools", "contacts", "files", "web", "game"];
+  /* ---------- Приложение «Поиск»: поиск в интернете (1 колонка) ----------
+     Строка ввода, под ней поисковики группами: Google и его сервисы, Яндекс и его сервисы, остальное.
+     Выбранный подсвечен, Enter ищет в нём; нажатие на другой — сразу ищет там. Запрос открывается в новой вкладке. */
+  const WEB = [
+    ["Google", [["google", "Google", "https://www.google.com/search?q=", "https://www.google.com"],
+      ["gmaps", "Карты", "https://www.google.com/maps/search/?api=1&query=", "https://www.google.com/maps"],
+      ["youtube", "YouTube", "https://www.youtube.com/results?search_query=", "https://www.youtube.com"],
+      ["gtrans", "Переводчик", "https://translate.google.com/?sl=auto&tl=ru&op=translate&text=", "https://translate.google.com"]]],
+    ["Яндекс", [["yandex", "Яндекс", "https://yandex.ru/search/?text=", "https://yandex.ru"],
+      ["ymaps", "Карты", "https://yandex.ru/maps/?text=", "https://yandex.ru/maps"],
+      ["wordstat", "Вордстат", "https://wordstat.yandex.ru/?region=all&view=table&words=", "https://wordstat.yandex.ru"],
+      ["market", "Маркет", "https://market.yandex.ru/search?text=", "https://market.yandex.ru"],
+      ["ytrans", "Переводчик", "https://translate.yandex.ru/?source_lang=auto&target_lang=ru&text=", "https://translate.yandex.ru"]]],
+    ["Другое", [["avito", "Авито", "https://www.avito.ru/all?q=", "https://www.avito.ru"],
+      ["ozon", "Ozon", "https://www.ozon.ru/search/?text=", "https://www.ozon.ru"],
+      ["wb", "Wildberries", "https://www.wildberries.ru/catalog/0/search.aspx?search=", "https://www.wildberries.ru"],
+      ["wiki", "Википедия", "https://ru.wikipedia.org/w/index.php?search=", "https://ru.wikipedia.org"]]],
+  ];
+  const WEB_ALL = WEB.flatMap(([g, list]) => list.map((e) => ({ id: e[0], name: e[1], q: e[2], home: e[3], group: g })));
+  const webFull = (e) => (e.group === "Другое" || e.name === e.group ? e.name : e.group + " " + e.name);
+  const webQ = {};
+  function webGo(e, text) {
+    const t = (text || "").trim();
+    const url = t ? e.q + encodeURIComponent(t) : e.home;
+    const a = document.createElement("a"); a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer";
+    document.body.append(a); a.click(); a.remove();
+  }
+  function renderWeb(f, body) {
+    const sel = WEB_ALL.find((e) => e.id === store.get("cloudesk-web-" + f.id)) || WEB_ALL[0];
+    const wrap = document.createElement("div"); wrap.className = "web";
+    const form = document.createElement("form"); form.className = "web-form";
+    const ico = document.createElement("span"); ico.className = "web-ico"; ico.innerHTML = svgIco("M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4", 18, 2);
+    const q = document.createElement("input"); q.type = "search"; q.className = "web-input"; q.autocomplete = "off"; q.enterKeyHint = "search"; q.maxLength = 300;
+    q.placeholder = "Искать в " + webFull(sel); q.setAttribute("aria-label", "Поиск в интернете: " + webFull(sel)); q.dataset.keep = f.id + ":web"; q.value = webQ[f.id] || "";
+    q.addEventListener("input", () => { webQ[f.id] = q.value; });
+    q.addEventListener("keydown", (e) => { if (e.key === "Escape" && q.value) { e.stopPropagation(); q.value = ""; webQ[f.id] = ""; } });
+    form.append(ico, q);
+    form.addEventListener("submit", (e) => { e.preventDefault(); webGo(sel, q.value); });
+    wrap.append(form);
+    const groups = document.createElement("div"); groups.className = "web-groups";
+    WEB.forEach(([g, list]) => {
+      const row = document.createElement("div"); row.className = "web-row"; row.setAttribute("role", "group"); row.setAttribute("aria-label", g);
+      const lb = document.createElement("div"); lb.className = "tk-gh web-label"; lb.textContent = g;
+      groups.append(lb);
+      list.forEach(([id, name]) => {
+        const e = WEB_ALL.find((x) => x.id === id);
+        const b = document.createElement("button"); b.type = "button"; b.className = "web-chip"; b.textContent = name;
+        b.setAttribute("aria-pressed", String(e === sel));
+        b.dataset.tip = q.value.trim() ? "Искать в " + webFull(e) : webFull(e) + " — выбрать; с запросом — сразу искать";
+        // с запросом — сразу ищет и запоминается; без запроса — просто выбирается для Enter
+        b.addEventListener("click", () => {
+          store.set("cloudesk-web-" + f.id, id);
+          if (q.value.trim()) webGo(e, q.value);
+          renderBoard([f.id]);
+          const ni = document.querySelector('[data-keep="' + f.id + ':web"]'); if (ni) ni.focus({ preventScroll: true });
+        });
+        row.append(b);
+      });
+      groups.append(row);
+    });
+    wrap.append(groups);
+    body.append(wrap);
+  }
   /* ---------- Приложение «Файлы»: хранилище с папками (1 или 2 колонки) ----------
      Папка — запись items типа folder (название до 20, data.parent — папка выше).
      Файл — запись типа file: название = имя файла с диска (до 120), data = { parent, path, size, mime }; сам файл — в хранилище «files».
