@@ -629,7 +629,7 @@
   const APP_ORDER = ["notes", "tasks", "tools", "contacts"];
   /* ---------- Приложение «Контакты» (1 колонка) ----------
      Контакт — запись items (type "contact"): title — имя, body — заметка, pinned — избранный,
-     data: { company, phones: [], emails: [], socials: [], bday: "дд.мм" | "дд.мм.гггг", bdayRemind } */
+     data: { phones: [], emails: [], socials: [], bday: "дд.мм" | "дд.мм.гггг", bdayRemind }; title — наименование (человек или компания) */
   const CT_LIM = { field: 500, phones: 5, emails: 5, socials: 10, phone: 30, email: 100, social: 200 };
   const CT_ICO = {
     phone: "M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2",
@@ -689,7 +689,7 @@
     const sub = document.createElement("div"); sub.className = "ct-sub";
     const b = bdayNext(d.bday);
     if (b && b.days <= 7) { sub.classList.add("bday"); sub.textContent = bdayLabel(b); }
-    else sub.textContent = [d.company, phone || (d.emails || [])[0]].filter(Boolean).join(" · ") || "нет данных";
+    else sub.textContent = phone || (d.emails || [])[0] || (d.socials || []).map(socialName)[0] || "нет данных";
     main.append(nm, sub);
     const acts = document.createElement("div"); acts.className = "ct-acts";
     const act = (tip, path, href, fn) => {
@@ -721,7 +721,7 @@
     const draw = () => {
       const s = norm(q.value.trim());
       ctQuery[f.id] = q.value;
-      const hay = (c) => { const d = cData(c); return norm([c.title, d.company, c.body, ...(d.phones || []), ...(d.phones || []).map(telOf), ...(d.emails || []), ...(d.socials || [])].join(" ")); };
+      const hay = (c) => { const d = cData(c); return norm([c.title, c.body, ...(d.phones || []), ...(d.phones || []).map(telOf), ...(d.emails || []), ...(d.socials || [])].join(" ")); };
       const found = all.filter((c) => !s || hay(c).includes(s) || (/\d{3,}/.test(s) && (cData(c).phones || []).some((p) => telOf(p).includes(s.replace(/\D/g, "")))));
       list.textContent = "";
       if (!found.length) { const e = document.createElement("div"); e.className = "tk-empty"; e.textContent = all.length ? "Никого не нашлось" : "Контактов нет"; list.append(e); return; }
@@ -805,8 +805,9 @@
     if (!c) ct_.phones = [""]; // новый контакт — сразу строка для телефона
     $("ct-h").textContent = c ? "Контакт" : "Новый контакт";
     $("ct-name").value = c ? c.title : ""; $("ct-name").classList.remove("bad");
-    $("ct-company").value = d.company || "";
-    $("ct-note").value = c ? c.body || "" : "";
+    // «компании» больше нет: если она была записана раньше — переносится в начало заметки
+    const note = c ? c.body || "" : "";
+    $("ct-note").value = d.company && !note.startsWith(d.company) ? (d.company + (note ? "\n" + note : "")).slice(0, LIM.desc) : note;
     $("ct-fav").setAttribute("aria-pressed", String(ct_.fav));
     $("ct-delete").hidden = !c;
     $("ct-status").textContent = "";
@@ -826,7 +827,7 @@
       const bday = ct_.bday && ct_.bday.trim() ? ct_.bday.trim() : null;
       const empty = !name && !phones.length && !emails.length && !socials.length && !$("ct-note").value.trim();
       if (!c && empty) { animHide($("ctsheet"), 170); lockSheets(false); return; }
-      if (!name) { $("ct-name").classList.add("bad"); $("ct-status").textContent = "Напишите имя"; $("ct-name").focus(); return; }
+      if (!name) { $("ct-name").classList.add("bad"); $("ct-status").textContent = "Напишите наименование"; $("ct-name").focus(); return; }
       if (name.length > LIM.title && (!c || name !== c.title)) { $("ct-name").classList.add("bad"); $("ct-status").textContent = LONG_TITLE; return; }
       // проверка: телефон — цифры, почта — с «@», ссылка — открывается, день рождения — дата
       let bad = false;
@@ -836,10 +837,11 @@
         r.classList.toggle("bad", !ok); if (!ok) bad = true;
       });
       if (bad) { $("ct-status").textContent = "Проверьте отмеченное красным"; return; }
-      const data = Object.assign({}, c ? cData(c) : {}, { company: $("ct-company").value.trim(), phones, emails, socials, bday, bdayRemind: !!(bday && ct_.bdayRemind), tz: TZ });
+      const data = Object.assign({}, c ? cData(c) : {}, { phones, emails, socials, bday, bdayRemind: !!(bday && ct_.bdayRemind), tz: TZ });
       // напоминание в день рождения — в 9 утра (письмо в Telegram отправляет сервер)
       const nb = data.bdayRemind ? bdayNext(bday) : null;
       const remind_at = nb ? new Date(nb.date.getFullYear(), nb.date.getMonth(), nb.date.getDate(), 9).toISOString() : null;
+      delete data.company;
       const row = { title: name, body: $("ct-note").value.slice(0, LIM.desc), pinned: ct_.fav, data, remind_at };
       $("ct-status").textContent = "Сохраняю…";
       let ok;
@@ -858,7 +860,7 @@
     } finally { ctClosing = false; }
   }
   $("ct-name").addEventListener("input", () => $("ct-name").classList.remove("bad"));
-  $("ct-name").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("ct-company").focus(); } });
+  $("ct-name").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); const i = $("ct-rows").querySelector("input"); (i || $("ct-note")).focus(); } });
   $("ctsheet").querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", closeContact));
   $("ctsheet").querySelector("[data-cancel]").addEventListener("click", () => { closeMenus(null); animHide($("ctsheet"), 170); lockSheets(false); });
   $("ct-delete").addEventListener("click", async () => { if (ct_.id && await removeItem(ct_.id, "Контакт удалён")) { animHide($("ctsheet"), 170); lockSheets(false); } });
@@ -4192,8 +4194,8 @@
         return resultEl("task", it.title, sub, q, async () => { const d = deskOf(it.section_id); if (d && d.id !== state.desk) await switchDesk(d.id); openItem(it.id); });
       });
     if (tasks.length) groups.push(["Задачи", tasks]);
-    const cts = state.items.filter((it) => it.type === "contact" && norm([it.title, cData(it).company, it.body, ...(cData(it).phones || []), ...(cData(it).emails || [])].join(" ")).includes(q))
-      .sort(ctSort).slice(0, 6).map((it) => resultEl("contact", it.title, [fieldName(it), cData(it).company, (cData(it).phones || [])[0]].filter(Boolean).join(" · "), q,
+    const cts = state.items.filter((it) => it.type === "contact" && norm([it.title, it.body, ...(cData(it).phones || []), ...(cData(it).emails || [])].join(" ")).includes(q))
+      .sort(ctSort).slice(0, 6).map((it) => resultEl("contact", it.title, [fieldName(it), (cData(it).phones || [])[0]].filter(Boolean).join(" · "), q,
         async () => { const d = deskOf(it.section_id); if (d && d.id !== state.desk) await switchDesk(d.id); openContact(it.id); }));
     if (cts.length) groups.push(["Контакты", cts]);
     const rems = (state.reminders || []).filter((r) => norm(r.text).includes(q)).slice(0, 5).map((r) =>

@@ -1264,8 +1264,6 @@ input.bad { border-color: var(--danger) !important; }
 
 /* окно контакта */
 .ct-form { gap: 10px; }
-.ct-company { flex: none; height: 32px !important; border: 0 !important; border-radius: 0 !important; padding: 0 4px !important; background: transparent !important; font-size: 14px !important; color: var(--ink-dim) !important; }
-.ct-company:focus { color: var(--ink) !important; }
 .ct-rows { flex: none; display: grid; gap: 4px; max-height: 50%; overflow-y: auto; }
 .ct-rows[hidden] { display: none; }
 .ct-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
