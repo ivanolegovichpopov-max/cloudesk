@@ -700,29 +700,65 @@
     if (v && /^[\w-]{11}$/.test(v)) return { video: v };
     return null;
   }
+  // запрос к серверу «Музыки» (поиск по словам — только с ключом YouTube; названия по ссылкам — без ключа)
+  async function muFn(body) {
+    const { data: ses } = await sb.auth.getSession();
+    const tok = ses && ses.session && ses.session.access_token;
+    const r = await fetch(SB_URL + "/functions/v1/yt-search", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + tok, apikey: SB_KEY }, body: JSON.stringify(body) });
+    return { ok: r.ok, j: await r.json().catch(() => ({})) };
+  }
+  const ytThumb = (id) => "https://i.ytimg.com/vi/" + id + "/mqdefault.jpg";
+  // id роликов плейлиста отдаёт сам плеер YouTube — ключ не нужен
+  async function muPlaylistIds(s, list) {
+    await muEnsurePlayer(s);
+    if (!s.player) return [];
+    await s.readyP;
+    return new Promise((res) => {
+      const done = (ids) => { clearTimeout(tm); s.onCued = null; res(ids || []); };
+      const tm = setTimeout(() => done([]), 10000);
+      s.onCued = done;
+      s.player.cuePlaylist({ list, listType: "playlist" });
+    });
+  }
+  // названия и каналы — пачками через сервер (там они берутся у YouTube без ключа)
+  async function muTitles(s, ids) {
+    for (let i = 0; i < ids.length; i += 50) {
+      try {
+        const { ok, j } = await muFn({ ids: ids.slice(i, i + 50) });
+        if (!ok) continue;
+        (j.items || []).forEach((x) => { const it = s.list.find((y) => y.id === x.id); if (it) { it.t = x.t; it.c = x.c; } });
+        muSave(s); muPaint(s);
+      } catch (e) {}
+    }
+  }
   async function muSearch(s, text) {
     const t = (text || "").trim();
     if (!t || s.busy) return;
     const link = ytLink(t);
     s.busy = true; s.err = ""; muPaint(s);
     try {
-      const { data: ses } = await sb.auth.getSession();
-      const tok = ses && ses.session && ses.session.access_token;
-      const r = await fetch(SB_URL + "/functions/v1/yt-search", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + tok, apikey: SB_KEY },
-        body: JSON.stringify(link && link.list ? { list: link.list } : { q: link && link.video ? link.video : t }) });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) {
-        s.err = j.error === "no_key" ? "Поиск ещё не подключён: нужен ключ YouTube" : j.error === "quotaExceeded" ? "На сегодня поиски закончились — завтра снова можно" : j.error === "not_found" ? "Плейлист не найден или он закрытый" : "Не получилось найти — проверьте интернет";
+      if (!link) {
+        const { ok, j } = await muFn({ q: t });
+        if (!ok) s.err = j.error === "no_key" ? "Поиск по словам пока не подключён — вставьте ссылку на ролик или плейлист YouTube" : j.error === "quotaExceeded" ? "На сегодня поиски закончились — завтра снова можно" : "Не получилось найти — проверьте интернет";
+        else {
+          s.list = (j.items || []).slice(0, 50); s.q = t;
+          s.order = s.list.map((x) => x.id); if (s.shuffle) muShuffle(s, false);
+          if (!s.list.length) s.err = "Ничего не нашлось";
+          muSave(s);
+        }
       } else {
-        s.list = (j.items || []).slice(0, 50);
-        if (link && link.video) s.list = s.list.filter((x) => x.id === link.video).concat(s.list.filter((x) => x.id !== link.video));
-        s.q = link ? "" : t;
-        s.order = s.list.map((x) => x.id); if (s.shuffle) muShuffle(s, false);
-        if (!s.list.length) s.err = "Ничего не нашлось";
-        else if (link) muPlay(s, s.order[0]);
-        muSave(s);
+        let ids = link.list ? await muPlaylistIds(s, link.list) : [link.video];
+        if (link.list && link.video && ids.includes(link.video)) ids = [link.video, ...ids.filter((x) => x !== link.video)];
+        if (!ids.length) s.err = "Плейлист не открылся — он закрытый или ссылка неверная";
+        else {
+          s.list = ids.slice(0, 200).map((id) => ({ id, t: "", c: "", th: ytThumb(id), d: 0 })); s.q = "";
+          s.order = s.list.map((x) => x.id); if (s.shuffle) muShuffle(s, false);
+          s.busy = false;
+          muPlay(s, s.order[0]); muSave(s);
+          muTitles(s, s.list.map((x) => x.id));
+        }
       }
-    } catch (e) { s.err = "Не получилось найти — проверьте интернет"; }
+    } catch (e) { s.err = "Не получилось — проверьте интернет"; }
     s.busy = false; muPaint(s);
     if (s.ui) { s.ui.list.scrollTop = 0; }
   }
@@ -740,30 +776,34 @@
     });
     return ytApi;
   }
-  async function muEnsurePlayer(s) {
-    if (s.player || s.making) return;
-    s.making = true;
+  function muEnsurePlayer(s) {
+    if (!s.makeP) s.makeP = muMake(s);
+    return s.makeP;
+  }
+  async function muMake(s) {
     try {
       const YT = await ytReady();
       s.host = document.createElement("div"); s.host.className = "mu-host"; s.host.hidden = true;
       const target = document.createElement("div"); s.host.append(target);
       $("desk").append(s.host);
       muWatch();
+      s.readyP = new Promise((r) => { s.readyRes = r; });
       s.player = new YT.Player(target, {
         width: "100%", height: "100%",
         playerVars: { playsinline: 1, rel: 0, modestbranding: 1, controls: 0, disablekb: 1, fs: 0, iv_load_policy: 3, origin: location.origin },
         events: {
-          onReady: () => { s.ready = true; if (s.muted) s.player.mute(); if (s.cur) { if (s.wantPlay) s.player.loadVideoById(s.cur); else s.player.cueVideoById(s.cur); } muPlace(); muPaint(s); },
+          onReady: () => { s.ready = true; if (s.readyRes) s.readyRes(); if (s.muted) s.player.mute(); if (s.cur) { if (s.wantPlay) s.player.loadVideoById(s.cur); else s.player.cueVideoById(s.cur); } muPlace(); muPaint(s); },
           onStateChange: (e) => {
+            if (e.data === YT.PlayerState.CUED && s.onCued) { s.onCued(s.player.getPlaylist() || []); return; }
             s.playing = e.data === YT.PlayerState.PLAYING || e.data === YT.PlayerState.BUFFERING;
             if (e.data === YT.PlayerState.ENDED) { if (s.repeat === "one") { s.player.seekTo(0, true); s.player.playVideo(); } else muStep(s, 1, true); }
             muPaint(s);
           },
-          onError: () => { s.err = "Этот ролик нельзя включить на сайте — следующий"; muPaint(s); setTimeout(() => muStep(s, 1, true), 1200); },
+          onError: () => { if (s.onCued) { s.onCued([]); return; } s.err = "Этот ролик нельзя включить на сайте — следующий"; muPaint(s); setTimeout(() => muStep(s, 1, true), 1200); },
         },
       });
     } catch (e) { s.err = "YouTube не загрузился — проверьте интернет"; muPaint(s); }
-    s.making = false;
+    if (!s.player) s.makeP = null; // не вышло — в следующий раз попробуем снова
   }
   function muPlay(s, id) {
     if (!id) return;
@@ -806,7 +846,7 @@
     if (muLoop) return;
     const tick = () => {
       muPlace();
-      Object.values(muS).forEach((s) => { if (s.player && s.ready && s.ui && s.playing) { const p = s.player.getCurrentTime() || 0, L = s.player.getDuration() || 0; if (Math.floor(p) !== Math.floor(s.pos) || L !== s.len) { s.pos = p; s.len = L; muTime(s); } } });
+      Object.values(muS).forEach((s) => { if (s.player && s.ready && s.ui && s.playing) { const p = s.player.getCurrentTime() || 0, L = s.player.getDuration() || 0; if (Math.floor(p) !== Math.floor(s.pos) || L !== s.len) { s.pos = p; s.len = L; muTime(s); const it = s.list.find((x) => x.id === s.cur); if (it && L && !it.d) { it.d = Math.round(L); muSave(s); } } } });
       muLoop = Object.values(muS).some((s) => s.host) ? requestAnimationFrame(tick) : 0;
     };
     muLoop = requestAnimationFrame(tick);
@@ -821,8 +861,8 @@
   function muPaint(s, force) {
     const u = s.ui; if (!u || (!force && !u.wrap.isConnected)) return;
     const it = s.list.find((x) => x.id === s.cur);
-    u.title.textContent = it ? it.t : s.cur ? "Загружается…" : "Ничего не играет";
-    u.sub.textContent = it ? it.c : "Найдите музыку в поиске";
+    u.title.textContent = it && it.t ? it.t : s.cur ? "Загружается…" : "Ничего не играет";
+    u.sub.textContent = it ? it.c : "";
     u.stage.classList.toggle("empty", !s.cur);
     const set = (b, path, tip, on) => { b.innerHTML = ICON(path, 18); b.dataset.tip = tip; b.setAttribute("aria-label", tip); if (on != null) b.setAttribute("aria-pressed", String(!!on)); };
     set(u.play, s.playing ? MU_ICO.pause : MU_ICO.play, s.playing ? "Пауза" : "Играть");
@@ -838,7 +878,7 @@
     if (s.busy) { const e = document.createElement("div"); e.className = "tk-empty"; e.textContent = "Ищу…"; u.list.append(e); }
     else if (!s.list.length || s.err) {
       const e = document.createElement("div"); e.className = "tk-empty" + (s.err ? " mu-err" : "");
-      e.textContent = s.err || "Напишите исполнителя, песню или настроение — или вставьте ссылку на плейлист YouTube";
+      e.textContent = s.err || "YouTube или YouTube Music → «Поделиться» → «Копировать ссылку» — и вставьте её сюда";
       u.list.append(e);
     }
     if (!s.busy && s.list.length) {
@@ -850,7 +890,7 @@
         if (x.th && /^https:\/\/i\.ytimg\.com\//.test(x.th)) { const img = document.createElement("img"); img.alt = ""; img.loading = "lazy"; img.src = x.th; th.append(img); }
         if (x.id === s.cur && s.playing) { const eq = document.createElement("span"); eq.className = "mu-eq"; eq.innerHTML = "<i></i><i></i><i></i>"; th.append(eq); }
         const main = document.createElement("div"); main.className = "mu-main";
-        const t = document.createElement("div"); t.className = "mu-t"; t.textContent = x.t;
+        const t = document.createElement("div"); t.className = "mu-t"; t.textContent = x.t || "Загружается…";
         const c = document.createElement("div"); c.className = "mu-c"; c.textContent = [x.c, x.d ? mm(x.d) : ""].filter(Boolean).join(" · ");
         main.append(t, c); li.append(th, main);
         const go = () => { if (x.id === s.cur) muToggle(s); else muPlay(s, x.id); };
@@ -894,9 +934,9 @@
     // справа: поиск и список
     const right = document.createElement("div"); right.className = "mu-right";
     const form = document.createElement("form"); form.className = "ct-search";
-    form.innerHTML = svgIco(MU_ICO.search, 16, 2);
-    const q = document.createElement("input"); q.type = "text"; q.autocomplete = "off"; q.maxLength = 300; q.placeholder = "Что послушать?"; q.value = s.q;
-    q.setAttribute("aria-label", "Поиск музыки на YouTube или ссылка на плейлист"); q.dataset.keep = f.id + ":mu";
+    form.innerHTML = svgIco("M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1", 16, 2);
+    const q = document.createElement("input"); q.type = "text"; q.autocomplete = "off"; q.maxLength = 300; q.placeholder = "Ссылка на ролик или плейлист"; q.value = s.q;
+    q.setAttribute("aria-label", "Ссылка на ролик или плейлист YouTube"); q.dataset.keep = f.id + ":mu";
     q.addEventListener("keydown", (e) => { if (e.key === "Escape" && q.value) { e.stopPropagation(); q.value = ""; } });
     q.addEventListener("paste", () => setTimeout(() => { if (ytLink(q.value)) { muSearch(s, q.value); q.value = ""; } }, 0));
     form.append(q);
