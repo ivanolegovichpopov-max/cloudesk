@@ -1117,12 +1117,12 @@ input.bad { border-color: var(--danger) !important; }
 .it-chip.off { opacity: .45; }
 .it-chip.off:hover { border-color: var(--line); }
 .it-chip-f .pop { left: auto; right: 0; width: 220px; min-width: 0; }
-#itemsheet .it-body, #hbsheet .it-body {
+#itemsheet .it-body, #hbsheet .it-body, #mnsheet .it-body {
   flex: 1 1 auto; min-height: 84px; padding: 6px 4px; border: 0; border-radius: 0; background: transparent;
   font: 400 15px/1.6 var(--font); color: inherit;
 }
-#itemsheet .it-body:focus, #hbsheet .it-body:focus { border: 0; }
-#itemsheet .it-body::placeholder, #hbsheet .it-body::placeholder { color: inherit; opacity: .45; }
+#itemsheet .it-body:focus, #hbsheet .it-body:focus, #mnsheet .it-body:focus { border: 0; }
+#itemsheet .it-body::placeholder, #hbsheet .it-body::placeholder, #mnsheet .it-body::placeholder { color: inherit; opacity: .45; }
 .it-subs-box { flex: none; display: grid; gap: 4px; max-height: 45%; overflow-y: auto; overflow-x: hidden; border-top: 1px solid var(--line); padding-top: 6px; }
 .it-subs-box[hidden] { display: none; }
 .it-subs-h { display: flex; gap: 6px; padding: 0 2px; }
@@ -1440,3 +1440,69 @@ input.fs-ren { width: 100%; min-width: 0; height: 22px !important; padding: 0 6p
 .hb-tp { width: auto; padding-top: 4px; }
 .tk-hist i.off { background: transparent; box-shadow: inset 0 0 0 1px rgba(127,127,127,.3); }
 #hb-today[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+
+/* ---------- Приложение «Деньги» (3 колонки): операции · итог месяца и проекты · платежи и долги ---------- */
+.fld-body.mn-body { overflow: hidden; }
+.mn { height: 100%; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr) minmax(0, 1fr); gap: 16px; min-width: 0; }
+.mn-col { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
+.mn-list { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
+.mn-hint { min-height: 16px; margin-top: -2px; padding: 0 4px; font-size: 12px; line-height: 16px; color: var(--ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mn-hint.bad { color: var(--danger); }
+.mn-input.nope { animation: tk-nope .5s ease; }
+.mn-day { display: flex; justify-content: space-between; align-items: center; padding: 8px 6px 2px; }
+.mn-day-sum { font-variant-numeric: tabular-nums; letter-spacing: 0; text-transform: none; font-weight: 600; }
+.mn-ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 2px; }
+.mn-row { position: relative; display: flex; align-items: center; gap: 10px; min-width: 0; height: 48px; padding: 0 8px 0 6px; border-radius: var(--r); cursor: pointer; outline: none; color: var(--ink); transition: background-color .12s ease; }
+.mn-row:hover, .mn-row:focus-visible { background: var(--hover); }
+.mn-row .tk-acts { right: 4px; }
+.mn-row:hover .mn-a, .mn-row:focus-within .mn-a { opacity: 0; }
+.mn-row:not(:has(.tk-acts)):hover .mn-a { opacity: 1; }
+.mn-main { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.mn-t { font-size: 14px; line-height: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mn-s { font-size: 12px; line-height: 16px; color: var(--ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mn-s.over { color: var(--danger); font-weight: 600; }
+.mn-a { flex: none; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; transition: opacity .12s ease; }
+.mn-a.in { color: var(--accent); }
+.mn-proj.on { background: color-mix(in srgb, var(--accent) 14%, transparent); box-shadow: inset 0 0 0 1px var(--accent); }
+.mn-tip { padding: 14px 8px; font-size: 13px; }
+/* итог месяца */
+.mn-nav { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
+.mn-month { flex: 1; height: 36px; border: 0; background: transparent; font-size: 15px; font-weight: 600; color: var(--ink); border-radius: var(--r); }
+.mn-month:not(:disabled):hover { background: var(--hover); }
+.mn-month:disabled { cursor: default; opacity: 1; }
+.mn-big { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.mn-cell { min-width: 0; padding: 8px 8px 9px; border: 1px solid var(--line); border-radius: var(--r); }
+.mn-cell-l { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-dim); }
+.mn-cell-v { margin-top: 2px; font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mn-cell.in .mn-cell-v, .mn-cell.net .mn-cell-v { color: var(--accent); }
+.mn-cell.neg .mn-cell-v { color: var(--danger); }
+.mn-h { padding: 8px 6px 0; }
+/* платежи и долги */
+.mn-tabs { display: flex; align-items: center; gap: 6px; }
+.mn-tabs .segmented { flex: 1; }
+.mn-tabs .segmented button { flex: 1; height: 30px; font-size: 13px; }
+.mn-tabs > .tool { flex: none; width: 36px; height: 36px; }
+/* окно операции */
+.mn-form { gap: 12px; }
+#mnsheet .it-form > .ed-head, #mnsheet .mn-when, #mnsheet .mn-amount-line { flex: none; }
+#mnsheet .mn-when { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.mn-amount-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.mn-amount-row { position: relative; flex: 1 1 180px; min-width: 0; display: flex; align-items: center; }
+.mn-amount-row input { width: 100%; height: 44px !important; padding-right: 34px !important; font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.mn-amount-row.in input { color: var(--accent); }
+.mn-amount-row.bad input { border-color: var(--danger) !important; }
+.mn-rub { position: absolute; right: 12px; font-size: 18px; font-weight: 600; color: var(--ink-dim); pointer-events: none; }
+.mn-seg button { height: 34px; padding: 0 12px; font-size: 13px; }
+.mn-seg[hidden] { display: none; }
+#mnsheet .it-body, #hbsheet .it-body { flex: 1 1 auto; min-height: 70px; }
+.mn-days-pop { width: 290px; }
+.mn-wd-head span { display: grid; place-items: center; height: 18px; font-size: 10px; font-weight: 600; color: var(--ink-dim); }
+.mn-days .hb-wd { font-weight: 500; }
+.mn-days .hb-wd.today { border-color: var(--ink-dim); }
+.mn-proj-pop { width: 230px; }
+.mn-proj-new { margin-top: 4px; }
+.mn-proj-new input { height: 34px !important; }
+@media (max-width: 760px) {
+  .fld:has(.mn-body) { grid-row: span 3; }
+  .fld[data-span] .mn { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1.3fr) auto minmax(0, 1fr); }
+}

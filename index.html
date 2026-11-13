@@ -510,6 +510,56 @@
   </div>
 </div>
 
+<!-- Деньги: операция, регулярный платёж, долг -->
+<div id="mnsheet" class="sheet-wrap" hidden>
+  <div class="sheet-backdrop" data-close></div>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="mn-h">
+    <div class="sheet-bar">
+      <h3 id="mn-h">Операция</h3>
+      <div class="sheet-tools">
+        <span id="mn-status" class="ed-status" role="status"></span>
+        <button type="button" class="tool cancel" data-cancel data-tip="Отменить" aria-label="Отменить — закрыть без сохранения"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M6 6l12 12M18 6 6 18"/></svg></button>
+        <button type="button" class="tool done" data-close data-tip="Готово" aria-label="Готово"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>
+      </div>
+    </div>
+    <div class="it-form mn-form">
+      <input id="mn-name" class="ed-head" type="text" maxlength="20" autocomplete="off" placeholder="Что" aria-label="Название">
+      <div class="mn-amount-line">
+        <label id="mn-amount-row" class="mn-amount-row"><input id="mn-amount" type="text" inputmode="decimal" autocomplete="off" maxlength="16" placeholder="0" aria-label="Сумма в рублях"><span class="mn-rub">₽</span></label>
+        <div id="mn-kind" class="segmented mn-seg" role="radiogroup" aria-label="Расход или доход"><button type="button" data-k="out" role="radio">Расход</button><button type="button" data-k="in" role="radio">Доход</button></div>
+        <div id="mn-dir" class="segmented mn-seg" role="radiogroup" aria-label="Кто кому должен" hidden><button type="button" data-k="they" role="radio">Мне должны</button><button type="button" data-k="me" role="radio">Я должен</button></div>
+      </div>
+      <div class="it-when mn-when">
+        <div class="field it-chip-f" id="mn-date-f">
+          <button type="button" id="mn-date-btn" class="pick-btn it-chip" aria-haspopup="menu" aria-expanded="false" data-menu="mn-date-pop"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M4 6h16v14H4zM4 10h16M8 3v4M16 3v4"/></svg><span id="mn-date-label"></span></button>
+          <div id="mn-date-pop" class="pop menu-pop it-pick-pop mn-days-pop" role="menu" hidden></div>
+        </div>
+        <div class="field it-chip-f" id="mn-every-f">
+          <button type="button" id="mn-every-btn" class="pick-btn it-chip" aria-haspopup="menu" aria-expanded="false" data-menu="mn-every-pop"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M17 2l4 4-4 4M3 11v-1a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v1a4 4 0 0 1-4 4H3"/></svg><span id="mn-every-label"></span></button>
+          <div id="mn-every-pop" class="pop menu-pop it-pick-pop" role="menu" hidden></div>
+        </div>
+        <div class="field it-chip-f" id="mn-remind-f">
+          <button type="button" id="mn-remind-btn" class="pick-btn it-chip" aria-haspopup="menu" aria-expanded="false" data-menu="mn-remind-pop"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4"/></svg><span id="mn-remind-label" hidden></span></button>
+          <div id="mn-remind-pop" class="pop menu-pop it-pick-pop" role="menu" hidden></div>
+        </div>
+        <div class="field it-chip-f" id="mn-proj-f">
+          <button type="button" id="mn-proj-btn" class="pick-btn it-chip" aria-haspopup="menu" aria-expanded="false" data-menu="mn-proj-pop"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M5 9h14M5 15h14M10 4 8 20M16 4l-2 16"/></svg><span id="mn-proj-label" hidden></span></button>
+          <div id="mn-proj-pop" class="pop menu-pop it-pick-pop mn-proj-pop" role="menu" hidden></div>
+        </div>
+      </div>
+      <textarea id="mn-note" class="it-body" maxlength="1000" placeholder="Заметка" aria-label="Заметка"></textarea>
+    </div>
+    <div class="sheet-foot">
+      <div></div>
+      <div class="foot-actions">
+        <button id="mn-pay" type="button" class="tool" data-tip="Оплачено" aria-label="Оплачено — записать"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM8 12.5l2.5 2.5L16 9.5"/></svg></button>
+        <button id="mn-close" type="button" class="tool" aria-pressed="false" data-tip="Закрыть долг" aria-label="Закрыть долг"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM8 12.5l2.5 2.5L16 9.5"/></svg></button>
+        <button id="mn-delete" type="button" class="tool" data-tip="Удалить" aria-label="Удалить"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Поле стола: приложение, ширина, название -->
 <div id="secsheet" class="sheet-wrap" hidden>
   <div class="sheet-backdrop" data-close></div>
