@@ -577,6 +577,7 @@
     task: "M4 5h16v14H4zM8 12l3 3 5-6",
     contacts: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0",
     game: "M5 20c0-4 2-7 7-7s7 3 7 7zM6 13 5 5l4 3M18 13l1-8-4 3M12 13a5 5 0 0 0 0-10 5 5 0 0 0 0 10z",
+    files: "M3 7h6l2 2h10v10H3zM12 12v5M9.5 14.5h5",
     tools: "M5 3h14v18H5zM8 7h8M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01M8 18h.01M12 18h.01M16 18h.01",
     plus: "M12 5v14M5 12h14",
     pin: "M9 3h6l-1 6 4 4H6l4-4zM11 13h2v8h-2z",
@@ -633,12 +634,420 @@
       render: (f, body) => renderContacts(f, body),
       count: (f) => state.items.filter((it) => it.type === "contact" && it.section_id === f.id).length,
     },
+    files: {
+      name: "Файлы", icon: IC.files, spans: [1, 2], addTip: "Загрузить файлы",
+      add: (f) => fsPick(f),
+      render: (f, body) => renderFiles(f, body),
+      count: (f) => state.items.filter((it) => it.type === "file" && it.section_id === f.id).length,
+      // место на столе: «2,4 МБ из 10 МБ» и полоска (общее для всех полей «Файлы» этого стола)
+      sub: (f) => { const u = deskUsed(f.desk_id); if (!u) return null; const p = Math.min(100, Math.round((u / FS_QUOTA) * 100)); return { text: fmtSize(u) + " из 10 МБ", p, warn: p >= 90, tip: "Файлы на этом столе занимают " + fmtSize(u) + " из 10 МБ" }; },
+    },
     game: {
       name: "Игра", icon: IC.game, spans: [1],
       render: (f, body) => renderGame(f, body),
     },
   };
-  const APP_ORDER = ["notes", "tasks", "tools", "contacts", "game"];
+  const APP_ORDER = ["notes", "tasks", "tools", "contacts", "files", "game"];
+  /* ---------- Приложение «Файлы»: хранилище с папками (1 или 2 колонки) ----------
+     Папка — запись items типа folder (название до 20, data.parent — папка выше).
+     Файл — запись типа file: название = имя файла с диска (до 120), data = { parent, path, size, mime }; сам файл — в хранилище «files».
+     На один стол — не больше 10 МБ файлов в сумме (проверяет и база). Удаление — в корзину; навсегда файл стирается вместе с записью. */
+  const FS_QUOTA = 10 * 1024 * 1024;
+  const FS_ICO = {
+    folder: "M3 7h6l2 2h10v10H3z",
+    file: "M6 3h9l4 4v14H6zM14 3v5h5",
+    image: "M4 5h16v14H4zM4 16l5-5 4 4 3-3 4 4M15 9h.01",
+    doc: "M6 3h9l4 4v14H6zM14 3v5h5M9 13h6M9 17h4",
+    table: "M4 5h16v14H4zM4 10h16M4 15h16M10 5v14",
+    zip: "M6 3h9l4 4v14H6zM14 3v5h5M11 6v2M11 10v2M11 14v2",
+    audio: "M9 18V6l10-2v12M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM19 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0z",
+    video: "M4 6h12v12H4zM16 10l5-3v10l-5-3",
+    upload: "M12 16V4M7 9l5-5 5 5M4 16v4h16v-4",
+    newdir: "M3 7h6l2 2h10v10H3zM12 12v5M9.5 14.5h5",
+    sort: "M7 4v16M4 17l3 3 3-3M14 6h7M14 11h5M14 16h3",
+    more: "M5 12h.01M12 12h.01M19 12h.01",
+    rename: "M4 20h4L19 9l-4-4L4 16zM13 7l4 4",
+    download: "M12 4v12M7 11l5 5 5-5M4 20h16",
+    link: "M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1",
+    move: "M3 7h6l2 2h10v10H3zM10 14h6M13 11l3 3-3 3",
+    trash: "M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3",
+    chev: "M9 6l6 6-6 6",
+  };
+  const fData = (it) => (it.data && typeof it.data === "object" ? it.data : {});
+  const fsOfField = (fid) => state.items.filter((it) => it.section_id === fid && (it.type === "file" || it.type === "folder"));
+  const fmtFsDay = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short" });
+  // сколько занято файлами на столе (все поля «Файлы» этого стола вместе)
+  function deskUsed(deskId) {
+    const secs = new Set(state.sections.filter((s) => s.desk_id === deskId).map((s) => s.id));
+    return state.items.filter((it) => it.type === "file" && secs.has(it.section_id)).reduce((s, it) => s + (Number(fData(it).size) || 0), 0);
+  }
+  const deskOfSec = (secId) => { const s = state.sections.find((x) => x.id === secId); return s ? s.desk_id : null; };
+  function fileKind(it) {
+    if (it.type === "folder") return "folder";
+    const m = (fData(it).mime || "").toLowerCase(), n = (it.title || "").toLowerCase();
+    if (m.startsWith("image/")) return "image";
+    if (m.startsWith("audio/")) return "audio";
+    if (m.startsWith("video/")) return "video";
+    if (/\.(xlsx?|csv|ods|numbers)$/.test(n)) return "table";
+    if (/\.(zip|rar|7z|tar|gz)$/.test(n)) return "zip";
+    if (/\.(pdf|docx?|odt|rtf|txt|md|pptx?)$/.test(n)) return "doc";
+    return "file";
+  }
+  // состояние поля: текущая папка, поиск, сортировка; папка, которой уже нет, — значит корень
+  const fsS = {};
+  function fsOf(fid) {
+    if (!fsS[fid]) fsS[fid] = { dir: store.get("cloudesk-fdir-" + fid) || null, q: "", sort: store.get("cloudesk-fsort-" + fid) || "name", up: [], ren: null };
+    const s = fsS[fid];
+    if (s.dir && !state.items.some((it) => it.id === s.dir && it.type === "folder" && it.section_id === fid)) s.dir = null;
+    return s;
+  }
+  function fsGo(fid, dir) { const s = fsOf(fid); s.dir = dir || null; s.q = ""; store.set("cloudesk-fdir-" + fid, s.dir || ""); renderBoard(); }
+  // родитель записи; если папка-родитель удалена (запись вернули из корзины без неё) — корень
+  function parentOf(it) {
+    const p = fData(it).parent;
+    return p && state.items.some((x) => x.id === p && x.type === "folder") ? p : null;
+  }
+  function fsChildren(fid, dir) { return fsOfField(fid).filter((it) => parentOf(it) === (dir || null)); }
+  function fsDescendants(fid, id) {
+    const out = [], walk = (d) => fsChildren(fid, d).forEach((c) => { out.push(c); if (c.type === "folder") walk(c.id); });
+    walk(id); return out;
+  }
+  function fsPath(dir) { // цепочка папок от корня до dir
+    const chain = []; let cur = dir ? state.items.find((x) => x.id === dir) : null;
+    while (cur && chain.length < 30) { chain.unshift(cur); const p = parentOf(cur); cur = p ? state.items.find((x) => x.id === p) : null; }
+    return chain;
+  }
+  const FS_SORT = { name: "По имени", date: "Сначала новые", size: "Сначала большие" };
+  function fsSorted(list, sort) {
+    const byName = (a, b) => (a.title || "").localeCompare(b.title || "", "ru", { numeric: true, sensitivity: "base" });
+    const cmp = sort === "date" ? (a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0) || byName(a, b)
+      : sort === "size" ? (a, b) => (Number(fData(b).size) || 0) - (Number(fData(a).size) || 0) || byName(a, b) : byName;
+    // папки всегда сверху; у папок «размер» — сумма файлов внутри
+    const sizeOf = (it) => (it.type === "folder" ? fsDescendants(it.section_id, it.id).reduce((s, x) => s + (Number(fData(x).size) || 0), 0) : Number(fData(it).size) || 0);
+    const cmpF = sort === "size" ? (a, b) => sizeOf(b) - sizeOf(a) || byName(a, b) : cmp;
+    return [...list.filter((x) => x.type === "folder").sort(cmpF), ...list.filter((x) => x.type === "file").sort(cmp)];
+  }
+
+  // ссылки на просмотр картинок живут час — держим их, чтобы при перерисовке миниатюры не загружались заново
+  const thumbs = new Map();
+  function thumbUrl(path, img) {
+    const c = thumbs.get(path);
+    if (c && c.exp > Date.now()) { img.src = c.url; return; }
+    if (c && c.wait) { c.wait.push(img); return; }
+    thumbs.set(path, { wait: [img], exp: 0 });
+    sb.storage.from("files").createSignedUrl(path, 3600).then(({ data }) => {
+      const w = (thumbs.get(path) || {}).wait || [];
+      if (!data) { thumbs.delete(path); return; }
+      thumbs.set(path, { url: data.signedUrl, exp: Date.now() + 3300 * 1000 });
+      w.forEach((i) => { i.src = data.signedUrl; });
+    });
+  }
+
+  // открыть файл в новой вкладке (вкладка открывается сразу — иначе браузер посчитает её всплывающим окном)
+  async function fsOpen(it) {
+    const w = window.open("", "_blank");
+    if (w) w.opener = null;
+    const { data, error } = await sb.storage.from("files").createSignedUrl(fData(it).path, 300);
+    if (error || !data) { if (w) w.close(); toast("Не удалось открыть файл — проверьте интернет."); return; }
+    if (w) w.location.replace(data.signedUrl); else window.location.assign(data.signedUrl);
+  }
+  async function fsDownload(it) {
+    const { data, error } = await sb.storage.from("files").createSignedUrl(fData(it).path, 60, { download: it.title });
+    if (error || !data) { toast("Не удалось скачать — проверьте интернет."); return; }
+    const a = document.createElement("a"); a.href = data.signedUrl; a.rel = "noopener"; a.download = it.title;
+    document.body.append(a); a.click(); a.remove();
+  }
+  // ссылка для других: открывается без входа, пока не истечёт срок
+  async function fsShare(it, days) {
+    const { data, error } = await sb.storage.from("files").createSignedUrl(fData(it).path, days * 86400, { download: it.title });
+    if (error || !data) { toast("Не удалось сделать ссылку — проверьте интернет."); return; }
+    try { await navigator.clipboard.writeText(data.signedUrl); toast("Ссылка скопирована — действует " + (days === 1 ? "сутки" : days === 7 ? "неделю" : days + " " + plural(days, "день", "дня", "дней"))); }
+    catch (e) { toast("Не удалось скопировать ссылку"); }
+  }
+
+  // загрузка: проверка места на столе, файл — в хранилище, потом запись; не записалось — файл стирается
+  async function fsUpload(fid, files) {
+    const s = fsOf(fid), desk = deskOfSec(fid), dir = s.dir;
+    let used = deskUsed(desk);
+    for (const file of files) {
+      if (!file || !file.size && file.type === "" && !/\.[^.]+$/.test(file.name)) { toast("Папки целиком не загружаются — выберите файлы"); continue; }
+      if (used + file.size > FS_QUOTA) {
+        toast("«" + file.name.slice(0, 40) + "» не помещается: на столе занято " + fmtSize(used) + " из 10 МБ");
+        continue;
+      }
+      const ext = (file.name.match(/\.([A-Za-z0-9]{1,8})$/) || [, ""])[1].toLowerCase();
+      let name = file.name.trim() || "Файл";
+      if (name.length > 120) name = ext ? name.slice(0, 119 - ext.length) + "." + ext : name.slice(0, 120);
+      const path = state.user.id + "/" + newId() + (ext ? "." + ext : "");
+      const pend = { key: path, name, size: file.size };
+      s.up.push(pend); renderBoard();
+      const up = await sb.storage.from("files").upload(path, file, { contentType: file.type || "application/octet-stream", upsert: false });
+      s.up = s.up.filter((p) => p !== pend);
+      if (up.error) { console.error(up.error); renderBoard(); toast("«" + name.slice(0, 40) + "» не загрузился — проверьте интернет."); continue; }
+      const row = await createItem({ type: "file", section_id: fid, title: name, data: { parent: dir, path, size: file.size, mime: (file.type || "").slice(0, 80) } });
+      if (!row) { sb.storage.from("files").remove([path]); renderBoard(); continue; }
+      used += file.size;
+    }
+  }
+  async function fsNewFolder(fid) {
+    const s = fsOf(fid), names = new Set(fsChildren(fid, s.dir).filter((x) => x.type === "folder").map((x) => x.title));
+    let name = "Новая папка", n = 2;
+    while (names.has(name)) name = "Новая папка " + n++;
+    const row = await createItem({ type: "folder", section_id: fid, title: name, data: { parent: s.dir } });
+    if (row) { s.ren = { id: row.id, v: name }; s.q = ""; renderBoard(); }
+  }
+  async function fsRename(it, v) {
+    const s = fsOf(it.section_id); s.ren = null;
+    v = (v || "").trim();
+    if (!v || v === it.title) { renderBoard(); return; }
+    await patchItem(it.id, { title: v.slice(0, it.type === "folder" ? LIM.title : 120) });
+  }
+  async function fsMove(it, dir) {
+    if ((parentOf(it) || null) === (dir || null)) return;
+    if (it.type === "folder" && (dir === it.id || fsDescendants(it.section_id, it.id).some((x) => x.id === dir))) { toast("Папку нельзя переложить в саму себя"); return; }
+    const prev = parentOf(it);
+    const ok = await patchItem(it.id, { data: Object.assign({}, fData(it), { parent: dir || null }) });
+    if (ok) {
+      const to = dir ? state.items.find((x) => x.id === dir) : null;
+      toast("Перемещено в «" + (to ? to.title : "Файлы") + "»", "Вернуть", () => patchItem(it.id, { data: Object.assign({}, fData(it), { parent: prev }) }));
+    }
+  }
+  // удаление: папка уходит в корзину вместе со всем, что внутри, — одной пачкой, «Вернуть» возвращает всё
+  async function fsRemove(it) {
+    if (it.type === "file") { removeItem(it.id, "Файл удалён"); return; }
+    const ids = [it.id, ...fsDescendants(it.section_id, it.id).map((x) => x.id)];
+    const mark = trashMark();
+    const { error } = await sb.from("items").update(mark).in("id", ids);
+    if (error) { toast("Не удалось удалить. Попробуйте ещё раз."); return; }
+    state.items = state.items.filter((x) => !ids.includes(x.id));
+    itemsChanged();
+    toast("Папка удалена" + (ids.length > 1 ? " вместе с содержимым" : ""), "Вернуть", () => restoreBatch(mark.deleted_batch));
+  }
+
+  // меню «⋯» у строки и выбор сортировки — одно всплывающее меню на всё приложение
+  const fsPop = document.createElement("div");
+  fsPop.className = "pop menu-pop fs-pop"; fsPop.hidden = true; fsPop.setAttribute("role", "menu");
+  document.body.append(fsPop);
+  let fsPopFor = null, fsPopAt = 0;
+  function closeFsPop() { if (!fsPop.hidden) animHide(fsPop, 120); fsPopFor = null; }
+  function fsMenuItem(label, path, fn, opts = {}) {
+    const b = document.createElement("button"); b.type = "button"; b.className = "menu-item" + (opts.danger ? " danger" : "");
+    b.setAttribute("role", opts.radio ? "menuitemradio" : "menuitem");
+    const l = document.createElement("span"); l.className = "menu-ico"; l.innerHTML = svgIco(path, 16); l.append(label);
+    b.append(l);
+    if (opts.radio) { b.setAttribute("aria-checked", String(!!opts.checked)); const c = document.createElement("span"); c.className = "check"; c.innerHTML = svgIco(P.check, 16, 2); b.append(c); }
+    if (opts.indent) l.style.paddingLeft = opts.indent * 14 + "px";
+    b.addEventListener("click", (e) => { e.stopPropagation(); if (!opts.keep) closeFsPop(); fn(); });
+    return b;
+  }
+  function placeFsPop(btn) {
+    animShow(fsPop);
+    const r = btn.getBoundingClientRect(), w = fsPop.offsetWidth, hh = fsPop.offsetHeight, m = 8;
+    const x = Math.min(Math.max(m, r.right - w), window.innerWidth - w - m);
+    let y = r.bottom + 4;
+    if (y + hh > window.innerHeight - m) y = r.top - 4 - hh;
+    fsPop.style.left = x + "px"; fsPop.style.top = Math.max(m, y) + "px";
+  }
+  function openFsMenu(btn, it) {
+    if (!fsPop.hidden && fsPopFor === it.id) { closeFsPop(); return; }
+    closeMenus(null); closeFsPop(); fsPopFor = it.id; fsPopAt = Date.now(); fsPop.textContent = "";
+    const s = fsOf(it.section_id);
+    fsPop.append(fsMenuItem("Переименовать", FS_ICO.rename, () => { s.ren = { id: it.id, v: it.title }; renderBoard(); }));
+    if (it.type === "file") {
+      fsPop.append(fsMenuItem("Скачать", FS_ICO.download, () => fsDownload(it)));
+      fsPop.append(fsMenuItem("Ссылка на сутки", FS_ICO.link, () => fsShare(it, 1)));
+      fsPop.append(fsMenuItem("Ссылка на неделю", FS_ICO.link, () => fsShare(it, 7)));
+    }
+    if (fsOfField(it.section_id).some((x) => x.type === "folder" && x.id !== it.id) || parentOf(it))
+      fsPop.append(fsMenuItem("Переместить…", FS_ICO.move, () => openFsMove(btn, it), { keep: true }));
+    fsPop.append(fsMenuItem("Удалить", FS_ICO.trash, () => fsRemove(it), { danger: true }));
+    placeFsPop(btn);
+  }
+  // «Переместить…»: дерево папок поля; сама папка и всё внутри неё недоступны
+  function openFsMove(btn, it) {
+    fsPop.textContent = ""; fsPopFor = it.id; fsPopAt = Date.now();
+    const h = document.createElement("div"); h.className = "menu-label"; h.textContent = "Переместить в";
+    fsPop.append(h);
+    const bad = new Set(it.type === "folder" ? [it.id, ...fsDescendants(it.section_id, it.id).map((x) => x.id)] : []);
+    const cur = parentOf(it);
+    const add = (dir, label, depth) => {
+      const b = fsMenuItem(label, FS_ICO.folder, () => fsMove(it, dir), { indent: depth, radio: true, checked: cur === dir });
+      if (cur === dir) b.disabled = true;
+      fsPop.append(b);
+    };
+    add(null, "Файлы", 0);
+    const walk = (d, depth) => fsSorted(fsChildren(it.section_id, d).filter((x) => x.type === "folder" && !bad.has(x.id)), "name").forEach((f) => { add(f.id, f.title, depth); walk(f.id, depth + 1); });
+    walk(null, 1);
+    placeFsPop(btn);
+  }
+  function openFsSort(btn, fid) {
+    if (!fsPop.hidden && fsPopFor === "sort:" + fid) { closeFsPop(); return; }
+    closeMenus(null); closeFsPop(); fsPopFor = "sort:" + fid; fsPopAt = Date.now(); fsPop.textContent = "";
+    const s = fsOf(fid);
+    Object.entries(FS_SORT).forEach(([k, label]) => fsPop.append(fsMenuItem(label, k === "name" ? "M4 18l4-12 4 12M5.5 14h5M14 6h6l-6 12h6" : k === "date" ? "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7v5l3 2" : "M4 20h4V10H4zM10 20h4V4h-4zM16 20h4v-6h-4z",
+      () => { s.sort = k; store.set("cloudesk-fsort-" + fid, k); renderBoard(); }, { radio: true, checked: s.sort === k })));
+    placeFsPop(btn);
+  }
+  document.addEventListener("click", (e) => { if (!fsPop.hidden && !e.composedPath().includes(fsPop)) closeFsPop(); });
+  window.addEventListener("scroll", () => { if (!fsPop.hidden && Date.now() - fsPopAt > 400) closeFsPop(); }, true);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !fsPop.hidden) { e.stopImmediatePropagation(); closeFsPop(); } }, true);
+
+  // перетаскивание: строку — на папку или на ссылку «Файлы › …» выше; файлы с компьютера — на поле
+  let fsDrag = null;
+  function fsDropTarget(el, fid, dir) {
+    el.addEventListener("dragover", (e) => {
+      if (!fsDrag || fsDrag.section_id !== fid) return;
+      if (fsDrag.id === dir || (fsDrag.type === "folder" && fsDescendants(fid, fsDrag.id).some((x) => x.id === dir))) return;
+      if ((parentOf(fsDrag) || null) === (dir || null)) return;
+      e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = "move"; el.classList.add("fs-drop");
+    });
+    el.addEventListener("dragleave", () => el.classList.remove("fs-drop"));
+    el.addEventListener("drop", (e) => {
+      el.classList.remove("fs-drop");
+      if (!fsDrag) return;
+      e.preventDefault(); e.stopPropagation();
+      const it = fsDrag; fsDrag = null; fsMove(it, dir);
+    });
+  }
+
+  const fsSeen = new Set();
+  function fsRow(it, s, tiles, showWhere) {
+    const fid = it.section_id, isDir = it.type === "folder", kind = fileKind(it), d = fData(it);
+    const li = document.createElement("li"); li.className = "fs" + (isDir ? " fs-dir" : ""); li.dataset.id = it.id; li.tabIndex = 0;
+    li.setAttribute("aria-label", (isDir ? "Папка «" : "Файл «") + it.title + "»");
+    if (!fsSeen.has(it.id)) { fsSeen.add(it.id); if (!boardFirst) li.classList.add("fade-in"); }
+    const ico = document.createElement("span"); ico.className = "fs-ico"; ico.dataset.kind = kind;
+    ico.innerHTML = svgIco(FS_ICO[kind] || FS_ICO.file, tiles ? 30 : 18, tiles ? 1.4 : 1.8);
+    if (tiles && kind === "image") { const img = document.createElement("img"); img.alt = ""; img.loading = "lazy"; img.decoding = "async"; img.addEventListener("load", () => ico.classList.add("has-img")); thumbUrl(d.path, img); ico.append(img); }
+    const main = document.createElement("div"); main.className = "fs-main";
+    const sub = document.createElement("div"); sub.className = "fs-sub";
+    if (isDir) {
+      const inside = fsDescendants(fid, it.id).filter((x) => x.type === "file");
+      sub.textContent = inside.length ? inside.length + " " + plural(inside.length, "файл", "файла", "файлов") + " · " + fmtSize(inside.reduce((t, x) => t + (Number(fData(x).size) || 0), 0)) : "пусто";
+    } else sub.textContent = fmtSize(Number(d.size) || 0) + (it.created_at ? " · " + fmtFsDay.format(new Date(it.created_at)).replace(".", "") : "");
+    if (showWhere) { const p = fsPath(parentOf(it)).map((x) => x.title); sub.textContent = (p.length ? p.join(" › ") : "Файлы") + " · " + sub.textContent; }
+    if (s.ren && s.ren.id === it.id) {
+      const inp = document.createElement("input"); inp.type = "text"; inp.className = "fs-ren"; inp.value = s.ren.v; inp.autocomplete = "off";
+      inp.maxLength = isDir ? LIM.title : 120; inp.dataset.keep = fid + ":ren"; inp.setAttribute("aria-label", "Новое название");
+      inp.addEventListener("input", () => { s.ren.v = inp.value; });
+      inp.addEventListener("click", (e) => e.stopPropagation());
+      inp.addEventListener("keydown", (e) => {
+        e.stopPropagation();
+        if (e.key === "Enter") { e.preventDefault(); inp.dataset.done = "1"; fsRename(it, inp.value); }
+        else if (e.key === "Escape") { e.preventDefault(); inp.dataset.done = "1"; s.ren = null; renderBoard(); }
+      });
+      // уход из поля сохраняет; перерисовка стола (поле ввода пересоздаётся) — нет
+      inp.addEventListener("blur", () => { setTimeout(() => { if (inp.dataset.done || !inp.isConnected) return; inp.dataset.done = "1"; fsRename(it, inp.value); }, 0); });
+      main.append(inp, sub);
+      li.draggable = false;
+      requestAnimationFrame(() => { if (inp.isConnected && document.activeElement !== inp) { inp.focus({ preventScroll: true }); if (isDir) inp.select(); else inp.setSelectionRange(0, Math.max(0, inp.value.lastIndexOf(".")) || inp.value.length); } });
+    } else {
+      const nm = document.createElement("div"); nm.className = "fs-name"; nm.textContent = it.title; nm.title = it.title;
+      main.append(nm, sub);
+      li.draggable = true;
+    }
+    const acts = document.createElement("div"); acts.className = "fs-acts";
+    if (!isDir) {
+      const dl = tool(FS_ICO.download, "Скачать", (e) => { e.stopPropagation(); fsDownload(it); });
+      acts.append(dl);
+    }
+    const more = tool(FS_ICO.more, "Ещё", (e) => { e.stopPropagation(); openFsMenu(more, it); });
+    more.setAttribute("aria-haspopup", "menu");
+    acts.append(more);
+    li.append(ico, main, acts);
+    const go = () => (isDir ? fsGo(fid, it.id) : fsOpen(it));
+    li.addEventListener("click", () => { if (!(s.ren && s.ren.id === it.id)) go(); });
+    li.addEventListener("keydown", (e) => {
+      if (e.target !== li) return;
+      if (e.key === "Enter") { e.preventDefault(); go(); }
+      else if (e.key === "F2") { e.preventDefault(); s.ren = { id: it.id, v: it.title }; renderBoard(); }
+      else if (e.key === "Delete") { e.preventDefault(); fsRemove(it); }
+    });
+    li.addEventListener("dragstart", (e) => { fsDrag = it; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", it.title); li.classList.add("dragging"); });
+    li.addEventListener("dragend", () => { fsDrag = null; li.classList.remove("dragging"); document.querySelectorAll(".fs-drop").forEach((x) => x.classList.remove("fs-drop")); });
+    if (isDir) fsDropTarget(li, fid, it.id);
+    return li;
+  }
+
+  function renderFiles(f, body) {
+    const s = fsOf(f.id), tiles = f.span >= 2;
+    const wrap = document.createElement("div"); wrap.className = "files" + (tiles ? " tiles" : "");
+    // верхняя строка: поиск, сортировка, новая папка
+    const bar = document.createElement("div"); bar.className = "fs-bar";
+    const sf = document.createElement("label"); sf.className = "ct-search fs-search";
+    sf.innerHTML = svgIco("M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4", 16, 2);
+    const q = document.createElement("input"); q.type = "text"; q.placeholder = "Поиск"; q.autocomplete = "off"; q.maxLength = 40;
+    q.setAttribute("aria-label", "Поиск по файлам и папкам этого поля"); q.dataset.keep = f.id + ":fsq"; q.value = s.q;
+    sf.append(q);
+    const sortB = tool(FS_ICO.sort, "Сортировка: " + FS_SORT[s.sort].toLowerCase(), (e) => { e.stopPropagation(); openFsSort(sortB, f.id); });
+    sortB.setAttribute("aria-haspopup", "menu");
+    const dirB = tool(FS_ICO.newdir, "Новая папка", (e) => { e.stopPropagation(); fsNewFolder(f.id); });
+    bar.append(sf, sortB, dirB);
+    // путь: Файлы › Папка › Папка; каждый шаг — ссылка назад и место, куда можно бросить строку
+    const crumbs = document.createElement("nav"); crumbs.className = "fs-crumbs"; crumbs.setAttribute("aria-label", "Путь");
+    const chain = fsPath(s.dir);
+    const crumb = (label, dir, last) => {
+      const b = document.createElement("button"); b.type = "button"; b.className = "fs-crumb"; b.textContent = label;
+      if (last) b.setAttribute("aria-current", "location");
+      else { b.addEventListener("click", () => fsGo(f.id, dir)); fsDropTarget(b, f.id, dir); }
+      return b;
+    };
+    if (chain.length) {
+      crumbs.append(crumb("Файлы", null, false));
+      chain.forEach((c, i) => { const sep = document.createElement("span"); sep.className = "fs-sep"; sep.innerHTML = svgIco(FS_ICO.chev, 12, 2); crumbs.append(sep, crumb(c.title, c.id, i === chain.length - 1)); });
+    }
+    crumbs.hidden = !chain.length;
+    const list = document.createElement("div"); list.className = "fs-list";
+    const draw = () => {
+      s.q = q.value;
+      const t = norm(q.value.trim());
+      list.textContent = "";
+      const all = fsOfField(f.id);
+      const items = t ? fsSorted(all.filter((x) => norm(x.title).includes(t)), s.sort) : fsSorted(fsChildren(f.id, s.dir), s.sort);
+      const ol = document.createElement("ol"); ol.className = "fs-ol";
+      if (!t) s.up.forEach((p) => {
+        const li = document.createElement("li"); li.className = "fs uploading";
+        const ico = document.createElement("span"); ico.className = "fs-ico"; ico.innerHTML = '<span class="fs-spin" aria-hidden="true"></span>';
+        const main = document.createElement("div"); main.className = "fs-main";
+        const nm = document.createElement("div"); nm.className = "fs-name"; nm.textContent = p.name;
+        const sub = document.createElement("div"); sub.className = "fs-sub"; sub.textContent = "Загружается · " + fmtSize(p.size);
+        main.append(nm, sub); li.append(ico, main); ol.append(li);
+      });
+      items.forEach((it) => ol.append(fsRow(it, s, tiles, !!t)));
+      if (!ol.children.length) {
+        const e = document.createElement("div"); e.className = "tk-empty fs-empty";
+        e.textContent = t ? "Ничего не нашлось" : all.length || s.dir ? "Папка пуста — перетащите сюда файлы" : "Файлов нет — нажмите «+» или перетащите их сюда";
+        list.append(e);
+      } else list.append(ol);
+    };
+    q.addEventListener("input", () => { noFlicker(list); draw(); });
+    q.addEventListener("keydown", (e) => { if (e.key === "Escape" && q.value) { e.stopPropagation(); q.value = ""; draw(); } });
+    // файлы с компьютера: поверх поля — подсказка, куда они лягут
+    const drop = document.createElement("div"); drop.className = "fs-over"; drop.hidden = true;
+    drop.textContent = "Отпустите, чтобы загрузить в «" + (chain.length ? chain[chain.length - 1].title : "Файлы") + "»";
+    const fromOS = (e) => !fsDrag && e.dataTransfer && [...e.dataTransfer.types].includes("Files");
+    let depth = 0;
+    body.addEventListener("dragenter", (e) => { if (!fromOS(e)) return; e.preventDefault(); depth++; drop.hidden = false; });
+    body.addEventListener("dragover", (e) => { if (!fromOS(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = "copy"; });
+    body.addEventListener("dragleave", (e) => { if (!fromOS(e)) return; depth = Math.max(0, depth - 1); if (!depth) drop.hidden = true; });
+    body.addEventListener("drop", (e) => {
+      if (!fromOS(e)) return;
+      e.preventDefault(); depth = 0; drop.hidden = true;
+      fsUpload(f.id, [...e.dataTransfer.files]);
+    });
+    body.classList.add("fs-body");
+    wrap.append(bar, crumbs, list);
+    body.append(wrap);
+    // подсказка лежит поверх всего поля (а не внутри прокрутки, где её обрезало бы)
+    requestAnimationFrame(() => { const el = body.closest(".fld"); if (el) el.append(drop); });
+    draw();
+  }
+  // «+» в заголовке поля — выбор файлов с компьютера
+  const fsInput = document.createElement("input"); fsInput.type = "file"; fsInput.multiple = true; fsInput.className = "sr"; fsInput.tabIndex = -1; fsInput.setAttribute("aria-hidden", "true");
+  document.body.append(fsInput);
+  let fsInputFor = null;
+  fsInput.addEventListener("change", () => { const list = [...fsInput.files]; fsInput.value = ""; if (fsInputFor && list.length) fsUpload(fsInputFor, list); });
+  function fsPick(f) { fsInputFor = f.id; fsInput.click(); }
   /* ---------- Приложение «Игра»: котик-бегун (1 колонка) ----------
      Котик бежит, препятствия едут навстречу: прыжок — пробел / ↑ / нажатие (дольше держите — выше), ↓ — пригнуться.
      Скорость растёт, рекорд запоминается. Холст создаётся один раз на поле и переживает перерисовку стола. */
@@ -2071,7 +2480,7 @@
       const tot = app && app.total ? app.total(f) : n;
       if (n) { const cnt = document.createElement("span"); cnt.className = "count"; cnt.textContent = app && app.limit && tot >= app.limit * 0.8 ? tot + " / " + app.limit : String(n); title.append(cnt); }
       const sub = app && app.sub ? app.sub(f) : null;
-      if (sub) { const sp = document.createElement("span"); sp.className = "fld-sub" + (sub.full ? " full" : ""); sp.dataset.tip = sub.tip; const bar = document.createElement("i"); bar.style.setProperty("--p", sub.p + "%"); sp.append(bar, sub.text); title.append(sp); }
+      if (sub) { const sp = document.createElement("span"); sp.className = "fld-sub" + (sub.full ? " full" : "") + (sub.warn ? " warn" : ""); sp.dataset.tip = sub.tip; const bar = document.createElement("i"); bar.style.setProperty("--p", sub.p + "%"); sp.append(bar, sub.text); title.append(sp); }
 
       const set = document.createElement("button");
       set.type = "button"; set.className = "tool fld-set"; set.dataset.tip = "Настройки поля"; set.setAttribute("aria-label", "Настройки поля «" + tt.textContent + "»");
@@ -2172,7 +2581,8 @@
       const name = document.createElement("div"); name.className = "sec-info-name"; name.textContent = a.name;
       const n = a.total ? a.total(f) : a.count ? a.count(f) : 0;
       const sub = document.createElement("div"); sub.className = "sec-info-sub";
-      sub.textContent = fd.app === "tasks" ? (n ? n + " " + plural(n, "задача", "задачи", "задач") : "Задач нет") : (n ? n + " " + plural(n, "заметка", "заметки", "заметок") : "Заметок нет");
+      const W = { notes: ["заметка", "заметки", "заметок", "Заметок нет"], tasks: ["задача", "задачи", "задач", "Задач нет"], contacts: ["контакт", "контакта", "контактов", "Контактов нет"], files: ["файл", "файла", "файлов", "Файлов нет"] }[fd.app];
+      sub.textContent = !W ? "" : n ? n + " " + plural(n, W[0], W[1], W[2]) + (fd.app === "files" && n ? " · на столе " + fmtSize(deskUsed(f.desk_id)) + " из 10 МБ" : "") : W[3];
       info.append(ico, name, sub);
     }
     document.querySelectorAll("#sec-span [data-span]").forEach((b) => {
@@ -2258,7 +2668,7 @@
 
   async function createItem(row) {
     const r = await sb.from("items").insert(Object.assign({ position: row.section_id ? nextPos(row.section_id) : 0 }, row)).select(ITEM_COLS).single();
-    if (r.error) { console.error(r.error); const m = String(r.error.message); toast(m.includes("title_len") ? LONG_TITLE + "." : m.includes("body_len") ? "Описание — не больше " + LIM.desc + " символов." : m.includes("items_limit") ? "Слишком много записей: удалите ненужные." : m.includes("tasks_limit") ? "В поле уже 100 задач — это предел." : "Не сохранилось — проверьте интернет."); return null; }
+    if (r.error) { console.error(r.error); const m = String(r.error.message); toast(m.includes("title_len") ? LONG_TITLE + "." : m.includes("body_len") ? "Описание — не больше " + LIM.desc + " символов." : m.includes("items_limit") ? "Слишком много записей: удалите ненужные." : m.includes("tasks_limit") ? "В поле уже 100 задач — это предел." : m.includes("files_quota") ? "Не помещается: на столе уже почти 10 МБ файлов." : "Не сохранилось — проверьте интернет."); return null; }
     state.items.push(r.data);
     itemsChanged();
     return r.data;
@@ -2307,6 +2717,7 @@
       const msg = res.map((r) => (r.error ? String(r.error.message) : "")).join(" ");
       toast(msg.includes("notes_limit") ? "Не вернуть: в поле уже 20 заметок. Освободите место."
         : msg.includes("tasks_limit") ? "Не вернуть: в поле уже 100 задач. Освободите место."
+        : msg.includes("files_quota") ? "Не вернуть: на столе не хватает места для файлов (10 МБ). Удалите ненужные."
         : msg.includes("desks_limit") ? "Не вернуть: столов уже " + DESK_MAX + ". Удалите лишний."
         : "Не получилось вернуть — проверьте интернет.");
       return false;
@@ -4277,7 +4688,7 @@
 
   /* ---------- Корзина: удалённое за 30 дней, восстановление пачкой ---------- */
   const TRASH_DAYS = 30;
-  const TRASH_ICO = { field: "M4 5h16v14H4zM4 10h16", note: "M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 16h5", reminder: "M6 10a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6zM10 20a2 2 0 0 0 4 0", link: "M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1", group: "M3 7h6l2 2h10v10H3z", task: "M4 5h16v14H4zM8 12l3 3 5-6", contact: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0", desk: "M3 5h8v6H3zM13 5h8v6h-8zM3 13h8v6H3zM13 13h8v6h-8z" };
+  const TRASH_ICO = { field: "M4 5h16v14H4zM4 10h16", note: "M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 16h5", reminder: "M6 10a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6zM10 20a2 2 0 0 0 4 0", link: "M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1", group: "M3 7h6l2 2h10v10H3z", task: "M4 5h16v14H4zM8 12l3 3 5-6", contact: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0", desk: "M3 5h8v6H3zM13 5h8v6h-8zM3 13h8v6H3zM13 13h8v6h-8z", file: "M6 3h9l4 4v14H6zM14 3v5h5", folder: "M3 7h6l2 2h10v10H3z" };
   const UNDO_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M9 14 4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3"/></svg>';
   const q_ = (s) => "«" + (s.length > 40 ? s.slice(0, 40) + "…" : s) + "»";
   async function renderTrash() {
@@ -4296,8 +4707,8 @@
     const list = [...batches.entries()].sort((a, b) => (a[1].at < b[1].at ? 1 : -1));
     for (const [batch, b] of list) {
       const by = (k) => b.rows.filter((r) => r.kind === k);
-      const f = by("field"), notes = by("note"), rems = by("reminder"), links = by("link"), groups = by("group"), desks = by("desk"), tasks = by("task"), contacts = by("contact");
-      const recs = () => { const p = []; if (notes.length) p.push(notes.length + " " + plural(notes.length, "заметка", "заметки", "заметок")); if (tasks.length) p.push(tasks.length + " " + plural(tasks.length, "задача", "задачи", "задач")); if (contacts.length) p.push(contacts.length + " " + plural(contacts.length, "контакт", "контакта", "контактов")); return p; };
+      const f = by("field"), notes = by("note"), rems = by("reminder"), links = by("link"), groups = by("group"), desks = by("desk"), tasks = by("task"), contacts = by("contact"), files = by("file"), folders = by("folder");
+      const recs = () => { const p = []; if (notes.length) p.push(notes.length + " " + plural(notes.length, "заметка", "заметки", "заметок")); if (tasks.length) p.push(tasks.length + " " + plural(tasks.length, "задача", "задачи", "задач")); if (contacts.length) p.push(contacts.length + " " + plural(contacts.length, "контакт", "контакта", "контактов")); if (folders.length) p.push(folders.length + " " + plural(folders.length, "папка", "папки", "папок")); if (files.length) p.push(files.length + " " + plural(files.length, "файл", "файла", "файлов")); return p; };
       let kind, title;
       if (desks.length) {
         kind = "desk"; title = "Стол " + q_(desks[0].title || "");
@@ -4308,6 +4719,8 @@
         if (parts.length) title += " · " + parts.join(", ");
       } else if (f.length) { kind = "field"; const app = APPS[f[0].app]; title = "Поле " + q_(app ? app.name : "Поле") + (recs().length ? " и " + recs().join(", ") : ""); }
       else if (notes.length) { kind = "note"; title = notes.length === 1 ? "Заметка " + q_(noteTitle(notes[0])) : notes.length + " " + plural(notes.length, "заметка", "заметки", "заметок"); }
+      else if (folders.length) { kind = "folder"; const top = folders[0]; title = "Папка " + q_(top.title || "") + (folders.length + files.length > 1 ? " и " + [folders.length > 1 ? (folders.length - 1) + " " + plural(folders.length - 1, "папка", "папки", "папок") : "", files.length ? files.length + " " + plural(files.length, "файл", "файла", "файлов") : ""].filter(Boolean).join(", ") : ""); }
+      else if (files.length) { kind = "file"; title = files.length === 1 ? "Файл " + q_(files[0].title || "") : files.length + " " + plural(files.length, "файл", "файла", "файлов"); }
       else if (contacts.length) { kind = "contact"; title = contacts.length === 1 ? "Контакт " + q_(contacts[0].title || "") : contacts.length + " " + plural(contacts.length, "контакт", "контакта", "контактов"); }
       else if (tasks.length) { kind = "task"; title = tasks.length === 1 ? "Задача " + q_(tasks[0].title || "") : tasks.length + " " + plural(tasks.length, "задача", "задачи", "задач"); }
       else if (rems.length) { kind = "reminder"; title = rems.length === 1 ? "Напоминание " + q_(rems[0].title || "") : "Напоминаний: " + rems.length; }
@@ -4333,9 +4746,12 @@
   $("trash-yes").addEventListener("click", async () => {
     $("trash-ask").hidden = true; $("trash-clear").hidden = false;
     // файлы удалённых навсегда заметок стираем из хранилища
-    const gone = await sb.from("items").select("data").not("deleted_at", "is", null);
+    const gone = await sb.from("items").select("type,data").not("deleted_at", "is", null);
     const paths = ((gone && gone.data) || []).flatMap((r) => ((r.data && r.data.files) || []).map((f) => f.path)).filter(Boolean);
     if (paths.length) await sb.storage.from("attachments").remove(paths);
+    // и файлы из приложения «Файлы»
+    const stored = ((gone && gone.data) || []).filter((r) => r.type === "file" && r.data && r.data.path).map((r) => r.data.path);
+    if (stored.length) await sb.storage.from("files").remove(stored);
     // и фото заставок удалённых столов
     const gd = await sb.from("desks").select("wallpaper_path").not("deleted_at", "is", null);
     const walls = ((gd && gd.data) || []).map((r) => r.wallpaper_path).filter(Boolean);
@@ -4377,6 +4793,8 @@
     note: "M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 16h5",
     rem: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7v5l3 2",
     task: "M4 5h16v14H4zM8 12l3 3 5-6",
+    file: "M6 3h9l4 4v14H6zM14 3v5h5",
+    folder: "M3 7h6l2 2h10v10H3z",
     link: "M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1",
   };
   function resultEl(kind, title, sub, q, onPick, href) {
@@ -4424,6 +4842,17 @@
       .sort(ctSort).slice(0, 6).map((it) => resultEl("contact", it.title, [fieldName(it), (cData(it).phones || [])[0]].filter(Boolean).join(" · "), q,
         async () => { const d = deskOf(it.section_id); if (d && d.id !== state.desk) await switchDesk(d.id); openContact(it.id); }));
     if (cts.length) groups.push(["Контакты", cts]);
+    // файлы и папки: во второй строке — где лежат; папка открывается в своём поле, файл — в новой вкладке
+    const fls = state.items.filter((it) => (it.type === "file" || it.type === "folder") && norm(it.title).includes(q))
+      .sort((a, b) => (a.type === "folder" ? 0 : 1) - (b.type === "folder" ? 0 : 1)).slice(0, 6).map((it) => {
+        const where = fsPath(parentOf(it)).map((x) => x.title).join(" › ");
+        return resultEl(it.type, it.title, [fieldName(it), where, it.type === "file" ? fmtSize(Number(fData(it).size) || 0) : ""].filter(Boolean).join(" · "), q, async () => {
+          const d = deskOf(it.section_id); if (d && d.id !== state.desk) await switchDesk(d.id);
+          if (it.type === "folder") fsGo(it.section_id, it.id); else fsOpen(it);
+          const el = document.querySelector('.fld[data-id="' + it.section_id + '"]'); if (el) el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        });
+      });
+    if (fls.length) groups.push(["Файлы", fls]);
     const rems = (state.reminders || []).filter((r) => norm(r.text).includes(q)).slice(0, 5).map((r) =>
       resultEl("rem", r.text, fmtRem.format(new Date(r.remind_at)) + (r.sent_at ? " · отправлено" : ""), q, () => openItem(r.id)));
     if (rems.length) groups.push(["Напоминания", rems]);
