@@ -1453,8 +1453,8 @@ input.fs-ren { width: 100%; min-width: 0; height: 22px !important; padding: 0 6p
 
 /* ---------- Приложение «Деньги» (3 колонки): операции · итог месяца и проекты · платежи и долги ---------- */
 .fld-body.mn-body { overflow: hidden; }
-.mn { height: 100%; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr) minmax(0, 1fr); gap: 0; min-width: 0; }
-/* три колонки разделены тонкими линиями — операции · итог · платежи и долги */
+.mn { height: 100%; display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr) minmax(0, 1fr); gap: 0; min-width: 0; }
+/* три колонки разделены тонкими линиями — итог · операции · платежи и долги */
 .mn-col + .mn-col { border-left: 1px solid var(--line); padding-left: 16px; }
 .mn-col:not(:last-child) { padding-right: 16px; }
 .mn-col { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 6px; }

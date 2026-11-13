@@ -1270,7 +1270,7 @@
     c3.append(bar, panel);
     // месяц или проект сменились — содержимое колонок проявляется
     if (s.anim) { s.anim = false; requestAnimationFrame(() => { replay(list); replay(big); replay(plist); }); }
-    wrap.append(c1, c2, c3);
+    wrap.append(c2, c1, c3); // слева итог месяца, посередине операции, справа платежи и долги
     body.append(wrap);
   }
 
