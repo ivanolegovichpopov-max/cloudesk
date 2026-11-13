@@ -1528,7 +1528,8 @@ input.fs-ren { width: 100%; min-width: 0; height: 22px !important; padding: 0 6p
 .mn-amount-row.in input { color: var(--accent); }
 .mn-amount-row.bad input { border-color: var(--danger) !important; }
 .mn-rub { position: absolute; right: 12px; font-size: 18px; font-weight: 600; color: var(--ink-dim); pointer-events: none; }
-.mn-seg button { height: 34px; padding: 0 12px; font-size: 13px; }
+.mn-foot-l { display: flex; align-items: center; }
+.mn-seg button { height: 30px; padding: 0 12px; font-size: 13px; }
 .mn-seg[hidden] { display: none; }
 #mnsheet .it-body, #hbsheet .it-body { flex: 1 1 auto; min-height: 70px; }
 .mn-proj-pop { width: 230px; }
