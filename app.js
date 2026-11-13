@@ -1018,11 +1018,11 @@
   const MONTHS_G = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"];
   const mnS = {};
   function mnState(fid) {
-    if (!mnS[fid]) { const n = new Date(); mnS[fid] = { y: n.getFullYear(), m: n.getMonth(), proj: null, tab: store.get("cloudesk-mn-tab-" + fid) || "pay" }; }
+    if (!mnS[fid]) { const n = new Date(); mnS[fid] = { y: n.getFullYear(), m: n.getMonth(), proj: null, day: null, kind: "out", tab: store.get("cloudesk-mn-tab-" + fid) || "pay" }; }
     return mnS[fid];
   }
   // «кофе 1500», «+45000 кворк #Rentika», «45к такси», «-1 200,50 обед»
-  function mnParse(text) {
+  function mnParse(text, kind) {
     let t = " " + String(text || "").trim() + " ";
     let project = null;
     t = t.replace(/\s#([\wа-яё-]{1,20})/gi, (_, p) => { project = p; return " "; });
@@ -1032,7 +1032,7 @@
     if (!Number.isFinite(amount) || amount <= 0) return null;
     if (m[4]) amount *= 1000;
     const rest = (t.slice(0, m.index) + " " + t.slice(m.index + m[0].length)).replace(/₽|руб\.?|р\./gi, " ").replace(/\s+/g, " ").trim();
-    const income = m[2] === "+" || /^(зп|зарплата|доход|аванс|получил|оплата от|возврат)(?=\s|$)/i.test(rest);
+    const income = m[2] === "+" || (m[2] !== "-" && m[2] !== "−" && (kind === "in" || /^(зп|зарплата|доход|аванс|получил|оплата от|возврат)(?=\s|$)/i.test(rest)));
     return { amount: Math.round(amount * 100) / 100, kind: income ? "in" : "out", title: (rest.charAt(0).toUpperCase() + rest.slice(1)).slice(0, LIM.title) || (income ? "Доход" : "Расход"), project };
   }
   const mnProjects = (fid) => [...new Set(state.items.filter((it) => it.section_id === fid && (it.type === "money" || it.type === "payment")).map((it) => mnData(it).project).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ru"));
@@ -1070,12 +1070,12 @@
   const mnOver = (k) => { const d = mnDate(k), t = new Date(); t.setHours(0, 0, 0, 0); return d && d < t; };
 
   async function mnQuick(f, inp, hint) {
-    const p = mnParse(inp.value);
+    const s0 = mnState(f.id), p = mnParse(inp.value, s0.kind);
     if (!p) { inp.classList.add("nope"); setTimeout(() => inp.classList.remove("nope"), 500); toast("Напишите сумму, например «кофе 1500» или «+45000 кворк»"); return; }
     const s = mnState(f.id), now = new Date();
     // запись — в выбранный месяц: в текущем — сегодня, в другом — его последний день
     const isCur = s.y === now.getFullYear() && s.m === now.getMonth();
-    const date = isCur ? mnKey(now) : mnKey(new Date(s.y, s.m + 1, 0));
+    const date = s.day || (isCur ? mnKey(now) : mnKey(new Date(s.y, s.m + 1, 0))); // выбран день на графике — запись в него
     const row = await createItem({ type: "money", section_id: f.id, title: p.title, data: { amount: p.amount, kind: p.kind, date, project: p.project || s.proj || null } });
     if (row) { inp.value = ""; hint.hidden = true; inp.style.paddingRight = ""; toast((p.kind === "in" ? "Доход " : "Расход ") + rub(p.amount) + " записан", "Вернуть", () => removeItem(row.id)); }
   }
@@ -1162,6 +1162,32 @@
       });
     }
   }
+  // частые записи за 3 месяца (по названию); пока своих мало — обычный набор
+  function mnFrequent(fid) {
+    const cut = mnKey(new Date(Date.now() - 92 * 86400000)), m = new Map();
+    mnOf(fid, "money").forEach((it) => { const d = mnData(it); if ((d.date || "") < cut || !it.title) return; const k = it.title.toLowerCase(); const v = m.get(k) || { title: it.title, kind: d.kind || "out", project: d.project || null, n: 0 }; v.n++; m.set(k, v); });
+    const mine = [...m.values()].filter((v) => v.n >= 2).sort((a, b) => b.n - a.n).slice(0, 6);
+    const def = [["Продукты", "out"], ["Кафе", "out"], ["Такси", "out"], ["Связь", "out"], ["Покупки", "out"], ["Зарплата", "in"]];
+    def.forEach(([t, k]) => { if (mine.length < 6 && !mine.some((x) => x.title.toLowerCase() === t.toLowerCase())) mine.push({ title: t, kind: k, project: null }); });
+    return mine.slice(0, 6);
+  }
+  function mnChart(f, s) {
+    const box = document.createElement("div"); box.className = "mn-chart"; box.setAttribute("role", "group"); box.setAttribute("aria-label", "Расходы по дням");
+    const days = new Date(s.y, s.m + 1, 0).getDate(), today = mnKey(new Date());
+    const per = Array(days).fill(0);
+    mnMonth(f.id, s.y, s.m).forEach((it) => { const d = mnData(it); if (d.kind === "in" || (s.proj && d.project !== s.proj)) return; const n = Number(String(d.date).slice(8, 10)); if (n) per[n - 1] += Number(d.amount) || 0; });
+    const max = Math.max(...per, 1);
+    per.forEach((v, i) => {
+      const k = s.y + "-" + String(s.m + 1).padStart(2, "0") + "-" + String(i + 1).padStart(2, "0");
+      const b = document.createElement("button"); b.type = "button"; b.className = "mn-bar" + (k === today ? " today" : "") + (k > today ? " future" : "") + (s.day === k ? " on" : "") + (s.day && s.day !== k ? " dim" : "");
+      const fill = document.createElement("i"); fill.style.height = (v ? Math.max(8, Math.round((v / max) * 100)) : 0) + "%"; b.append(fill);
+      b.dataset.tip = (i + 1) + " " + MONTHS_G[s.m].slice(0, 3) + ": " + (v ? "−" + rub(v) : "нет расходов") + (s.day === k ? " · показать все дни" : "");
+      b.setAttribute("aria-label", b.dataset.tip); b.disabled = k > today;
+      b.addEventListener("click", () => { s.day = s.day === k ? null : k; s.anim = true; renderBoard([f.id]); });
+      box.append(b);
+    });
+    return box;
+  }
   function renderMoney(f, body) {
     const s = mnState(f.id), now = new Date();
     body.classList.add("mn-body");
@@ -1173,23 +1199,43 @@
     const form = document.createElement("form"); form.className = "tk-add";
     const pl = document.createElement("span"); pl.className = "tk-add-ico"; pl.innerHTML = svgIco(MN_ICO.plus, 16, 2);
     const inp = document.createElement("input"); inp.type = "text"; inp.className = "tk-input mn-input"; inp.autocomplete = "off"; inp.maxLength = 80; inp.dataset.keep = f.id + ":mn";
-    inp.placeholder = "кофе 1500 · +45000 кворк #Rentika";
-    inp.setAttribute("aria-label", "Быстрая запись: сумма и что это; «+» — доход, #проект — проект");
-    inp.dataset.tip = "«+» в начале — доход, без него — расход. «45к» — 45 000. #Проект — пометка проекта";
+    // справа в строке — переключатель «− расход / + доход»: про «+» помнить не нужно
+    const kindB = document.createElement("button"); kindB.type = "button"; kindB.className = "mn-kind-b";
+    const paintKind = () => {
+      const isIn = s.kind === "in";
+      kindB.textContent = isIn ? "+" : "−"; kindB.classList.toggle("in", isIn);
+      kindB.dataset.tip = isIn ? "Доход — нажмите, чтобы записать расход" : "Расход — нажмите, чтобы записать доход"; kindB.setAttribute("aria-label", kindB.dataset.tip);
+      inp.placeholder = isIn ? "Доход: кворк 45000" : "Расход: кофе 1500";
+    };
+    inp.setAttribute("aria-label", "Быстрая запись: что и сколько; #проект — пометка проекта");
+    inp.dataset.tip = "Что и сколько: «кофе 1500», «45к» — 45 000, «#Rentika» — проект";
     // что поймётся — справа внутри строки, как у задач (форма не раздвигается)
-    const hint = document.createElement("div"); hint.className = "tk-hint"; hint.hidden = true;
-    form.append(pl, inp, hint);
-    form.addEventListener("submit", (e) => { e.preventDefault(); mnQuick(f, inp, hint); });
-    inp.addEventListener("input", () => {
-      hint.classList.remove("bad");
-      const p = inp.value.trim() ? mnParse(inp.value) : null;
+    const hint = document.createElement("div"); hint.className = "tk-hint mn-hint"; hint.hidden = true;
+    form.append(pl, inp, hint, kindB);
+    const preview = () => {
+      const p = inp.value.trim() ? mnParse(inp.value, s.kind) : null;
       hint.textContent = p ? (p.kind === "in" ? "+" : "−") + rub(p.amount) + (p.project || s.proj ? " · #" + (p.project || s.proj) : "") : "";
-      hint.hidden = !p; inp.style.paddingRight = p ? hint.offsetWidth + 18 + "px" : "";
+      hint.hidden = !p; inp.style.paddingRight = (p ? hint.offsetWidth + 18 : 0) + 40 + "px";
+    };
+    kindB.addEventListener("click", () => { s.kind = s.kind === "in" ? "out" : "in"; paintKind(); preview(); inp.focus({ preventScroll: true }); });
+    paintKind();
+    form.addEventListener("submit", (e) => { e.preventDefault(); mnQuick(f, inp, hint); });
+    inp.addEventListener("input", preview);
+    preview();
+    // частые записи — кнопками: нажали — название уже в строке, осталось написать сумму
+    const quick = document.createElement("div"); quick.className = "mn-quick";
+    mnFrequent(f.id).forEach((q) => {
+      const b = document.createElement("button"); b.type = "button"; b.className = "mn-q" + (q.kind === "in" ? " in" : ""); b.textContent = q.title;
+      b.dataset.tip = (q.kind === "in" ? "Доход «" : "Расход «") + q.title + "»" + (q.project ? " · #" + q.project : "") + " — допишите сумму";
+      b.addEventListener("click", () => { s.kind = q.kind; paintKind(); inp.value = q.title + " " + (q.project ? "#" + q.project + " " : ""); preview(); inp.focus({ preventScroll: true }); inp.setSelectionRange(inp.value.length, inp.value.length); });
+      quick.append(b);
     });
+    // расходы по дням месяца — столбиками; нажатие на день показывает только его операции
+    const chart = mnChart(f, s);
     const list = document.createElement("div"); list.className = "mn-list";
-    const ops = mnMonth(f.id, s.y, s.m).filter((it) => !s.proj || mnData(it).project === s.proj)
+    const ops = mnMonth(f.id, s.y, s.m).filter((it) => (!s.proj || mnData(it).project === s.proj) && (!s.day || mnData(it).date === s.day))
       .sort((a, b) => (mnData(b).date || "").localeCompare(mnData(a).date || "") || (new Date(b.created_at) - new Date(a.created_at)));
-    if (!ops.length) { const e = document.createElement("div"); e.className = "tk-empty"; e.textContent = s.proj ? "В этом месяце по #" + s.proj + " ничего" : "Операций в этом месяце нет"; list.append(e); }
+    if (!ops.length) { const e = document.createElement("div"); e.className = "tk-empty"; e.textContent = s.day ? "В этот день ничего" : s.proj ? "В этом месяце по #" + s.proj + " ничего" : "Операций в этом месяце нет"; list.append(e); }
     let curDay = null, ol = null;
     ops.forEach((it) => {
       const d = mnData(it);
@@ -1208,13 +1254,13 @@
         amount: (d.kind === "in" ? "+" : "−") + rub(d.amount), amountCls: d.kind === "in" ? "in" : "", fresh: mnFresh(it.id),
         onOpen: () => openMoney("money", it.id), onDel: () => removeItem(it.id, "Операция удалена") }));
     });
-    c1.append(form, list);
+    c1.append(form, quick, chart, list);
 
     // 2. Итог месяца: месяц стрелками, доходы / расходы / остаток, проекты
     const c2 = col("mn-sum");
     const nav = document.createElement("div"); nav.className = "mn-nav";
     const isCur = s.y === now.getFullYear() && s.m === now.getMonth();
-    const go = (dm) => { const d = new Date(s.y, s.m + dm, 1); s.y = d.getFullYear(); s.m = d.getMonth(); s.anim = true; renderBoard([f.id]); };
+    const go = (dm) => { const d = new Date(s.y, s.m + dm, 1); s.y = d.getFullYear(); s.m = d.getMonth(); s.day = null; s.anim = true; renderBoard([f.id]); };
     const prevB = tool(MN_ICO.prev, "Предыдущий месяц", () => go(-1));
     const nextB = tool(MN_ICO.next, "Следующий месяц", () => go(1)); nextB.disabled = isCur;
     const mt = document.createElement("button"); mt.type = "button"; mt.className = "mn-month"; mt.textContent = MONTHS[s.m].charAt(0).toUpperCase() + MONTHS[s.m].slice(1) + (s.y !== now.getFullYear() ? " " + s.y : "");
@@ -1267,7 +1313,7 @@
     mnSide(f, s, panel);
     c3.append(bar, panel);
     // месяц или проект сменились — содержимое колонок проявляется
-    if (s.anim) { s.anim = false; requestAnimationFrame(() => { replay(list); replay(big); replay(plist); }); }
+    if (s.anim) { s.anim = false; requestAnimationFrame(() => { replay(list); replay(big); replay(plist); replay(chart); }); }
     wrap.append(c2, c1, c3); // слева итог месяца, посередине операции, справа платежи и долги
     body.append(wrap);
   }

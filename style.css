@@ -1453,6 +1453,27 @@ input.fs-ren { width: 100%; min-width: 0; height: 22px !important; padding: 0 6p
 
 /* ---------- Приложение «Деньги» (3 колонки): операции · итог месяца и проекты · платежи и долги ---------- */
 .fld-body.mn-body { overflow: hidden; }
+/* строка записи: справа переключатель «− расход / + доход», подсказка левее него */
+.mn-ops .tk-add .mn-hint { right: 42px; }
+.mn-kind-b { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 28px; height: 28px; padding: 0; border: 1px solid var(--line); border-radius: var(--r); background: transparent; font-size: 17px; font-weight: 700; line-height: 1; color: var(--ink); transition: background-color .15s ease, color .15s ease, border-color .15s ease; }
+.mn-kind-b:hover { background: var(--hover); }
+.mn-kind-b.in { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+/* частые записи — кнопками в стиле стола (не «таблетки»), одна строка */
+.mn-quick { display: flex; flex-wrap: wrap; gap: 4px; max-height: 28px; overflow: hidden; }
+.mn-quick:empty { display: none; }
+.mn-q { height: 28px; padding: 0 9px; border: 1px solid var(--line); border-radius: var(--r); background: transparent; font-size: 12px; font-weight: 500; color: var(--ink-dim); white-space: nowrap; transition: background-color .12s ease, color .12s ease; }
+.mn-q:hover { background: var(--hover); color: var(--ink); }
+.mn-q.in { color: var(--accent); }
+/* расходы по дням: столбики, сегодня — акцентом, выбранный день — акцентом, остальные бледнеют */
+.mn-chart { flex: none; display: flex; align-items: stretch; gap: 2px; height: 40px; padding: 4px 2px 0; border-bottom: 1px solid var(--line); }
+.mn-bar { flex: 1 1 0; min-width: 0; display: flex; align-items: flex-end; padding: 0; border: 0; border-radius: 2px 2px 0 0; background: transparent; cursor: pointer; }
+.mn-bar:hover:not(:disabled) { background: var(--hover); }
+.mn-bar i { width: 100%; min-height: 2px; border-radius: 2px 2px 0 0; background: color-mix(in srgb, var(--ink) 32%, transparent); transition: background-color .15s ease, opacity .15s ease; }
+.mn-bar.today i { background: color-mix(in srgb, var(--accent) 70%, transparent); }
+.mn-bar.on i { background: var(--accent); }
+.mn-bar.dim i { opacity: .35; }
+.mn-bar.future { cursor: default; }
+.mn-bar.future i { background: transparent; box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--ink) 12%, transparent); }
 .mn { height: 100%; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px; min-width: 0; }
 /* три колонки разделены тонкими линиями — итог · операции · платежи и долги */
 .mn-col { position: relative; }
