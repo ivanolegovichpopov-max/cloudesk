@@ -1382,3 +1382,13 @@ input.fs-ren { width: 100%; min-width: 0; height: 22px !important; padding: 0 6p
 }
 .web-tile:hover { background: var(--hover); color: var(--ink); }
 .web-tile[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); box-shadow: inset 0 0 0 1px var(--accent); }
+
+/* ---------- Приложение «Музыка» (1 колонка): встроенный плеер Яндекс Музыки ---------- */
+.fld-body.mu-body { position: relative; overflow: hidden; padding-bottom: 12px; }
+.mu-frame { display: block; width: 100%; height: 100%; border: 0; border-radius: var(--r); background: transparent; }
+.mu-change { position: absolute; top: 6px; right: 6px; opacity: 0; background: var(--glass-strong); }
+.fld:hover .mu-change, .mu-change:focus-visible { opacity: .9; }
+@media (hover: none) { .mu-change { opacity: .9; } }
+.mu-empty { display: flex; flex-direction: column; gap: 8px; }
+.mu-hint { padding: 0 2px; font-size: 12px; line-height: 16px; color: var(--ink-dim); }
+.mu-hint.bad { color: var(--danger); }

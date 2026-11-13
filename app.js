@@ -578,6 +578,7 @@
     contacts: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0",
     game: "M5 20c0-4 2-7 7-7s7 3 7 7zM6 13 5 5l4 3M18 13l1-8-4 3M12 13a5 5 0 0 0 0-10 5 5 0 0 0 0 10z",
     files: "M3 7h6l2 2h10v10H3zM12 12v5M9.5 14.5h5",
+    music: "M9 18V6l10-2v12M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM19 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0z",
     web: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18",
     tools: "M5 3h14v18H5zM8 7h8M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01M8 18h.01M12 18h.01M16 18h.01",
     plus: "M12 5v14M5 12h14",
@@ -643,6 +644,10 @@
       // место на столе: «2,4 МБ из 10 МБ» и полоска (общее для всех полей «Файлы» этого стола)
       sub: (f) => { const u = deskUsed(f.desk_id); if (!u) return null; const p = Math.min(100, Math.round((u / FS_QUOTA) * 100)); return { text: fmtSize(u) + " из 10 МБ", p, warn: p >= 90, tip: "Файлы на этом столе занимают " + fmtSize(u) + " из 10 МБ" }; },
     },
+    music: {
+      name: "Музыка", icon: IC.music, spans: [1],
+      render: (f, body) => renderMusic(f, body),
+    },
     web: {
       name: "Поиск", icon: IC.web, spans: [2],
       render: (f, body) => renderWeb(f, body),
@@ -652,7 +657,56 @@
       render: (f, body) => renderGame(f, body),
     },
   };
-  const APP_ORDER = ["notes", "tasks", "tools", "contacts", "files", "web", "game"];
+  const APP_ORDER = ["notes", "tasks", "tools", "contacts", "files", "web", "music", "game"];
+  /* ---------- Приложение «Музыка»: плеер Яндекс Музыки (1 колонка) ----------
+     Яндекс разрешает встраивать плейлисты, альбомы и треки (Поделиться → HTML-код). Ссылка хранится в настройках поля. */
+  function musicSrc(raw) {
+    const t = String(raw || "").trim();
+    const m = t.match(/src=["']?([^"'\s>]+)/i);
+    let u;
+    try { u = new URL(m ? m[1] : t); } catch (e) { return { err: "Это не похоже на ссылку Яндекс Музыки" }; }
+    if (!/^music\.yandex\.(ru|com|by|kz|uz)$/.test(u.hostname)) return { err: "Нужна ссылка или HTML-код с music.yandex.ru" };
+    const p = u.pathname.replace(/\/+$/, "");
+    let r;
+    if ((r = p.match(/^\/iframe\/(playlist\/[^/]+\/\d+|album\/\d+|track\/\d+\/\d+)$/))) return { path: r[1] };
+    if ((r = p.match(/^\/users\/([^/]+)\/playlists\/(\d+)$/))) return { path: "playlist/" + r[1] + "/" + r[2] };
+    if ((r = p.match(/^\/album\/(\d+)\/track\/(\d+)$/))) return { path: "track/" + r[2] + "/" + r[1] };
+    if ((r = p.match(/^\/album\/(\d+)$/))) return { path: "album/" + r[1] };
+    if (/^\/playlists\/lk\./.test(p)) return { err: "Такую ссылку встроить нельзя — нужен HTML-код: ⋯ → Поделиться → HTML-код" };
+    return { err: "Нужен плейлист, альбом или трек" };
+  }
+  async function saveMusic(f, path) {
+    const settings = Object.assign({}, f.settings || {}, { music: path });
+    const { error } = await sb.from("sections").update({ settings }).eq("id", f.id);
+    if (error) { toast("Не сохранилось — проверьте интернет."); return; }
+    f.settings = settings; renderBoard([f.id]);
+  }
+  function renderMusic(f, body) {
+    const path = f.settings && f.settings.music;
+    body.classList.add("mu-body");
+    if (path) {
+      const fr = document.createElement("iframe"); fr.className = "mu-frame";
+      fr.src = "https://music.yandex.ru/iframe/" + path; fr.title = "Плеер Яндекс Музыки";
+      fr.allow = "autoplay; clipboard-write; encrypted-media"; fr.loading = "lazy"; fr.referrerPolicy = "strict-origin-when-cross-origin";
+      const ch = tool("M4 20h4L19 9l-4-4L4 16zM13 7l4 4", "Сменить плейлист", () => saveMusic(f, null));
+      ch.classList.add("mu-change");
+      body.append(fr, ch);
+      return;
+    }
+    const wrap = document.createElement("form"); wrap.className = "mu-empty";
+    const sf = document.createElement("label"); sf.className = "ct-search";
+    sf.innerHTML = svgIco(IC.music, 16, 2);
+    const q = document.createElement("input"); q.type = "text"; q.autocomplete = "off"; q.maxLength = 2000; q.dataset.keep = f.id + ":mu";
+    q.placeholder = "HTML-код плейлиста"; q.setAttribute("aria-label", "HTML-код или ссылка на плейлист, альбом или трек Яндекс Музыки");
+    sf.append(q);
+    const hint = document.createElement("div"); hint.className = "mu-hint";
+    hint.textContent = "Яндекс Музыка → ⋯ у плейлиста → Поделиться → HTML-код. Вставьте сюда и нажмите Enter";
+    wrap.append(sf, hint);
+    const go = () => { const r = musicSrc(q.value); if (r.err) { hint.textContent = r.err; hint.classList.add("bad"); return; } saveMusic(f, r.path); };
+    wrap.addEventListener("submit", (e) => { e.preventDefault(); go(); });
+    q.addEventListener("paste", () => setTimeout(go, 0));
+    body.append(wrap);
+  }
   /* ---------- Приложение «Поиск»: поиск в интернете (1 колонка) ----------
      Строка ввода, под ней поисковики группами: Google и его сервисы, Яндекс и его сервисы, остальное.
      Выбранный подсвечен, Enter ищет в нём; нажатие на другой — сразу ищет там. Запрос открывается в новой вкладке. */
