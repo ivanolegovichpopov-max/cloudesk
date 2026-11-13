@@ -1371,11 +1371,6 @@ input.fs-ren { width: 100%; min-width: 0; height: 22px !important; padding: 0 6p
 
 /* ---------- Приложение «Поиск» (1 колонка): строка ввода и поисковики группами ---------- */
 .web { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-.web-form { position: relative; display: flex; align-items: center; color: var(--ink-dim); }
-.web-ico { position: absolute; left: 11px; display: grid; place-items: center; pointer-events: none; }
-.web-form:focus-within .web-ico { color: var(--accent); }
-.web-input { width: 100%; height: 40px !important; padding-left: 38px !important; font-size: 15px; }
-.web-input::-webkit-search-cancel-button { display: none; }
 .web-groups { display: flex; flex-direction: column; min-width: 0; }
 .web-label { padding: 6px 2px 4px; }
 .web-row { display: flex; flex-wrap: wrap; gap: 4px; }

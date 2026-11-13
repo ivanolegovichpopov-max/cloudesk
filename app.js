@@ -683,13 +683,14 @@
   function renderWeb(f, body) {
     const sel = WEB_ALL.find((e) => e.id === store.get("cloudesk-web-" + f.id)) || WEB_ALL[0];
     const wrap = document.createElement("div"); wrap.className = "web";
-    const form = document.createElement("form"); form.className = "web-form";
-    const ico = document.createElement("span"); ico.className = "web-ico"; ico.innerHTML = svgIco("M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4", 18, 2);
-    const q = document.createElement("input"); q.type = "search"; q.className = "web-input"; q.autocomplete = "off"; q.enterKeyHint = "search"; q.maxLength = 300;
+    // строка ввода — та же, что везде (как поиск в контактах и файлах)
+    const form = document.createElement("form"); form.className = "ct-search web-form";
+    form.innerHTML = svgIco("M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4", 16, 2);
+    const q = document.createElement("input"); q.type = "text"; q.autocomplete = "off"; q.enterKeyHint = "search"; q.maxLength = 300;
     q.placeholder = "Искать в " + webFull(sel); q.setAttribute("aria-label", "Поиск в интернете: " + webFull(sel)); q.dataset.keep = f.id + ":web"; q.value = webQ[f.id] || "";
     q.addEventListener("input", () => { webQ[f.id] = q.value; });
     q.addEventListener("keydown", (e) => { if (e.key === "Escape" && q.value) { e.stopPropagation(); q.value = ""; webQ[f.id] = ""; } });
-    form.append(ico, q);
+    form.append(q);
     form.addEventListener("submit", (e) => { e.preventDefault(); webGo(sel, q.value); });
     wrap.append(form);
     const groups = document.createElement("div"); groups.className = "web-groups";
