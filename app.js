@@ -649,7 +649,7 @@
       render: (f, body) => renderMusic(f, body),
     },
     web: {
-      name: "Поиск", icon: IC.web, spans: [2],
+      name: "Поиск", icon: IC.web, spans: [1],
       render: (f, body) => renderWeb(f, body),
     },
     game: {
