@@ -693,31 +693,24 @@
     form.append(q);
     form.addEventListener("submit", (e) => { e.preventDefault(); webGo(sel, q.value); });
     wrap.append(form);
-    // три столбика: Google, Яндекс, Другое; строки — как пункты меню, выбранный — галочка справа
-    const WI = {
-      search: "M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4",
-      map: "M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12zM12 11.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5",
-      video: "M4 6h12v12H4zM16 10l5-3v10l-5-3",
-      trans: "M4 5h8M8 3v2M6 5c0 4 3 7 6 8M10 5c0 4-3 7-6 8M13 21l4-10 4 10M14.5 17h5",
-      chart: "M4 20h4V10H4zM10 20h4V4h-4zM16 20h4v-6h-4z",
-      cart: "M3 4h2l2.5 11h11L21 7H6.2M9 20h.01M18 20h.01",
-      tag: "M3 12V3h9l9 9-9 9zM7.5 7.5h.01",
-      book: "M4 4h6a2 2 0 0 1 2 2v14a2 2 0 0 0-2-2H4zM20 4h-6a2 2 0 0 0-2 2v14a2 2 0 0 1 2-2h6z",
-    };
-    const kindOf = { google: "search", yandex: "search", gmaps: "map", ymaps: "map", youtube: "video", gtrans: "trans", ytrans: "trans", wordstat: "chart", market: "cart", ozon: "cart", wb: "cart", avito: "tag", wiki: "book" };
+    // поисковики — квадратные кнопки со значком сервиса (как кнопки-значки стола), по группам с подписями;
+    // значок берётся у самого сервиса; не загрузился — первая буква названия
+    const host = { google: "www.google.com", gmaps: "maps.google.com", youtube: "www.youtube.com", gtrans: "translate.google.com", yandex: "ya.ru", ymaps: "maps.yandex.ru",
+      wordstat: "wordstat.yandex.ru", market: "market.yandex.ru", ytrans: "translate.yandex.ru", avito: "www.avito.ru", ozon: "www.ozon.ru", wb: "www.wildberries.ru", wiki: "ru.wikipedia.org" };
     const groups = document.createElement("div"); groups.className = "web-groups";
     WEB.forEach(([g, list]) => {
-      const col = document.createElement("div"); col.className = "web-col"; col.setAttribute("role", "group"); col.setAttribute("aria-label", g);
       const lb = document.createElement("div"); lb.className = "tk-gh web-label"; lb.textContent = g;
-      col.append(lb);
-      list.forEach(([id, name]) => {
+      const row = document.createElement("div"); row.className = "web-row"; row.setAttribute("role", "group"); row.setAttribute("aria-label", g);
+      list.forEach(([id]) => {
         const e = WEB_ALL.find((x) => x.id === id);
-        const b = document.createElement("button"); b.type = "button"; b.className = "menu-item web-item";
-        b.setAttribute("aria-checked", String(e === sel)); b.setAttribute("role", "menuitemradio");
-        const l = document.createElement("span"); l.className = "menu-ico"; l.innerHTML = svgIco(WI[kindOf[id]], 16); l.append(name);
-        const c = document.createElement("span"); c.className = "check"; c.innerHTML = svgIco(P.check, 16, 2);
-        b.append(l, c);
-        b.dataset.tip = webFull(e) + (q.value.trim() ? " — искать" : " — выбрать");
+        const b = document.createElement("button"); b.type = "button"; b.className = "web-tile";
+        b.setAttribute("aria-pressed", String(e === sel)); b.setAttribute("aria-label", webFull(e));
+        b.dataset.tip = webFull(e);
+        const img = document.createElement("img"); img.alt = ""; img.width = 22; img.height = 22; img.decoding = "async";
+        img.referrerPolicy = "no-referrer";
+        img.addEventListener("error", () => { img.remove(); b.textContent = e.name.charAt(0); b.classList.add("no-img"); });
+        img.src = "https://www.google.com/s2/favicons?sz=64&domain=" + host[id];
+        b.append(img);
         // с запросом — сразу ищет и запоминается; без запроса — просто выбирается для Enter
         b.addEventListener("click", () => {
           store.set("cloudesk-web-" + f.id, id);
@@ -725,9 +718,9 @@
           renderBoard([f.id]);
           const ni = document.querySelector('[data-keep="' + f.id + ':web"]'); if (ni) ni.focus({ preventScroll: true });
         });
-        col.append(b);
+        row.append(b);
       });
-      groups.append(col);
+      groups.append(lb, row);
     });
     wrap.append(groups);
     body.append(wrap);

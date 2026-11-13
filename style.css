@@ -1371,9 +1371,15 @@ input.fs-ren { width: 100%; min-width: 0; height: 22px !important; padding: 0 6p
 
 /* ---------- Приложение «Поиск» (1 колонка): строка ввода и поисковики группами ---------- */
 .web { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-.web-groups { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; min-width: 0; }
-.web-col { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.web-label { padding: 6px 10px 2px; }
-.web-item { min-height: 34px; justify-content: space-between; }
-.web-item .menu-ico { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-@media (max-width: 760px) { .web-groups { grid-template-columns: minmax(0, 1fr); } }
+.web-groups { display: flex; flex-direction: column; min-width: 0; }
+.web-label { padding: 6px 2px 4px; }
+.web-row { display: flex; flex-wrap: wrap; gap: 6px; }
+/* кнопка поисковика — квадрат со значком сервиса, как кнопки-значки стола; выбранный — рамка и мягкая заливка акцентом */
+.web-tile {
+  width: 44px; height: 44px; display: grid; place-items: center; padding: 0; border: 1px solid var(--line); border-radius: var(--r);
+  background: transparent; color: var(--ink); font-size: 15px; font-weight: 600;
+  transition: background-color .12s ease, border-color .12s ease;
+}
+.web-tile img { width: 22px; height: 22px; display: block; border-radius: 4px; }
+.web-tile:hover { background: var(--hover); }
+.web-tile[aria-pressed="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); box-shadow: inset 0 0 0 1px var(--accent); }
