@@ -1371,13 +1371,9 @@ input.fs-ren { width: 100%; min-width: 0; height: 22px !important; padding: 0 6p
 
 /* ---------- Приложение «Поиск» (1 колонка): строка ввода и поисковики группами ---------- */
 .web { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-.web-groups { display: flex; flex-direction: column; min-width: 0; }
-.web-label { padding: 6px 2px 4px; }
-.web-row { display: flex; flex-wrap: wrap; gap: 4px; }
-.web-chip {
-  height: 28px; padding: 0 10px; border: 1px solid var(--line); border-radius: 999px; background: transparent;
-  font-size: 12px; font-weight: 500; color: var(--ink); white-space: nowrap;
-  transition: background-color .12s ease, border-color .12s ease, color .12s ease;
-}
-.web-chip:hover { background: var(--hover); }
-.web-chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.web-groups { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; min-width: 0; }
+.web-col { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.web-label { padding: 6px 10px 2px; }
+.web-item { min-height: 34px; justify-content: space-between; }
+.web-item .menu-ico { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 760px) { .web-groups { grid-template-columns: minmax(0, 1fr); } }
