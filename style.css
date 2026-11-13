@@ -1029,7 +1029,7 @@ input.bad { border-color: var(--danger) !important; }
 .tasks { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .tk-add { position: relative; display: flex; align-items: center; min-width: 0; }
 .tk-add-ico { position: absolute; left: 10px; display: grid; color: var(--ink-dim); pointer-events: none; }
-.tk-input { flex: 1; width: 100%; padding-left: 34px !important; }
+.tk-input { flex: 1; width: 100%; height: 36px !important; padding-left: 34px !important; }
 .tk-input:focus + .tk-add-ico, .tk-add:focus-within .tk-add-ico { color: var(--accent); }
 .tk-hint {
   position: absolute; right: 10px; top: 50%; transform: translateY(-50%); max-width: 55%; pointer-events: none;
@@ -1456,25 +1456,27 @@ input.fs-ren { width: 100%; min-width: 0; height: 22px !important; padding: 0 6p
 .mn { height: 100%; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr) minmax(0, 1fr); gap: 16px; min-width: 0; }
 .mn-col { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
 .mn-list { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
-.mn-hint { min-height: 16px; margin-top: -2px; padding: 0 4px; font-size: 12px; line-height: 16px; color: var(--ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.mn-hint.bad { color: var(--danger); }
 .mn-input.nope { animation: tk-nope .5s ease; }
 .mn-day { display: flex; justify-content: space-between; align-items: center; padding: 8px 6px 2px; }
+/* итог дня и группы — на одной линии с суммами в строках (справа у строк место под «Удалить») */
+.mn-ops .mn-day, .mn-side .mn-day { padding-right: 40px; }
 .mn-day-sum { font-variant-numeric: tabular-nums; letter-spacing: 0; text-transform: none; font-weight: 600; }
 .mn-ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 2px; }
-.mn-row { position: relative; display: flex; align-items: center; gap: 10px; min-width: 0; height: 48px; padding: 0 8px 0 6px; border-radius: var(--r); cursor: pointer; outline: none; color: var(--ink); transition: background-color .12s ease; }
+.mn-row { position: relative; display: flex; align-items: center; gap: 10px; min-width: 0; height: var(--tk-row, 54px); padding: 0 8px 0 6px; border-radius: var(--r); cursor: pointer; outline: none; color: var(--ink); transition: background-color .12s ease; }
 .mn-row:hover, .mn-row:focus-visible { background: var(--hover); }
-.mn-row .tk-acts { right: 4px; }
-.mn-row:hover .mn-a, .mn-row:focus-within .mn-a { opacity: 0; }
-.mn-row:not(:has(.tk-acts)):hover .mn-a { opacity: 1; }
+/* у строк с «Удалить» справа всегда оставлено место под значок — при наведении сумма не прячется и ничего не сдвигается */
+.mn-row:has(.tk-acts) { padding-right: 40px; }
+.mn-row .tk-acts { right: 6px; }
+.mn-row:hover .tk-acts, .mn-row:focus-within .tk-acts { opacity: 1; pointer-events: auto; }
 .mn-main { flex: 1; min-width: 0; display: grid; gap: 1px; }
 .mn-t { font-size: 14px; line-height: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mn-s { font-size: 12px; line-height: 16px; color: var(--ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mn-s.over { color: var(--danger); font-weight: 600; }
+.mn-s.none { opacity: .7; }
 .mn-a { flex: none; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; transition: opacity .12s ease; }
 .mn-a.in { color: var(--accent); }
 .mn-proj.on { background: color-mix(in srgb, var(--accent) 14%, transparent); box-shadow: inset 0 0 0 1px var(--accent); }
-.mn-tip { padding: 14px 8px; font-size: 13px; }
+.mn-tip { padding: 18px 8px 6px; }
 /* итог месяца */
 .mn-nav { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
 .mn-month { flex: 1; height: 36px; border: 0; background: transparent; font-size: 15px; font-weight: 600; color: var(--ink); border-radius: var(--r); }
@@ -1490,7 +1492,8 @@ input.fs-ren { width: 100%; min-width: 0; height: 22px !important; padding: 0 6p
 /* платежи и долги */
 .mn-tabs { display: flex; align-items: center; gap: 6px; }
 .mn-tabs .segmented { flex: 1; }
-.mn-tabs .segmented button { flex: 1; height: 30px; font-size: 13px; }
+.mn-tabs .segmented { height: 36px; box-sizing: border-box; align-items: stretch; }
+.mn-tabs .segmented button { flex: 1; height: auto; font-size: 13px; }
 .mn-tabs > .tool { flex: none; width: 36px; height: 36px; }
 /* окно операции */
 .mn-form { gap: 12px; }

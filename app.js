@@ -1071,13 +1071,13 @@
 
   async function mnQuick(f, inp, hint) {
     const p = mnParse(inp.value);
-    if (!p) { hint.textContent = "Напишите сумму, например «кофе 1500» или «+45000 кворк»"; hint.classList.add("bad"); inp.classList.add("nope"); setTimeout(() => inp.classList.remove("nope"), 500); return; }
+    if (!p) { inp.classList.add("nope"); setTimeout(() => inp.classList.remove("nope"), 500); toast("Напишите сумму, например «кофе 1500» или «+45000 кворк»"); return; }
     const s = mnState(f.id), now = new Date();
     // запись — в выбранный месяц: в текущем — сегодня, в другом — его последний день
     const isCur = s.y === now.getFullYear() && s.m === now.getMonth();
     const date = isCur ? mnKey(now) : mnKey(new Date(s.y, s.m + 1, 0));
     const row = await createItem({ type: "money", section_id: f.id, title: p.title, data: { amount: p.amount, kind: p.kind, date, project: p.project || s.proj || null } });
-    if (row) { inp.value = ""; hint.textContent = ""; toast((p.kind === "in" ? "Доход " : "Расход ") + rub(p.amount) + " записан", "Вернуть", () => removeItem(row.id)); }
+    if (row) { inp.value = ""; hint.hidden = true; inp.style.paddingRight = ""; toast((p.kind === "in" ? "Доход " : "Расход ") + rub(p.amount) + " записан", "Вернуть", () => removeItem(row.id)); }
   }
   // кнопка «оплачено»: операция в деньги + следующий срок
   async function mnPay(p) {
@@ -1140,13 +1140,15 @@
     inp.placeholder = "кофе 1500 · +45000 кворк #Rentika";
     inp.setAttribute("aria-label", "Быстрая запись: сумма и что это; «+» — доход, #проект — проект");
     inp.dataset.tip = "«+» в начале — доход, без него — расход. «45к» — 45 000. #Проект — пометка проекта";
-    const hint = document.createElement("div"); hint.className = "mn-hint";
-    form.append(pl, inp);
+    // что поймётся — справа внутри строки, как у задач (форма не раздвигается)
+    const hint = document.createElement("div"); hint.className = "tk-hint"; hint.hidden = true;
+    form.append(pl, inp, hint);
     form.addEventListener("submit", (e) => { e.preventDefault(); mnQuick(f, inp, hint); });
     inp.addEventListener("input", () => {
       hint.classList.remove("bad");
       const p = inp.value.trim() ? mnParse(inp.value) : null;
-      hint.textContent = p ? (p.kind === "in" ? "Доход " : "Расход ") + rub(p.amount) + " · «" + p.title + "»" + (p.project || s.proj ? " · #" + (p.project || s.proj) : "") : "";
+      hint.textContent = p ? (p.kind === "in" ? "+" : "−") + rub(p.amount) + (p.project || s.proj ? " · #" + (p.project || s.proj) : "") : "";
+      hint.hidden = !p; inp.style.paddingRight = p ? hint.offsetWidth + 18 + "px" : "";
     });
     const list = document.createElement("div"); list.className = "mn-list";
     const ops = mnMonth(f.id, s.y, s.m).filter((it) => !s.proj || mnData(it).project === s.proj)
@@ -1165,11 +1167,12 @@
         ol = document.createElement("ol"); ol.className = "mn-ol";
         list.append(h, ol);
       }
-      ol.append(mnRow({ title: it.title || (d.kind === "in" ? "Доход" : "Расход"), sub: d.project ? "#" + d.project : d.kind === "in" ? "доход" : "расход",
+      const note = (it.body || "").trim().split("\n")[0];
+      ol.append(mnRow({ title: it.title || (d.kind === "in" ? "Доход" : "Расход"), sub: [d.project ? "#" + d.project : "", note].filter(Boolean).join(" · ") || "без проекта", subCls: d.project || note ? "" : "none",
         amount: (d.kind === "in" ? "+" : "−") + rub(d.amount), amountCls: d.kind === "in" ? "in" : "", fresh: mnFresh(it.id),
         onOpen: () => openMoney("money", it.id), onDel: () => removeItem(it.id, "Операция удалена") }));
     });
-    c1.append(form, hint, list);
+    c1.append(form, list);
 
     // 2. Итог месяца: месяц стрелками, доходы / расходы / остаток, проекты
     const c2 = col("mn-sum");
