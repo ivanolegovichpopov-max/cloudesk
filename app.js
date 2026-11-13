@@ -645,7 +645,7 @@
       sub: (f) => { const u = deskUsed(f.desk_id); if (!u) return null; const p = Math.min(100, Math.round((u / FS_QUOTA) * 100)); return { text: fmtSize(u) + " из 10 МБ", p, warn: p >= 90, tip: "Файлы на этом столе занимают " + fmtSize(u) + " из 10 МБ" }; },
     },
     music: {
-      name: "Музыка", icon: IC.music, spans: [1],
+      name: "Музыка", icon: IC.music, spans: [2],
       render: (f, body) => renderMusic(f, body),
     },
     web: {
@@ -658,54 +658,259 @@
     },
   };
   const APP_ORDER = ["notes", "tasks", "tools", "contacts", "files", "web", "music", "game"];
-  /* ---------- Приложение «Музыка»: плеер Яндекс Музыки (1 колонка) ----------
-     Яндекс разрешает встраивать плейлисты, альбомы и треки (Поделиться → HTML-код). Ссылка хранится в настройках поля. */
-  function musicSrc(raw) {
-    const t = String(raw || "").trim();
-    const m = t.match(/src=["']?([^"'\s>]+)/i);
-    let u;
-    try { u = new URL(m ? m[1] : t); } catch (e) { return { err: "Это не похоже на ссылку Яндекс Музыки" }; }
-    if (!/^music\.yandex\.(ru|com|by|kz|uz)$/.test(u.hostname)) return { err: "Нужна ссылка или HTML-код с music.yandex.ru" };
-    const p = u.pathname.replace(/\/+$/, "");
-    let r;
-    if ((r = p.match(/^\/iframe\/(playlist\/[^/]+\/\d+|album\/\d+|track\/\d+\/\d+)$/))) return { path: r[1] };
-    if ((r = p.match(/^\/users\/([^/]+)\/playlists\/(\d+)$/))) return { path: "playlist/" + r[1] + "/" + r[2] };
-    if ((r = p.match(/^\/album\/(\d+)\/track\/(\d+)$/))) return { path: "track/" + r[2] + "/" + r[1] };
-    if ((r = p.match(/^\/album\/(\d+)$/))) return { path: "album/" + r[1] };
-    if ((r = p.match(/^\/(?:iframe\/)?playlists\/(lk\.[0-9a-f-]{36})$/i))) return { path: "playlists/" + r[1] };
-    return { err: "Нужен плейлист, альбом или трек" };
+  /* ---------- Приложение «Музыка»: YouTube (2 колонки) ----------
+     Слева — видео (YouTube требует, чтобы плеер был виден), название, полоска времени и кнопки стола:
+     вперемешку, назад, плей/пауза, вперёд, повтор, звук. Справа — поиск (через сервер, ключ там) и список найденного.
+     Можно вставить ссылку на плейлист или ролик YouTube / YouTube Music.
+     Сам плеер живёт вне поля — поверх его места: перерисовка стола, перестановка и смена ширины полей музыку не прерывают. */
+  const MU_ICO = {
+    play: "M8 5v14l11-7z", pause: "M7 5h3v14H7zM14 5h3v14h-3z",
+    prev: "M6 5v14M18 5 9 12l9 7z", next: "M18 5v14M6 5l9 7-9 7z",
+    shuffle: "M4 7h3l10 10h3M4 17h3l3-3M14 10l3-3h3M17 4l3 3-3 3M17 14l3 3-3 3",
+    repeat: "M4 11V9a2 2 0 0 1 2-2h12l-3-3M20 13v2a2 2 0 0 1-2 2H6l3 3",
+    one: "M11.5 10.5 13 9.5v5",
+    vol: "M4 9h4l5-4v14l-5-4H4zM16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11",
+    mute: "M4 9h4l5-4v14l-5-4H4zM17 9l5 6M22 9l-5 6",
+    search: "M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4",
+  };
+  const mm = (s) => { s = Math.max(0, Math.floor(s || 0)); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = String(s % 60).padStart(2, "0"); return h ? h + ":" + String(m).padStart(2, "0") + ":" + x : m + ":" + x; };
+  const muS = {};
+  function muOf(fid) {
+    if (muS[fid]) return muS[fid];
+    let saved = {};
+    try { saved = JSON.parse(store.get("cloudesk-mu-" + fid) || "{}") || {}; } catch (e) {}
+    const s = muS[fid] = { fid, q: saved.q || "", list: Array.isArray(saved.list) ? saved.list : [], cur: saved.cur || null, shuffle: !!saved.shuffle, repeat: saved.repeat || "off",
+      muted: !!saved.muted, order: [], busy: false, err: "", player: null, ready: false, playing: false, host: null, slot: null, ui: null, wantPlay: false, pos: 0, len: 0 };
+    s.order = s.list.map((x) => x.id);
+    if (s.shuffle) muShuffle(s, true);
+    return s;
   }
-  async function saveMusic(f, path) {
-    const settings = Object.assign({}, f.settings || {}, { music: path });
-    const { error } = await sb.from("sections").update({ settings }).eq("id", f.id);
-    if (error) { toast("Не сохранилось — проверьте интернет."); return; }
-    f.settings = settings; renderBoard([f.id]);
+  function muSave(s) { store.set("cloudesk-mu-" + s.fid, JSON.stringify({ q: s.q, list: s.list.slice(0, 50), cur: s.cur, shuffle: s.shuffle, repeat: s.repeat, muted: s.muted })); }
+  function muShuffle(s, keepCur) {
+    const ids = s.list.map((x) => x.id).filter((id) => !(keepCur && id === s.cur));
+    for (let i = ids.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [ids[i], ids[j]] = [ids[j], ids[i]]; }
+    s.order = keepCur && s.cur ? [s.cur, ...ids] : ids;
+  }
+  // ссылка на плейлист или ролик YouTube / YouTube Music → { list } или { video }
+  function ytLink(t) {
+    let u; try { u = new URL(t.trim()); } catch (e) { return null; }
+    if (!/(^|\.)youtube\.com$|(^|\.)youtu\.be$/.test(u.hostname)) return null;
+    const list = u.searchParams.get("list"), v = u.hostname.endsWith("youtu.be") ? u.pathname.slice(1) : u.searchParams.get("v") || (u.pathname.match(/^\/(?:shorts|embed|live)\/([\w-]{11})/) || [])[1];
+    if (list && /^[\w-]{10,64}$/.test(list)) return { list };
+    if (v && /^[\w-]{11}$/.test(v)) return { video: v };
+    return null;
+  }
+  async function muSearch(s, text) {
+    const t = (text || "").trim();
+    if (!t || s.busy) return;
+    const link = ytLink(t);
+    s.busy = true; s.err = ""; muPaint(s);
+    try {
+      const { data: ses } = await sb.auth.getSession();
+      const tok = ses && ses.session && ses.session.access_token;
+      const r = await fetch(SB_URL + "/functions/v1/yt-search", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + tok, apikey: SB_KEY },
+        body: JSON.stringify(link && link.list ? { list: link.list } : { q: link && link.video ? link.video : t }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        s.err = j.error === "no_key" ? "Поиск ещё не подключён: нужен ключ YouTube" : j.error === "quotaExceeded" ? "На сегодня поиски закончились — завтра снова можно" : j.error === "not_found" ? "Плейлист не найден или он закрытый" : "Не получилось найти — проверьте интернет";
+      } else {
+        s.list = (j.items || []).slice(0, 50);
+        if (link && link.video) s.list = s.list.filter((x) => x.id === link.video).concat(s.list.filter((x) => x.id !== link.video));
+        s.q = link ? "" : t;
+        s.order = s.list.map((x) => x.id); if (s.shuffle) muShuffle(s, false);
+        if (!s.list.length) s.err = "Ничего не нашлось";
+        else if (link) muPlay(s, s.order[0]);
+        muSave(s);
+      }
+    } catch (e) { s.err = "Не получилось найти — проверьте интернет"; }
+    s.busy = false; muPaint(s);
+    if (s.ui) { s.ui.list.scrollTop = 0; }
+  }
+
+  // YouTube IFrame API — загружается один раз, когда впервые нужно поле «Музыка»
+  let ytApi = null;
+  function ytReady() {
+    if (window.YT && window.YT.Player) return Promise.resolve(window.YT);
+    if (!ytApi) ytApi = new Promise((res, rej) => {
+      const prev = window.onYouTubeIframeAPIReady;
+      window.onYouTubeIframeAPIReady = () => { if (prev) try { prev(); } catch (e) {} res(window.YT); };
+      const sc = document.createElement("script"); sc.src = "https://www.youtube.com/iframe_api"; sc.async = true;
+      sc.onerror = () => { ytApi = null; rej(new Error("yt")); };
+      document.head.append(sc);
+    });
+    return ytApi;
+  }
+  async function muEnsurePlayer(s) {
+    if (s.player || s.making) return;
+    s.making = true;
+    try {
+      const YT = await ytReady();
+      s.host = document.createElement("div"); s.host.className = "mu-host"; s.host.hidden = true;
+      const target = document.createElement("div"); s.host.append(target);
+      $("desk").append(s.host);
+      muWatch();
+      s.player = new YT.Player(target, {
+        width: "100%", height: "100%",
+        playerVars: { playsinline: 1, rel: 0, modestbranding: 1, controls: 0, disablekb: 1, fs: 0, iv_load_policy: 3, origin: location.origin },
+        events: {
+          onReady: () => { s.ready = true; if (s.muted) s.player.mute(); if (s.cur) { if (s.wantPlay) s.player.loadVideoById(s.cur); else s.player.cueVideoById(s.cur); } muPlace(); muPaint(s); },
+          onStateChange: (e) => {
+            s.playing = e.data === YT.PlayerState.PLAYING || e.data === YT.PlayerState.BUFFERING;
+            if (e.data === YT.PlayerState.ENDED) { if (s.repeat === "one") { s.player.seekTo(0, true); s.player.playVideo(); } else muStep(s, 1, true); }
+            muPaint(s);
+          },
+          onError: () => { s.err = "Этот ролик нельзя включить на сайте — следующий"; muPaint(s); setTimeout(() => muStep(s, 1, true), 1200); },
+        },
+      });
+    } catch (e) { s.err = "YouTube не загрузился — проверьте интернет"; muPaint(s); }
+    s.making = false;
+  }
+  function muPlay(s, id) {
+    if (!id) return;
+    s.cur = id; s.err = ""; s.wantPlay = true; s.pos = 0; muSave(s);
+    if (s.player && s.ready) s.player.loadVideoById(id); else muEnsurePlayer(s);
+    muPaint(s);
+  }
+  // шаг по очереди (с учётом «вперемешку»); auto — сам после конца трека: на последнем без повтора — стоп
+  function muStep(s, dir, auto) {
+    if (!s.order.length) return;
+    let i = s.order.indexOf(s.cur) + dir;
+    if (i >= s.order.length) { if (auto && s.repeat === "off") { s.playing = false; muPaint(s); return; } if (s.shuffle) { muShuffle(s, false); i = 0; } else i = 0; }
+    if (i < 0) i = s.order.length - 1;
+    muPlay(s, s.order[i]);
+  }
+  function muToggle(s) {
+    if (!s.cur) { if (s.order.length) muPlay(s, s.order[0]); return; }
+    if (!s.player || !s.ready) { s.wantPlay = true; muEnsurePlayer(s); return; }
+    if (s.playing) s.player.pauseVideo(); else s.player.playVideo();
+  }
+
+  // плеер лежит поверх своего места в поле; место пропало (другой стол) — прячется и ставится на паузу
+  function muPlace() {
+    Object.values(muS).forEach((s) => {
+      if (!s.host) return;
+      const slot = document.querySelector('.fld[data-id="' + s.fid + '"] .mu-stage');
+      if (!slot) {
+        if (!s.host.hidden) { s.host.hidden = true; if (s.player && s.ready && s.playing) { s.player.pauseVideo(); s.paused = true; } }
+        return;
+      }
+      const d = $("desk").getBoundingClientRect(), r = slot.getBoundingClientRect();
+      const st = s.host.style, l = r.left - d.left + "px", t = r.top - d.top + "px";
+      if (st.left !== l || st.top !== t || st.width !== r.width + "px" || st.height !== r.height + "px") Object.assign(st, { left: l, top: t, width: r.width + "px", height: r.height + "px" });
+      if (s.host.hidden && s.cur) s.host.hidden = false;
+    });
+  }
+  // следим за местом: пока есть плеер — раз в кадр сверяем положение (дёшево: только чтение, запись — при сдвиге)
+  let muLoop = 0;
+  function muWatch() {
+    if (muLoop) return;
+    const tick = () => {
+      muPlace();
+      Object.values(muS).forEach((s) => { if (s.player && s.ready && s.ui && s.playing) { const p = s.player.getCurrentTime() || 0, L = s.player.getDuration() || 0; if (Math.floor(p) !== Math.floor(s.pos) || L !== s.len) { s.pos = p; s.len = L; muTime(s); } } });
+      muLoop = Object.values(muS).some((s) => s.host) ? requestAnimationFrame(tick) : 0;
+    };
+    muLoop = requestAnimationFrame(tick);
+  }
+  function muTime(s) {
+    const u = s.ui; if (!u) return;
+    const it = s.list.find((x) => x.id === s.cur), L = s.len || (it && it.d) || 0;
+    u.bar.style.setProperty("--p", (L ? Math.min(100, (s.pos / L) * 100) : 0) + "%");
+    u.time.textContent = s.cur ? mm(s.pos) + " / " + mm(L) : "";
+  }
+  // обновление на месте — без перерисовки поля (иначе мигало бы)
+  function muPaint(s, force) {
+    const u = s.ui; if (!u || (!force && !u.wrap.isConnected)) return;
+    const it = s.list.find((x) => x.id === s.cur);
+    u.title.textContent = it ? it.t : s.cur ? "Загружается…" : "Ничего не играет";
+    u.sub.textContent = it ? it.c : "Найдите музыку в поиске";
+    u.stage.classList.toggle("empty", !s.cur);
+    const set = (b, path, tip, on) => { b.innerHTML = ICON(path, 18); b.dataset.tip = tip; b.setAttribute("aria-label", tip); if (on != null) b.setAttribute("aria-pressed", String(!!on)); };
+    set(u.play, s.playing ? MU_ICO.pause : MU_ICO.play, s.playing ? "Пауза" : "Играть");
+    set(u.shuffle, MU_ICO.shuffle, s.shuffle ? "Вперемешку: включено" : "Вперемешку", s.shuffle);
+    set(u.repeat, MU_ICO.repeat + (s.repeat === "one" ? MU_ICO.one : ""), s.repeat === "one" ? "Повтор одного трека" : s.repeat === "all" ? "Повтор всего списка" : "Повтор", s.repeat !== "off");
+    set(u.vol, s.muted ? MU_ICO.mute : MU_ICO.vol, s.muted ? "Включить звук" : "Выключить звук");
+    set(u.prev, MU_ICO.prev, "Назад"); set(u.next, MU_ICO.next, "Вперёд");
+    [u.prev, u.next].forEach((b) => { b.disabled = s.order.length < 2; });
+    muTime(s);
+    // список
+    noFlicker(u.list);
+    u.list.textContent = "";
+    if (s.busy) { const e = document.createElement("div"); e.className = "tk-empty"; e.textContent = "Ищу…"; u.list.append(e); }
+    else if (!s.list.length || s.err) {
+      const e = document.createElement("div"); e.className = "tk-empty" + (s.err ? " mu-err" : "");
+      e.textContent = s.err || "Напишите исполнителя, песню или настроение — или вставьте ссылку на плейлист YouTube";
+      u.list.append(e);
+    }
+    if (!s.busy && s.list.length) {
+      const ol = document.createElement("ol"); ol.className = "mu-ol";
+      s.list.forEach((x) => {
+        const li = document.createElement("li"); li.className = "mu-row" + (x.id === s.cur ? " cur" : ""); li.tabIndex = 0;
+        li.setAttribute("aria-label", x.t + (x.c ? ", " + x.c : ""));
+        const th = document.createElement("span"); th.className = "mu-th";
+        if (x.th && /^https:\/\/i\.ytimg\.com\//.test(x.th)) { const img = document.createElement("img"); img.alt = ""; img.loading = "lazy"; img.src = x.th; th.append(img); }
+        if (x.id === s.cur && s.playing) { const eq = document.createElement("span"); eq.className = "mu-eq"; eq.innerHTML = "<i></i><i></i><i></i>"; th.append(eq); }
+        const main = document.createElement("div"); main.className = "mu-main";
+        const t = document.createElement("div"); t.className = "mu-t"; t.textContent = x.t;
+        const c = document.createElement("div"); c.className = "mu-c"; c.textContent = [x.c, x.d ? mm(x.d) : ""].filter(Boolean).join(" · ");
+        main.append(t, c); li.append(th, main);
+        const go = () => { if (x.id === s.cur) muToggle(s); else muPlay(s, x.id); };
+        li.addEventListener("click", go);
+        li.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target === li) { e.preventDefault(); go(); } });
+        ol.append(li);
+      });
+      u.list.append(ol);
+    }
   }
   function renderMusic(f, body) {
-    const path = f.settings && f.settings.music;
+    const s = muOf(f.id);
     body.classList.add("mu-body");
-    if (path) {
-      const fr = document.createElement("iframe"); fr.className = "mu-frame";
-      fr.src = "https://music.yandex.ru/iframe/" + path; fr.title = "Плеер Яндекс Музыки";
-      fr.allow = "autoplay; clipboard-write; encrypted-media"; fr.loading = "lazy"; fr.referrerPolicy = "strict-origin-when-cross-origin";
-      const ch = tool("M4 20h4L19 9l-4-4L4 16zM13 7l4 4", "Сменить плейлист", () => saveMusic(f, null));
-      ch.classList.add("mu-change");
-      body.append(fr, ch);
-      return;
-    }
-    const wrap = document.createElement("form"); wrap.className = "mu-empty";
-    const sf = document.createElement("label"); sf.className = "ct-search";
-    sf.innerHTML = svgIco(IC.music, 16, 2);
-    const q = document.createElement("input"); q.type = "text"; q.autocomplete = "off"; q.maxLength = 2000; q.dataset.keep = f.id + ":mu";
-    q.placeholder = "Ссылка на плейлист"; q.setAttribute("aria-label", "HTML-код или ссылка на плейлист, альбом или трек Яндекс Музыки");
-    sf.append(q);
-    const hint = document.createElement("div"); hint.className = "mu-hint";
-    hint.textContent = "Яндекс Музыка → ⋯ у плейлиста → Поделиться → Скопировать ссылку. Вставьте сюда";
-    wrap.append(sf, hint);
-    const go = () => { const r = musicSrc(q.value); if (r.err) { hint.textContent = r.err; hint.classList.add("bad"); return; } saveMusic(f, r.path); };
-    wrap.addEventListener("submit", (e) => { e.preventDefault(); go(); });
-    q.addEventListener("paste", () => setTimeout(go, 0));
+    const wrap = document.createElement("div"); wrap.className = "mu";
+    // слева: видео, название, время, кнопки
+    const left = document.createElement("div"); left.className = "mu-left";
+    const stage = document.createElement("div"); stage.className = "mu-stage";
+    stage.innerHTML = svgIco(IC.music, 28, 1.6);
+    const now = document.createElement("div"); now.className = "mu-now";
+    const title = document.createElement("div"); title.className = "mu-title";
+    const sub = document.createElement("div"); sub.className = "mu-sub";
+    const time = document.createElement("span"); time.className = "mu-time";
+    const subRow = document.createElement("div"); subRow.className = "mu-subrow"; subRow.append(sub, time);
+    now.append(title, subRow);
+    const bar = document.createElement("div"); bar.className = "mu-bar"; bar.setAttribute("role", "slider"); bar.setAttribute("aria-label", "Перемотка"); bar.tabIndex = 0;
+    const seek = (x) => { if (!s.player || !s.ready || !s.cur) return; const r = bar.getBoundingClientRect(), L = s.player.getDuration() || 0; const p = Math.min(1, Math.max(0, (x - r.left) / r.width)); s.player.seekTo(p * L, true); s.pos = p * L; muTime(s); };
+    bar.addEventListener("pointerdown", (e) => { seek(e.clientX); bar.setPointerCapture(e.pointerId); });
+    bar.addEventListener("pointermove", (e) => { if (bar.hasPointerCapture(e.pointerId)) seek(e.clientX); });
+    bar.addEventListener("keydown", (e) => { if (!s.player || !s.ready) return; if (e.key === "ArrowRight" || e.key === "ArrowLeft") { e.preventDefault(); const p = (s.player.getCurrentTime() || 0) + (e.key === "ArrowRight" ? 10 : -10); s.player.seekTo(Math.max(0, p), true); } });
+    const ctrl = document.createElement("div"); ctrl.className = "mu-ctrl";
+    const b = (fn) => { const x = document.createElement("button"); x.type = "button"; x.className = "tool"; x.addEventListener("click", fn); return x; };
+    const shuffle = b(() => { s.shuffle = !s.shuffle; if (s.shuffle) muShuffle(s, true); else s.order = s.list.map((x) => x.id); muSave(s); muPaint(s); });
+    const prev = b(() => { if (s.player && s.ready && (s.player.getCurrentTime() || 0) > 4) { s.player.seekTo(0, true); return; } muStep(s, -1); });
+    const play = b(() => muToggle(s)); play.className = "icon-primary mu-play";
+    const next = b(() => muStep(s, 1));
+    const repeat = b(() => { s.repeat = s.repeat === "off" ? "all" : s.repeat === "all" ? "one" : "off"; muSave(s); muPaint(s); });
+    const vol = b(() => { s.muted = !s.muted; if (s.player && s.ready) { if (s.muted) s.player.mute(); else s.player.unMute(); } muSave(s); muPaint(s); });
+    ctrl.append(shuffle, prev, play, next, repeat, vol);
+    // видео не меньше 200 px в высоту (так требует YouTube); под ним — полоска времени и кнопки
+    left.append(stage, bar, ctrl);
+    // справа: поиск и список
+    const right = document.createElement("div"); right.className = "mu-right";
+    const form = document.createElement("form"); form.className = "ct-search";
+    form.innerHTML = svgIco(MU_ICO.search, 16, 2);
+    const q = document.createElement("input"); q.type = "text"; q.autocomplete = "off"; q.maxLength = 300; q.placeholder = "Что послушать?"; q.value = s.q;
+    q.setAttribute("aria-label", "Поиск музыки на YouTube или ссылка на плейлист"); q.dataset.keep = f.id + ":mu";
+    q.addEventListener("keydown", (e) => { if (e.key === "Escape" && q.value) { e.stopPropagation(); q.value = ""; } });
+    q.addEventListener("paste", () => setTimeout(() => { if (ytLink(q.value)) { muSearch(s, q.value); q.value = ""; } }, 0));
+    form.append(q);
+    form.addEventListener("submit", (e) => { e.preventDefault(); muSearch(s, q.value); });
+    const list = document.createElement("div"); list.className = "mu-list";
+    right.append(now, form, list);
+    wrap.append(left, right);
     body.append(wrap);
+    s.ui = { wrap, stage, title, sub, time, bar, play, prev, next, shuffle, repeat, vol, list };
+    muPaint(s, true);
+    if (s.cur && !s.player) muEnsurePlayer(s);
+    if (s.host) { if (s.paused && s.player && s.ready) { s.paused = false; } }
+    muWatch();
+    requestAnimationFrame(muPlace);
   }
   /* ---------- Приложение «Поиск»: поиск в интернете (1 колонка) ----------
      Строка ввода, под ней поисковики группами: Google и его сервисы, Яндекс и его сервисы, остальное.
