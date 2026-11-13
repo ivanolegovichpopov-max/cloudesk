@@ -127,6 +127,8 @@
   // Перезапустить анимацию появления (например, при смене месяца)
   // перерисовка списка не должна заново проявлять то, что уже на экране (значки при наведении и т. п.):
   // на два кадра плавные переходы внутри el выключаются
+  // ширина полосы прокрутки в этом браузере — для ровных отступов в полях (см. .fld-body в стилях)
+  (() => { try { const t = document.createElement("div"); t.className = "fld-body"; t.style.cssText = "position:absolute;top:-999px;width:100px;height:50px;overflow-y:scroll;scrollbar-gutter:auto"; document.body.append(t); const sb = t.offsetWidth - t.clientWidth; t.remove(); document.documentElement.style.setProperty("--sb", Math.min(12, Math.max(0, sb)) + "px"); } catch (e) {} })();
   function noFlicker(el) {
     if (!el) return;
     el.classList.add("instant");

@@ -822,7 +822,11 @@ html:has(.dragging) .fade-scroll { -webkit-mask-image: none; mask-image: none; }
 .fld-set:hover { opacity: 1; }
 @media (hover: none) { .fld-set { opacity: .75; } }
 .fld-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fld-body { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding-bottom: 12px; }
+.fld-body { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding-bottom: 12px; scrollbar-gutter: stable both-edges; }
+/* место под полосу прокрутки зарезервировано с обеих сторон и «съедает» часть отступа поля (--sb меряется при загрузке):
+   содержимое всех полей стоит ровно в 12 px от левого и правого края — и когда список прокручивается, и когда нет */
+.fld { padding-left: max(0px, calc(12px - var(--sb, 0px))); padding-right: max(0px, calc(12px - var(--sb, 0px))); }
+.fld-head { margin-inline: min(12px, var(--sb, 0px)); }
 .fld-empty { height: 100%; display: grid; place-items: center; font-size: 14px; color: var(--ink-dim); }
 .fld-new {
   display: grid; place-items: center; border: 1px dashed var(--line); border-radius: var(--r-lg);
