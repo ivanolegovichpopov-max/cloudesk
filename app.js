@@ -790,53 +790,100 @@
     body.append(wrap);
   }
 
-  /* Окно привычки: название, дни недели, сколько раз в день, напоминание, история за 4 недели, удалить */
-  const hb_ = { id: null, sec: null, days: null, target: 1 };
-  function hbParseTime(v) {
-    const s = String(v || "").trim().replace(/[.\s-]/g, ":");
-    if (!s) return "";
-    let m = s.match(/^(\d{1,2})(?::?(\d{2}))?$/);
-    if (!m) return null;
-    const h = Number(m[1]), mi = Number(m[2] || 0);
-    if (h > 23 || mi > 59) return null;
-    return String(h).padStart(2, "0") + ":" + String(mi).padStart(2, "0");
+  /* Окно привычки — как окно задачи: крупное название с линией, под ним «чипы» (дни, сколько раз, напоминание),
+     ниже серия и 4 недели квадратиками; внизу значками — «Отметить сегодня» и «Удалить». */
+  const hb_ = { id: null, sec: null, days: null, target: 1, remind: null, today: false };
+  const HB_COUNTS = [1, 2, 3, 4, 5, 6, 8, 10, 12, 15, 20];
+  const HB_CHECK = '<svg class="check" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+  function hbItem(label, checked, onClick, role = "menuitemradio") {
+    const b = document.createElement("button"); b.type = "button"; b.className = "menu-item"; b.setAttribute("role", role); b.setAttribute("aria-checked", String(!!checked));
+    const t = document.createElement("span"); t.textContent = label; b.append(t); b.insertAdjacentHTML("beforeend", HB_CHECK);
+    b.addEventListener("click", (e) => { e.stopPropagation(); onClick(); });
+    return b;
   }
   function hbRenderForm() {
-    document.querySelectorAll("#hb-days [data-wd]").forEach((b) => b.setAttribute("aria-checked", String(!hb_.days || hb_.days.includes(Number(b.dataset.wd)))));
-    $("hb-target").textContent = hb_.target;
-    $("hb-minus").disabled = hb_.target <= 1; $("hb-plus").disabled = hb_.target >= HB_LIM.target;
-    $("hb-target-l").textContent = plural(hb_.target, "раз", "раза", "раз") + " в день";
+    // дни: готовые варианты и отдельные дни (галочками, меню не закрывается)
+    const all = !hb_.days, wk = hb_.days && hb_.days.length === 5 && [1, 2, 3, 4, 5].every((x) => hb_.days.includes(x)), we = hb_.days && hb_.days.length === 2 && hb_.days.includes(0) && hb_.days.includes(6);
+    $("hb-days-label").textContent = all ? "Каждый день" : wk ? "По будням" : we ? "По выходным" : HB_WD_ORDER.filter((x) => hb_.days.includes(x)).map((x) => HB_WD[x].toLowerCase()).join(", ");
+    $("hb-days-btn").classList.toggle("on", !all); $("hb-days-btn").dataset.tip = "Дни"; $("hb-days-btn").setAttribute("aria-label", "Дни: " + $("hb-days-label").textContent);
+    const dp = $("hb-days-pop"); dp.textContent = "";
+    [["Каждый день", all, null], ["По будням", wk, [1, 2, 3, 4, 5]], ["По выходным", we, [0, 6]]].forEach(([l, on, v]) => dp.append(hbItem(l, on, () => { hb_.days = v; hbRenderForm(); closeMenus(null); })));
+    const sep = document.createElement("div"); sep.className = "menu-sep"; dp.append(sep);
+    HB_WD_ORDER.forEach((wd) => dp.append(hbItem(HB_WD[wd], all || hb_.days.includes(wd), () => {
+      let days = hb_.days ? hb_.days.slice() : [0, 1, 2, 3, 4, 5, 6];
+      days = days.includes(wd) ? days.filter((x) => x !== wd) : days.concat(wd);
+      if (!days.length) { toast("Нужен хотя бы один день"); return; }
+      hb_.days = days.length === 7 ? null : days.sort(); hbRenderForm();
+    }, "menuitemcheckbox")));
+    // сколько раз в день: 1 — чип только значком
+    const cl = $("hb-count-label"), cb = $("hb-count-btn"), cOn = hb_.target > 1;
+    cl.textContent = cOn ? hb_.target + " " + plural(hb_.target, "раз", "раза", "раз") + " в день" : ""; cl.hidden = !cOn; cb.classList.toggle("on", cOn);
+    cb.dataset.tip = "Сколько раз в день"; cb.setAttribute("aria-label", "Сколько раз в день: " + hb_.target);
+    const cp = $("hb-count-pop"); cp.textContent = "";
+    HB_COUNTS.forEach((n) => cp.append(hbItem(n === 1 ? "Один раз в день" : n + " " + plural(n, "раз", "раза", "раз") + " в день", n === hb_.target, () => { hb_.target = n; hbRenderForm(); closeMenus(null); })));
+    // напоминание: выключено — чип только значком
+    const rl = $("hb-remind-label"), rb = $("hb-remind-btn");
+    rl.textContent = hb_.remind || ""; rl.hidden = !hb_.remind; rb.classList.toggle("on", !!hb_.remind);
+    rb.dataset.tip = "Напомнить в Telegram, если не отмечено"; rb.setAttribute("aria-label", "Напоминание в Telegram: " + (hb_.remind || "нет"));
+    $("hb-remind-off").setAttribute("aria-checked", String(!hb_.remind));
+    hbRenderTP();
+    // отметка за сегодня — значком внизу (залит, когда отмечено)
+    const t = $("hb-today"), on = hb_.today;
+    t.setAttribute("aria-pressed", String(on)); t.dataset.tip = on ? "Снять отметку за сегодня" : "Отметить сегодня"; t.setAttribute("aria-label", t.dataset.tip);
+    t.disabled = !(!hb_.days || hb_.days.includes(new Date().getDay()));
+    if (t.disabled) t.dataset.tip = "Сегодня не по плану";
   }
-  document.querySelectorAll("#hb-days [data-wd]").forEach((b) => b.addEventListener("click", () => {
-    const wd = Number(b.dataset.wd);
-    let days = hb_.days ? hb_.days.slice() : [0, 1, 2, 3, 4, 5, 6];
-    days = days.includes(wd) ? days.filter((x) => x !== wd) : days.concat(wd);
-    if (!days.length) { toast("Нужен хотя бы один день"); return; }
-    hb_.days = days.length === 7 ? null : days.sort();
-    hbRenderForm();
+  function hbRenderTP() {
+    const [h, m] = (hb_.remind || "21:00").split(":");
+    const mk = (box, vals, cur, onPick) => {
+      box.textContent = "";
+      vals.forEach((v) => { const b = document.createElement("button"); b.type = "button"; b.className = "tp-item" + (hb_.remind && v === cur ? " sel" : ""); b.textContent = v; b.addEventListener("click", (e) => { e.stopPropagation(); onPick(v); }); box.append(b); });
+      const sel = box.querySelector(".sel") || [...box.children].find((x) => x.textContent === cur); if (sel) box.scrollTop = sel.offsetTop - box.clientHeight / 2 + sel.clientHeight / 2;
+    };
+    mk($("hbtp-hours"), Array.from({ length: 24 }, (_, i) => pad(i)), h, (v) => { hb_.remind = v + ":" + m; hbRenderForm(); });
+    mk($("hbtp-mins"), Array.from({ length: 12 }, (_, i) => pad(i * 5)), m, (v) => { hb_.remind = h + ":" + v; hbRenderForm(); closeMenus(null); });
+  }
+  $("hb-remind-off").addEventListener("click", (e) => { e.stopPropagation(); hb_.remind = null; hbRenderForm(); closeMenus(null); });
+  $("hb-remind-btn").addEventListener("click", () => setTimeout(hbRenderTP, 0));
+  // списки чипов прижимаются к той стороне, где есть место
+  ["hb-days", "hb-count", "hb-remind"].forEach((k) => $(k + "-btn").addEventListener("click", () => {
+    const pop = $(k + "-pop"); if (pop.hidden) return;
+    pop.style.left = ""; pop.style.right = "";
+    const sheet = pop.closest(".sheet").getBoundingClientRect(), r = pop.getBoundingClientRect();
+    if (r.left < sheet.left + 8) { pop.style.left = "0"; pop.style.right = "auto"; }
   }));
-  $("hb-minus").addEventListener("click", () => { hb_.target = Math.max(1, hb_.target - 1); hbRenderForm(); });
-  $("hb-plus").addEventListener("click", () => { hb_.target = Math.min(HB_LIM.target, hb_.target + 1); hbRenderForm(); });
+  $("hb-today").addEventListener("click", () => { hb_.today = !hb_.today; hbRenderForm(); });
   function openHabit(id, secId) {
     closeMenus(null);
     const h = id ? state.items.find((x) => x.id === id) : null;
     if (id && !h) return;
     const d = h ? hbData(h) : {};
-    Object.assign(hb_, { id: h ? h.id : null, sec: h ? h.section_id : secId, days: Array.isArray(d.days) && d.days.length && d.days.length < 7 ? d.days.slice() : null, target: hbTarget(d) });
+    Object.assign(hb_, { id: h ? h.id : null, sec: h ? h.section_id : secId, days: Array.isArray(d.days) && d.days.length && d.days.length < 7 ? d.days.slice() : null,
+      target: hbTarget(d), remind: d.remind || null, today: h ? hbCount(d, dayKey(new Date())) >= hbTarget(d) : false });
     $("hb-h").textContent = h ? "Привычка" : "Новая привычка";
     $("hb-name").value = h ? h.title : ""; $("hb-name").classList.remove("bad");
-    $("hb-time").value = d.remind || ""; $("hb-time-row").classList.remove("bad");
+    $("hb-note").value = h ? h.body || "" : "";
     $("hb-status").textContent = "";
     $("hb-delete").hidden = !h;
+    // история: серия и последние 4 недели (как у повторяющейся задачи)
     const hist = $("hb-hist"); hist.textContent = ""; hist.hidden = !h;
     if (h) {
-      const w = hbWeek(h, 28); w.classList.add("hb-month");
-      const st = hbStreak(h), lab = document.createElement("div"); lab.className = "hb-hist-l";
-      const t = hbTarget(d), now = new Date(); let done = 0, plan = 0;
-      const born = new Date(h.created_at || now); born.setHours(0, 0, 0, 0);
-      for (let i = 0; i < 28; i++) { const x = new Date(now); x.setDate(x.getDate() - i); if (x < born && dayKey(x) !== dayKey(born)) break; if (!hbOn(d, x)) continue; plan++; if (hbCount(d, dayKey(x)) >= t) done++; }
-      lab.textContent = "За 4 недели: " + done + " из " + plan + (st ? " · " + st + " " + plural(st, "день", "дня", "дней") + " подряд" : "");
-      hist.append(lab, w);
+      const st = hbStreak(h), t = hbTarget(d), now = new Date(), born = new Date(h.created_at || now); born.setHours(0, 0, 0, 0);
+      const lab = document.createElement("span"); lab.className = "it-hist-l";
+      lab.innerHTML = svgIco("M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2.2 1-3.6 2-4.6.3 1.6 1 2.6 2 3.1C11 9 11 6 12 3z", 14, 2);
+      lab.append(st ? "Серия " + st : "Серии пока нет");
+      const strip = document.createElement("span"); strip.className = "tk-hist big";
+      let done = 0, plan = 0;
+      for (let i = 27; i >= 0; i--) {
+        const x = new Date(now); x.setDate(x.getDate() - i); x.setHours(0, 0, 0, 0);
+        const on = hbOn(d, x) && x >= born, ok = on && hbCount(d, dayKey(x)) >= t;
+        if (on) { plan++; if (ok) done++; }
+        const c = document.createElement("i"); c.className = ok ? "on" : on ? "" : "off";
+        c.dataset.tip = fmtWdDate.format(x).replace(/\.$/, "") + (!on ? " — не по плану" : ok ? " — сделано" : " — пропущено");
+        strip.append(c);
+      }
+      const cap = document.createElement("span"); cap.className = "it-hist-c"; cap.textContent = "за 4 недели: " + done + " из " + plan;
+      hist.append(lab, strip, cap);
     }
     hbRenderForm();
     animShow($("hbsheet")); lockSheets(true);
@@ -847,18 +894,24 @@
     if (hbClosing) return;
     hbClosing = true;
     try {
+      closeMenus(null);
       const name = $("hb-name").value.trim();
       const h = hb_.id ? state.items.find((x) => x.id === hb_.id) : null;
       if (!h && !name) { animHide($("hbsheet"), 170); lockSheets(false); return; }
       if (!name) { $("hb-name").classList.add("bad"); $("hb-status").textContent = "Напишите название"; $("hb-name").focus(); return; }
-      const remind = hbParseTime($("hb-time").value);
-      if (remind === null) { $("hb-time-row").classList.add("bad"); $("hb-status").textContent = "Время — например 21:00"; return; }
-      const data = Object.assign({}, h ? hbData(h) : {}, { days: hb_.days, target: hb_.target, remind: remind || null, tz: TZ });
-      const row = { title: name.slice(0, LIM.title), data, remind_at: hbNextRemind(data), sent_at: null, failed_at: null };
+      const d0 = h ? hbData(h) : {}, key = dayKey(new Date()), log = Object.assign({}, d0.log || {});
+      // поменяли «сколько раз» — прошлые выполненные дни остаются выполненными (серия не рвётся)
+      const oldT = hbTarget(d0);
+      if (h && oldT !== hb_.target) Object.keys(log).forEach((k) => { if (k < key && Number(log[k]) >= oldT) log[k] = hb_.target; });
+      if (hb_.today) log[key] = hb_.target; else if (hbCount(d0, key) >= oldT) delete log[key];
+      const data = Object.assign({}, d0, { days: hb_.days, target: hb_.target, remind: hb_.remind, log, tz: TZ });
+      const row = { title: name.slice(0, LIM.title), body: $("hb-note").value.slice(0, LIM.desc), data, remind_at: hbNextRemind(data), sent_at: null, failed_at: null };
       $("hb-status").textContent = "Сохраняю…";
       let ok;
-      if (h) ok = await patchItem(h.id, row);
-      else {
+      if (h) {
+        const same = h.title === row.title && (h.body || "") === row.body && JSON.stringify(d0) === JSON.stringify(data);
+        ok = same ? true : await patchItem(h.id, row);
+      } else {
         const n = state.items.filter((x) => x.type === "habit" && x.section_id === hb_.sec).length;
         if (n >= HB_LIM.field) { $("hb-status").textContent = "В поле уже " + HB_LIM.field + " привычек — это предел"; return; }
         ok = !!(await createItem(Object.assign({ type: "habit", section_id: hb_.sec }, row)));
@@ -868,11 +921,9 @@
     } finally { hbClosing = false; }
   }
   $("hbsheet").querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", closeHabit));
-  $("hbsheet").querySelector("[data-cancel]").addEventListener("click", () => { animHide($("hbsheet"), 170); lockSheets(false); });
+  $("hbsheet").querySelector("[data-cancel]").addEventListener("click", () => { closeMenus(null); animHide($("hbsheet"), 170); lockSheets(false); });
   $("hb-delete").addEventListener("click", async () => { if (hb_.id && await removeItem(hb_.id, "Привычка удалена")) { animHide($("hbsheet"), 170); lockSheets(false); } });
   $("hb-name").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); closeHabit(); } });
-  $("hb-time").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); closeHabit(); } });
-  $("hb-time").addEventListener("input", () => $("hb-time-row").classList.remove("bad"));
   /* ---------- Приложение «Музыка»: плеер Яндекс Музыки (1 колонка) ----------
      Яндекс разрешает встраивать плейлисты, альбомы и треки (Поделиться → HTML-код). Ссылка хранится в настройках поля. */
   function musicSrc(raw) {

@@ -477,18 +477,33 @@
     </div>
     <div class="it-form hb-form">
       <input id="hb-name" class="ed-head" type="text" maxlength="20" autocomplete="off" placeholder="Привычка" aria-label="Название привычки">
-      <div class="hb-line"><span class="hb-line-ico"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M4 6h16v14H4zM4 10h16M8 3v4M16 3v4"/></svg></span><div id="hb-days" class="segmented hb-days" role="group" aria-label="Дни недели"><button type="button" data-wd="1" role="checkbox" aria-checked="true">Пн</button><button type="button" data-wd="2" role="checkbox" aria-checked="true">Вт</button><button type="button" data-wd="3" role="checkbox" aria-checked="true">Ср</button><button type="button" data-wd="4" role="checkbox" aria-checked="true">Чт</button><button type="button" data-wd="5" role="checkbox" aria-checked="true">Пт</button><button type="button" data-wd="6" role="checkbox" aria-checked="true">Сб</button><button type="button" data-wd="0" role="checkbox" aria-checked="true">Вс</button></div></div>
-      <div class="hb-line"><span class="hb-line-ico"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7v5l3 2"/></svg></span>
-        <button id="hb-minus" type="button" class="tool" data-tip="Меньше" aria-label="Меньше раз в день"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M5 12h14"/></svg></button>
-        <span id="hb-target" class="hb-target" aria-live="polite">1</span>
-        <button id="hb-plus" type="button" class="tool" data-tip="Больше" aria-label="Больше раз в день"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14"/></svg></button>
-        <span id="hb-target-l" class="hb-target-l">раз в день</span></div>
-      <label id="hb-time-row" class="ct-search hb-time"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M6 10a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6zM10 20a2 2 0 0 0 4 0"/></svg><input id="hb-time" type="text" inputmode="numeric" maxlength="5" autocomplete="off" placeholder="Напомнить в Telegram, например 21:00" aria-label="Время напоминания в Telegram, если привычка не отмечена"></label>
-      <div id="hb-hist" class="hb-hist" hidden></div>
+      <div class="it-when hb-when">
+        <div class="field it-chip-f">
+          <button type="button" id="hb-days-btn" class="pick-btn it-chip" aria-haspopup="menu" aria-expanded="false" data-menu="hb-days-pop"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M4 6h16v14H4zM4 10h16M8 3v4M16 3v4"/></svg><span id="hb-days-label">Каждый день</span></button>
+          <div id="hb-days-pop" class="pop menu-pop it-pick-pop" role="menu" hidden></div>
+        </div>
+        <div class="field it-chip-f">
+          <button type="button" id="hb-count-btn" class="pick-btn it-chip" aria-haspopup="menu" aria-expanded="false" data-menu="hb-count-pop"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M5 9h14M5 15h14M10 4 8 20M16 4l-2 16"/></svg><span id="hb-count-label" hidden></span></button>
+          <div id="hb-count-pop" class="pop menu-pop it-pick-pop" role="menu" hidden></div>
+        </div>
+        <div class="field it-chip-f">
+          <button type="button" id="hb-remind-btn" class="pick-btn it-chip" aria-haspopup="menu" aria-expanded="false" data-menu="hb-remind-pop"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4"/></svg><span id="hb-remind-label" hidden></span></button>
+          <div id="hb-remind-pop" class="pop menu-pop it-pick-pop hb-remind-pop" role="menu" hidden>
+            <button type="button" id="hb-remind-off" class="menu-item" role="menuitemradio" aria-checked="true"><span>Не напоминать</span><svg class="check" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>
+            <div class="pop-time hb-tp">
+              <div class="tp-col"><div class="tp-head">Часы</div><div id="hbtp-hours" class="tp-list"></div></div>
+              <div class="tp-col"><div class="tp-head">Минуты</div><div id="hbtp-mins" class="tp-list"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="hb-hist" class="it-hist" hidden></div>
+      <textarea id="hb-note" class="it-body" maxlength="1000" placeholder="Заметка" aria-label="Заметка"></textarea>
     </div>
     <div class="sheet-foot">
       <div></div>
       <div class="foot-actions">
+        <button id="hb-today" type="button" class="tool" aria-pressed="false" data-tip="Отметить сегодня" aria-label="Отметить сегодня"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM8 12.5l2.5 2.5L16 9.5"/></svg></button>
         <button id="hb-delete" type="button" class="tool" data-tip="Удалить" aria-label="Удалить"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>
       </div>
     </div>

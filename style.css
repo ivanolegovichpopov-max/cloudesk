@@ -1110,12 +1110,12 @@ input.bad { border-color: var(--danger) !important; }
 .it-chip.off { opacity: .45; }
 .it-chip.off:hover { border-color: var(--line); }
 .it-chip-f .pop { left: auto; right: 0; width: 220px; min-width: 0; }
-#itemsheet .it-body {
+#itemsheet .it-body, #hbsheet .it-body {
   flex: 1 1 auto; min-height: 84px; padding: 6px 4px; border: 0; border-radius: 0; background: transparent;
   font: 400 15px/1.6 var(--font); color: inherit;
 }
-#itemsheet .it-body:focus { border: 0; }
-#itemsheet .it-body::placeholder { color: inherit; opacity: .45; }
+#itemsheet .it-body:focus, #hbsheet .it-body:focus { border: 0; }
+#itemsheet .it-body::placeholder, #hbsheet .it-body::placeholder { color: inherit; opacity: .45; }
 .it-subs-box { flex: none; display: grid; gap: 4px; max-height: 45%; overflow-y: auto; overflow-x: hidden; border-top: 1px solid var(--line); padding-top: 6px; }
 .it-subs-box[hidden] { display: none; }
 .it-subs-h { display: flex; gap: 6px; padding: 0 2px; }
@@ -1428,17 +1428,11 @@ input.fs-ren { width: 100%; min-width: 0; height: 22px !important; padding: 0 6p
 .hb-day.off { background: transparent; box-shadow: inset 0 0 0 1px rgba(127,127,127,.25); }
 .hb-day.today { box-shadow: inset 0 0 0 1.5px var(--ink-dim); }
 .hb-day.on.today { box-shadow: none; }
-/* окно привычки */
-.hb-form { gap: 12px; }
-.hb-line { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
-.hb-line-ico { flex: none; display: grid; place-items: center; width: 24px; color: var(--ink-dim); }
-.hb-days { flex-wrap: wrap; }
-.hb-days button { min-width: 36px; }
-.hb-target { min-width: 24px; text-align: center; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.hb-target-l { font-size: 14px; color: var(--ink-dim); }
-.hb-time.bad input { border-color: var(--danger) !important; }
-.hb-hist { display: grid; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
-.hb-hist[hidden] { display: none; }
-.hb-hist-l { font-size: 12px; color: var(--ink-dim); }
-.hb-month { display: grid; grid-template-columns: repeat(14, 24px); gap: 4px; }
-@media (max-width: 420px) { .hb-month { grid-template-columns: repeat(7, 24px); } }
+/* окно привычки — как окно задачи: чипы в строку, история, значки внизу */
+#hbsheet .it-form > .ed-head, #hbsheet .hb-when { flex: none; }
+#hbsheet .hb-when { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.menu-sep { height: 1px; margin: 4px 6px; background: var(--line); }
+.hb-remind-pop { width: 200px; }
+.hb-tp { width: auto; padding-top: 4px; }
+.tk-hist i.off { background: transparent; box-shadow: inset 0 0 0 1px rgba(127,127,127,.3); }
+#hb-today[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
