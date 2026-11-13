@@ -1279,3 +1279,6 @@ input.bad { border-color: var(--danger) !important; }
 .ct-add { display: flex; gap: 6px; }
 .ct-add .tool.off { opacity: .35; }
 #ct-fav[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+
+/* перерисовка стола и списков: на два кадра без плавных переходов — ничего не мигает (анимации появления новых строк остаются) */
+.instant *, .instant *::before, .instant *::after { transition: none !important; }

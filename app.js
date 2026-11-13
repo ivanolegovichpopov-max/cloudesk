@@ -125,6 +125,13 @@
     el.hidden = false;
   }
   // Перезапустить анимацию появления (например, при смене месяца)
+  // перерисовка списка не должна заново проявлять то, что уже на экране (значки при наведении и т. п.):
+  // на два кадра плавные переходы внутри el выключаются
+  function noFlicker(el) {
+    if (!el) return;
+    el.classList.add("instant");
+    requestAnimationFrame(() => requestAnimationFrame(() => el.classList.remove("instant")));
+  }
   function replay(el, cls = "fade-in") {
     if (reduceMotion || !el) return;
     el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls);
@@ -1829,6 +1836,9 @@
     const keepIn = ae && ae.classList && ae.classList.contains("tk-input") ? { fid: ae.closest(".fld").dataset.id, v: ae.value, a: ae.selectionStart, b: ae.selectionEnd } : null;
     // поля ввода инструментов (и калькулятор) тоже не теряют фокус при перерисовке
     const keepTool = ae && ae.dataset && ae.dataset.keep ? { k: ae.dataset.keep, a: ae.selectionStart, b: ae.selectionEnd } : null;
+    // перерисовка не должна заново «проявлять» то, что уже видно (значки при наведении и т. п.):
+    // на один кадр плавные переходы выключаются — новые элементы сразу в своём конечном виде
+    noFlicker(board);
     board.querySelectorAll(".fld, .fld-new").forEach((n) => n.remove());
     const frag = document.createDocumentFragment();
     for (const f of orderedFields()) {
@@ -3300,7 +3310,7 @@
     return diff === 0 ? "Сегодня" : diff === 1 ? "Завтра" : diff === -1 ? "Вчера" : fmtDM.format(d);
   }
   function renderReminders() {
-    const ul = $("rem-list");
+    const ul = $("rem-list"); noFlicker(ul);
     ul.textContent = "";
     const done = (r) => !!(r.sent_at || r.failed_at);
     const next = state.reminders.filter((r) => !done(r)).sort((a, b) => new Date(a.remind_at) - new Date(b.remind_at));
@@ -3434,7 +3444,7 @@
     return Math.round((Date.UTC(g("year"), g("month") - 1, g("day"), g("hour"), g("minute")) - Math.floor(d.getTime() / 60000) * 60000) / 60000);
   }
   function renderCities() {
-    const ul = $("city-list");
+    const ul = $("city-list"); noFlicker(ul);
     ul.textContent = "";
     const localTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const rows = [[localTz, true]].concat(cities().map((c) => [c, false]));
@@ -3518,7 +3528,7 @@
   }
   // Список «Ссылки»: сначала без группы, затем группы с заголовками (пустые группы не показываем)
   function renderLinks() {
-    const list = $("links-menu-list");
+    const list = $("links-menu-list"); noFlicker(list);
     list.textContent = "";
     if (!state.links.length) {
       const e = document.createElement("div");
@@ -3578,7 +3588,7 @@
   const liveGroups = () => dgroups.filter((g) => !g.removed);
 
   function renderDraft() {
-    const box = $("links-list");
+    const box = $("links-list"); noFlicker(box);
     const keepScroll = box.scrollTop;
     box.textContent = "";
     const hasGroups = liveGroups().length > 0;
@@ -3852,7 +3862,7 @@
     return parts.join(" · ");
   }
   function renderDesksDraft() {
-    const ol = $("desks-list");
+    const ol = $("desks-list"); noFlicker(ol);
     const keep = ol.scrollTop;
     ol.textContent = "";
     const live = liveDesks().length;
@@ -4066,7 +4076,7 @@
       batches.set(row.deleted_batch, b);
     };
     se.data.forEach((r) => add("field", r)); it.data.forEach((r) => add(r.type, r)); li.data.forEach((r) => add("link", r)); gr.data.forEach((r) => add("group", r)); dk.data.forEach((r) => add("desk", r));
-    const ul = $("trash-list"); ul.textContent = "";
+    const ul = $("trash-list"); noFlicker(ul); ul.textContent = "";
     const list = [...batches.entries()].sort((a, b) => (a[1].at < b[1].at ? 1 : -1));
     for (const [batch, b] of list) {
       const by = (k) => b.rows.filter((r) => r.kind === k);
