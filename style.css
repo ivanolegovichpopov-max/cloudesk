@@ -1497,6 +1497,10 @@ input.fs-ren { width: 100%; min-width: 0; height: 22px !important; padding: 0 6p
 .mn-month:not(:disabled):hover { background: var(--hover); }
 .mn-month:disabled { cursor: default; opacity: 1; }
 .mn-big { display: grid; border: 1px solid var(--line); border-radius: var(--r); }
+/* итог растягивается на всю высоту колонки (как карточки заметок): три строки делят её поровну */
+.mn-sum .mn-big { flex: 1 1 auto; min-height: 0; grid-template-rows: repeat(3, minmax(0, 1fr)); margin-bottom: 12px; }
+.mn-sum .mn-cell { align-items: center; padding: 0 14px; }
+.mn-sum .mn-cell-v { font-size: 20px; }
 /* итог — три строки в одной рамке: подпись слева, сумма справа (ничего не обрезается) */
 .mn-cell { min-width: 0; display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 7px 10px; }
 .mn-cell + .mn-cell { border-top: 1px solid var(--line); }
