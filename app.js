@@ -645,7 +645,7 @@
       sub: (f) => { const u = deskUsed(f.desk_id); if (!u) return null; const p = Math.min(100, Math.round((u / FS_QUOTA) * 100)); return { text: fmtSize(u) + " из 10 МБ", p, warn: p >= 90, tip: "Файлы на этом столе занимают " + fmtSize(u) + " из 10 МБ" }; },
     },
     music: {
-      name: "Музыка", icon: IC.music, spans: [2],
+      name: "Музыка", icon: IC.music, spans: [1],
       render: (f, body) => renderMusic(f, body),
     },
     web: {
@@ -658,7 +658,7 @@
     },
   };
   const APP_ORDER = ["notes", "tasks", "tools", "contacts", "files", "web", "music", "game"];
-  /* ---------- Приложение «Музыка»: плеер Яндекс Музыки (2 колонки) ----------
+  /* ---------- Приложение «Музыка»: плеер Яндекс Музыки (1 колонка) ----------
      Яндекс разрешает встраивать плейлисты, альбомы и треки (Поделиться → HTML-код). Ссылка хранится в настройках поля. */
   function musicSrc(raw) {
     const t = String(raw || "").trim();
