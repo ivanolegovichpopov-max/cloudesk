@@ -701,7 +701,7 @@
     if (s.dir && !state.items.some((it) => it.id === s.dir && it.type === "folder" && it.section_id === fid)) s.dir = null;
     return s;
   }
-  function fsGo(fid, dir) { const s = fsOf(fid); s.dir = dir || null; s.q = ""; store.set("cloudesk-fdir-" + fid, s.dir || ""); renderBoard(); }
+  function fsGo(fid, dir) { const s = fsOf(fid); s.dir = dir || null; s.q = ""; store.set("cloudesk-fdir-" + fid, s.dir || ""); renderBoard([fid]); }
   // родитель записи; если папка-родитель удалена (запись вернули из корзины без неё) — корень
   function parentOf(it) {
     const p = fData(it).parent;
@@ -780,12 +780,12 @@
       if (name.length > 120) name = ext ? name.slice(0, 119 - ext.length) + "." + ext : name.slice(0, 120);
       const path = state.user.id + "/" + newId() + (ext ? "." + ext : "");
       const pend = { key: path, name, size: file.size };
-      s.up.push(pend); renderBoard();
+      s.up.push(pend); renderBoard([fid]);
       const up = await sb.storage.from("files").upload(path, file, { contentType: file.type || "application/octet-stream", upsert: false });
       s.up = s.up.filter((p) => p !== pend);
-      if (up.error) { console.error(up.error); renderBoard(); toast("«" + name.slice(0, 40) + "» не загрузился — проверьте интернет."); continue; }
+      if (up.error) { console.error(up.error); renderBoard([fid]); toast("«" + name.slice(0, 40) + "» не загрузился — проверьте интернет."); continue; }
       const row = await createItem({ type: "file", section_id: fid, title: name, data: { parent: dir, path, size: file.size, mime: (file.type || "").slice(0, 80) } });
-      if (!row) { sb.storage.from("files").remove([path]); renderBoard(); continue; }
+      if (!row) { sb.storage.from("files").remove([path]); renderBoard([fid]); continue; }
       used += file.size;
     }
   }
@@ -794,12 +794,12 @@
     let name = "Новая папка", n = 2;
     while (names.has(name)) name = "Новая папка " + n++;
     const row = await createItem({ type: "folder", section_id: fid, title: name, data: { parent: s.dir } });
-    if (row) { s.ren = { id: row.id, v: name }; s.q = ""; renderBoard(); }
+    if (row) { s.ren = { id: row.id, v: name }; s.q = ""; renderBoard([fid]); }
   }
   async function fsRename(it, v) {
     const s = fsOf(it.section_id); s.ren = null;
     v = (v || "").trim();
-    if (!v || v === it.title) { renderBoard(); return; }
+    if (!v || v === it.title) { renderBoard([it.section_id]); return; }
     await patchItem(it.id, { title: v.slice(0, it.type === "folder" ? LIM.title : 120) });
   }
   async function fsMove(it, dir) {
@@ -820,7 +820,7 @@
     const { error } = await sb.from("items").update(mark).in("id", ids);
     if (error) { toast("Не удалось удалить. Попробуйте ещё раз."); return; }
     state.items = state.items.filter((x) => !ids.includes(x.id));
-    itemsChanged();
+    itemsChanged([it.section_id]);
     toast("Папка удалена" + (ids.length > 1 ? " вместе с содержимым" : ""), "Вернуть", () => restoreBatch(mark.deleted_batch));
   }
 
@@ -852,7 +852,7 @@
     if (!fsPop.hidden && fsPopFor === it.id) { closeFsPop(); return; }
     closeMenus(null); closeFsPop(); fsPopFor = it.id; fsPopAt = Date.now(); fsPop.textContent = "";
     const s = fsOf(it.section_id);
-    fsPop.append(fsMenuItem("Переименовать", FS_ICO.rename, () => { s.ren = { id: it.id, v: it.title }; renderBoard(); }));
+    fsPop.append(fsMenuItem("Переименовать", FS_ICO.rename, () => { s.ren = { id: it.id, v: it.title }; renderBoard([it.section_id]); }));
     if (it.type === "file") {
       fsPop.append(fsMenuItem("Скачать", FS_ICO.download, () => fsDownload(it)));
       fsPop.append(fsMenuItem("Ссылка на сутки", FS_ICO.link, () => fsShare(it, 1)));
@@ -885,7 +885,7 @@
     closeMenus(null); closeFsPop(); fsPopFor = "sort:" + fid; fsPopAt = Date.now(); fsPop.textContent = "";
     const s = fsOf(fid);
     Object.entries(FS_SORT).forEach(([k, label]) => fsPop.append(fsMenuItem(label, k === "name" ? "M4 18l4-12 4 12M5.5 14h5M14 6h6l-6 12h6" : k === "date" ? "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7v5l3 2" : "M4 20h4V10H4zM10 20h4V4h-4zM16 20h4v-6h-4z",
-      () => { s.sort = k; store.set("cloudesk-fsort-" + fid, k); renderBoard(); }, { radio: true, checked: s.sort === k })));
+      () => { s.sort = k; store.set("cloudesk-fsort-" + fid, k); renderBoard([fid]); }, { radio: true, checked: s.sort === k })));
     placeFsPop(btn);
   }
   document.addEventListener("click", (e) => { if (!fsPop.hidden && !e.composedPath().includes(fsPop)) closeFsPop(); });
@@ -934,7 +934,7 @@
       inp.addEventListener("keydown", (e) => {
         e.stopPropagation();
         if (e.key === "Enter") { e.preventDefault(); inp.dataset.done = "1"; fsRename(it, inp.value); }
-        else if (e.key === "Escape") { e.preventDefault(); inp.dataset.done = "1"; s.ren = null; renderBoard(); }
+        else if (e.key === "Escape") { e.preventDefault(); inp.dataset.done = "1"; s.ren = null; renderBoard([fid]); }
       });
       // уход из поля сохраняет; перерисовка стола (поле ввода пересоздаётся) — нет
       inp.addEventListener("blur", () => { setTimeout(() => { if (inp.dataset.done || !inp.isConnected) return; inp.dataset.done = "1"; fsRename(it, inp.value); }, 0); });
@@ -960,7 +960,7 @@
     li.addEventListener("keydown", (e) => {
       if (e.target !== li) return;
       if (e.key === "Enter") { e.preventDefault(); go(); }
-      else if (e.key === "F2") { e.preventDefault(); s.ren = { id: it.id, v: it.title }; renderBoard(); }
+      else if (e.key === "F2") { e.preventDefault(); s.ren = { id: it.id, v: it.title }; renderBoard([fid]); }
       else if (e.key === "Delete") { e.preventDefault(); fsRemove(it); }
     });
     li.addEventListener("dragstart", (e) => { fsDrag = it; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", it.title); li.classList.add("dragging"); });
@@ -2190,7 +2190,7 @@
       h.innerHTML = svgIco("M9 6l6 6-6 6", 14, 2); h.append("Выполнено"); const c = document.createElement("span"); c.className = "tk-gc"; c.textContent = done.length; h.append(c);
       const ol = document.createElement("ol"); ol.className = "tk-list done-list"; ol.hidden = !open;
       if (open) done.forEach((t) => ol.append(taskRow(t, { drag: false, wide })));
-      h.addEventListener("click", () => { store.set("cloudesk-done-" + f.id, open ? "0" : "1"); renderBoard(); });
+      h.addEventListener("click", () => { store.set("cloudesk-done-" + f.id, open ? "0" : "1"); renderBoard([f.id]); });
       sec.append(h, ol); wrap.append(sec);
     }
     body.append(wrap);
@@ -2204,7 +2204,7 @@
       it.position = i;
       ops.push(sb.from("items").update({ position: i }).eq("id", it.id));
     });
-    renderBoard();
+    renderBoard([ol.closest(".fld").dataset.id]);
     const res = await Promise.all(ops);
     if (res.some((r) => r.error)) { toast("Порядок не сохранился — проверьте интернет."); loadItems(); }
   }
@@ -2212,7 +2212,7 @@
   async function moveTaskTo(id, ol) {
     const t = state.items.find((x) => x.id === id);
     const drop = ol.dataset.drop;
-    if (!t || drop === "over") { renderBoard(); if (drop === "over") toast("В «Просрочено» задачи попадают сами"); return; }
+    if (!t || drop === "over") { renderBoard([ol.closest(".fld").dataset.id]); if (drop === "over") toast("В «Просрочено» задачи попадают сами"); return; }
     const dt = tData(t), now = new Date();
     let day = null;
     if (drop === "today") day = now;
@@ -2255,7 +2255,7 @@
     if ($("desk").hidden || !state.items) return;
     const now = new Date();
     const sig = state.items.filter((t) => t.type === "task" && !t.done).map((t) => t.id + taskGroup(t, now)).join("|") + dayKey(now);
-    if (taskSig && sig !== taskSig) renderBoard();
+    if (taskSig && sig !== taskSig) renderBoard(state.sections.filter((x) => x.app === "tasks").map((x) => x.id));
     taskSig = sig;
   }, 30000);
 
@@ -2398,14 +2398,16 @@
   // свой порядок заметок: перетаскивание внутри поля
   async function saveNoteOrder(grid) {
     const ops = [];
+    const moved = new Set();
     const fid = grid.dataset.field; // заметку можно перетащить и в другое поле «Заметки»
     [...grid.querySelectorAll(":scope > .note")].forEach((el, i) => {
       const it = state.items.find((x) => x.id === el.dataset.id);
       if (!it || (it.position === i && it.section_id === fid)) return;
+      if (it.section_id !== fid) moved.add(it.section_id);
       it.position = i; it.section_id = fid;
       ops.push(sb.from("items").update({ position: i, section_id: fid }).eq("id", it.id));
     });
-    renderBoard();
+    renderBoard([fid, ...moved]);
     const res = await Promise.all(ops);
     if (res.some((r) => r.error)) { toast(res.some((r) => r.error && String(r.error.message).includes("notes_limit")) ? "В том поле уже 20 заметок." : "Порядок не сохранился — проверьте интернет."); loadItems(); }
   }
@@ -2430,9 +2432,15 @@
     return state.items.filter((i) => i.remind_at && !i.done && (i.type === "reminder" || i.type === "task"))
       .map((i) => ({ id: i.id, text: i.title, remind_at: i.remind_at, sent_at: i.sent_at, failed_at: i.failed_at, type: i.type }));
   }
-  function itemsChanged() {
+  // secs — поля, чьи записи поменялись; без него — весь стол. Поля «Файлы» одного стола делят 10 МБ — обновляются вместе
+  function itemsChanged(secs) {
     syncReminders();
-    renderBoard();
+    if (!secs) renderBoard();
+    else {
+      const ids = new Set(secs.filter(Boolean));
+      [...ids].forEach((id) => { const f = state.sections.find((x) => x.id === id); if (f && f.app === "files") state.sections.filter((x) => x.app === "files" && x.desk_id === f.desk_id).forEach((x) => ids.add(x.id)); });
+      if (ids.size) renderBoard([...ids]);
+    }
     if (typeof renderReminders === "function") renderReminders();
     if (!$("timesheet").hidden && timeTab === "cal") renderCal();
   }
@@ -2452,8 +2460,17 @@
   const nextPos = (secId) => state.items.filter((it) => it.section_id === secId).reduce((m, it) => Math.max(m, it.position), -1) + 1;
   const orderedFields = () => state.sections.filter((f) => f.desk_id === state.desk).sort((a, b) => a.position - b.position);
 
-  function renderBoard() {
+  /* Перерисовка: только те поля, в которых что-то поменялось (only — их id). Соседние поля не трогаются —
+     ничего в них не мигает и не начинается заново (игра, поиск, открытые списки). Весь стол — только при смене
+     стола, порядка или ширины полей и при загрузке. */
+  function renderBoard(only) {
     const board = $("board");
+    if (only) {
+      const ids = [...new Set(only)].filter((id) => state.sections.some((x) => x.id === id && x.desk_id === state.desk));
+      if (ids.some((id) => !board.querySelector(':scope > .fld[data-id="' + id + '"]'))) only = null;
+      else if (!ids.length) return;
+      else only = ids;
+    }
     const keep = {};
     board.querySelectorAll(".fld").forEach((f) => { const b = f.querySelector(".fld-body"); if (b) keep[f.dataset.id] = b.scrollTop; });
     // строка ввода задачи не теряет фокус и набранный текст, когда стол перерисовывается
@@ -2463,10 +2480,9 @@
     const keepTool = ae && ae.dataset && ae.dataset.keep ? { k: ae.dataset.keep, a: ae.selectionStart, b: ae.selectionEnd } : null;
     // перерисовка не должна заново «проявлять» то, что уже видно (значки при наведении и т. п.):
     // на один кадр плавные переходы выключаются — новые элементы сразу в своём конечном виде
-    noFlicker(board);
-    board.querySelectorAll(".fld, .fld-new").forEach((n) => n.remove());
     const frag = document.createDocumentFragment();
-    for (const f of orderedFields()) {
+    const built = [];
+    for (const f of only ? orderedFields().filter((x) => only.includes(x.id)) : orderedFields()) {
       const app = APPS[f.app];
       const el = document.createElement("section");
       el.className = "fld"; el.dataset.id = f.id; el.dataset.span = String(f.span);
@@ -2502,15 +2518,23 @@
       if (app) app.render(f, body);
       else { const e = document.createElement("div"); e.className = "fld-empty"; e.textContent = "Приложение недоступно"; body.append(e); }
       el.append(head, body);
-      frag.append(el);
-      if (keep[f.id]) requestAnimationFrame(() => { body.scrollTop = keep[f.id]; });
+      if (only) { const old = board.querySelector(':scope > .fld[data-id="' + f.id + '"]'); noFlicker(el); old.replaceWith(el); }
+      else frag.append(el);
+      built.push(el);
+      // прокрутка возвращается сразу, в том же кадре (иначе поле на миг прыгает к началу)
+      if (keep[f.id]) { body.scrollTop = keep[f.id]; requestAnimationFrame(() => { body.scrollTop = keep[f.id]; }); }
     }
+    if (!only) {
+    noFlicker(board);
+    board.querySelectorAll(".fld, .fld-new").forEach((n) => n.remove());
     const nb = document.createElement("button");
     nb.type = "button"; nb.className = "fld-new"; nb.dataset.tip = "Новое поле"; nb.setAttribute("aria-label", "Новое поле");
     nb.innerHTML = svgIco(IC.plus, 22, 2);
     nb.addEventListener("click", () => openField(null));
     frag.append(nb);
     board.append(frag);
+    built.forEach((el) => { const b = el.querySelector(".fld-body"); if (b && keep[el.dataset.id]) b.scrollTop = keep[el.dataset.id]; });
+    }
     if (keepIn) {
       const i = board.querySelector('.fld[data-id="' + keepIn.fid + '"] .tk-input');
       if (i) { i.value = keepIn.v; i.focus({ preventScroll: true }); try { i.setSelectionRange(keepIn.a, keepIn.b); } catch (e) {} if (keepIn.v) i.dispatchEvent(new Event("input")); }
@@ -2670,7 +2694,7 @@
     const r = await sb.from("items").insert(Object.assign({ position: row.section_id ? nextPos(row.section_id) : 0 }, row)).select(ITEM_COLS).single();
     if (r.error) { console.error(r.error); const m = String(r.error.message); toast(m.includes("title_len") ? LONG_TITLE + "." : m.includes("body_len") ? "Описание — не больше " + LIM.desc + " символов." : m.includes("items_limit") ? "Слишком много записей: удалите ненужные." : m.includes("tasks_limit") ? "В поле уже 100 задач — это предел." : m.includes("files_quota") ? "Не помещается: на столе уже почти 10 МБ файлов." : "Не сохранилось — проверьте интернет."); return null; }
     state.items.push(r.data);
-    itemsChanged();
+    itemsChanged([r.data.section_id]);
     return r.data;
   }
   async function patchItem(id, patch) {
@@ -2679,9 +2703,9 @@
     const prev = Object.assign({}, it);
     Object.assign(it, patch);
     const r = await sb.from("items").update(patch).eq("id", id).select(ITEM_COLS).single();
-    if (r.error) { console.error(r.error); Object.assign(it, prev); itemsChanged(); toast(String(r.error.message).includes("title_len") ? LONG_TITLE + "." : "Не сохранилось — проверьте интернет."); return false; }
+    if (r.error) { console.error(r.error); Object.assign(it, prev); itemsChanged([it.section_id, prev.section_id]); toast(String(r.error.message).includes("title_len") ? LONG_TITLE + "." : "Не сохранилось — проверьте интернет."); return false; }
     Object.assign(it, r.data);
-    itemsChanged();
+    itemsChanged([it.section_id, prev.section_id]);
     return true;
   }
   // Удаление = в корзину (30 дней). label — что показать в уведомлении с «Вернуть»; без него — тихо
@@ -2689,8 +2713,9 @@
     const mark = trashMark();
     const { error } = await sb.from("items").update(mark).eq("id", id);
     if (error) { toast("Не удалось удалить. Попробуйте ещё раз."); return false; }
+    const was = state.items.find((x) => x.id === id);
     state.items = state.items.filter((x) => x.id !== id);
-    itemsChanged();
+    itemsChanged([was && was.section_id]);
     if (label) toast(label, "Вернуть", () => restoreBatch(mark.deleted_batch));
     return true;
   }
@@ -3372,7 +3397,7 @@
       ed.id = saved.id;
       $("ed-delete").hidden = false;
       $("ed-status").textContent = "Сохранено";
-      itemsChanged();
+      itemsChanged([saved.section_id]);
     })();
     await ed.saving;
     ed.saving = null;
@@ -3451,7 +3476,7 @@
         if (it && ((it.title || "") !== ed.snap.title || it.body !== ed.snap.body || it.color !== ed.snap.color || !!it.pinned !== ed.snap.pinned || JSON.stringify(it.data || {}) !== JSON.stringify(ed.snap.data))) {
           const r = await sb.from("items").update(ed.snap).eq("id", ed.id).select(ITEM_COLS).single();
           if (r.error) { $("ed-status").textContent = "Не получилось отменить — проверьте интернет"; return; }
-          Object.assign(it, r.data); itemsChanged();
+          Object.assign(it, r.data); itemsChanged([it.section_id]);
         }
       }
       if (ed.filesNew.length) sb.storage.from("attachments").remove(ed.filesNew);
@@ -3751,7 +3776,7 @@
         const { error } = await sb.from("items").update(mark).in("id", ids);
         if (error) { setTab("rem"); $("time-status").textContent = "Не удалось удалить — проверьте интернет"; return; }
         state.items = state.items.filter((x) => !remDel.has(x.id));
-        remDel.clear(); itemsChanged();
+        remDel.clear(); itemsChanged([]);
         toast(ids.length === 1 ? "Напоминание удалено" : "Удалено напоминаний: " + ids.length, "Вернуть", () => restoreBatch(mark.deleted_batch));
       }
       $("time-status").textContent = "";
@@ -4033,7 +4058,7 @@
       const r = await sb.from("items").insert({ type: "reminder", title: text, remind_at: dt.toISOString(), section_id: null, position: 0 }).select(ITEM_COLS).single();
       if (r.error) throw r.error;
       state.items.push(r.data);
-      itemsChanged();
+      itemsChanged([]);
     });
     if (!ok) { setTab("rem"); $("time-status").textContent = "Не сохранилось — проверьте интернет"; return false; }
     resetRemForm(); renderReminders();
