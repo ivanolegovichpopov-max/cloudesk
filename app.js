@@ -672,7 +672,7 @@
     if ((r = p.match(/^\/users\/([^/]+)\/playlists\/(\d+)$/))) return { path: "playlist/" + r[1] + "/" + r[2] };
     if ((r = p.match(/^\/album\/(\d+)\/track\/(\d+)$/))) return { path: "track/" + r[2] + "/" + r[1] };
     if ((r = p.match(/^\/album\/(\d+)$/))) return { path: "album/" + r[1] };
-    if (/^\/playlists\/lk\./.test(p)) return { err: "Такую ссылку встроить нельзя — нужен HTML-код: ⋯ → Поделиться → HTML-код" };
+    if ((r = p.match(/^\/(?:iframe\/)?playlists\/(lk\.[0-9a-f-]{36})$/i))) return { path: "playlists/" + r[1] };
     return { err: "Нужен плейлист, альбом или трек" };
   }
   async function saveMusic(f, path) {
@@ -697,10 +697,10 @@
     const sf = document.createElement("label"); sf.className = "ct-search";
     sf.innerHTML = svgIco(IC.music, 16, 2);
     const q = document.createElement("input"); q.type = "text"; q.autocomplete = "off"; q.maxLength = 2000; q.dataset.keep = f.id + ":mu";
-    q.placeholder = "HTML-код плейлиста"; q.setAttribute("aria-label", "HTML-код или ссылка на плейлист, альбом или трек Яндекс Музыки");
+    q.placeholder = "Ссылка на плейлист"; q.setAttribute("aria-label", "HTML-код или ссылка на плейлист, альбом или трек Яндекс Музыки");
     sf.append(q);
     const hint = document.createElement("div"); hint.className = "mu-hint";
-    hint.textContent = "Яндекс Музыка → ⋯ у плейлиста → Поделиться → HTML-код. Вставьте сюда и нажмите Enter";
+    hint.textContent = "Яндекс Музыка → ⋯ у плейлиста → Поделиться → Скопировать ссылку. Вставьте сюда";
     wrap.append(sf, hint);
     const go = () => { const r = musicSrc(q.value); if (r.err) { hint.textContent = r.err; hint.classList.add("bad"); return; } saveMusic(f, r.path); };
     wrap.addEventListener("submit", (e) => { e.preventDefault(); go(); });
