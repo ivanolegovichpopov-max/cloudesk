@@ -259,6 +259,9 @@
     y = Math.max(m, y);
     tipEl.style.left = x + "px"; tipEl.style.top = y + "px";
   }
+  // после нажатия элемент под курсором часто перерисовывается (галочка, «Удалить»): его подсказка не всплывает сама —
+  // только когда курсор снова сдвинется на другой элемент
+  let tipDown = null;
   document.addEventListener("pointerover", (e) => {
     if (e.pointerType !== "mouse") return;
     const el = e.target.closest && e.target.closest('[data-tip]:not([data-tip=""])'); // пустая подсказка не показывается
@@ -266,8 +269,11 @@
     hideTip();
     if (!el || el.disabled) return;
     tipFor = el;
+    if (tipDown && e.clientX === tipDown.x && e.clientY === tipDown.y) return; // курсор не двигался с нажатия
+
     tipT = setTimeout(() => showTip(el), 300);
   });
+  document.addEventListener("pointerdown", (e) => { tipDown = { x: e.clientX, y: e.clientY }; }, true);
   ["pointerdown", "keydown", "wheel"].forEach((t) => document.addEventListener(t, hideTip, true));
   document.addEventListener("scroll", hideTip, true);
   window.addEventListener("blur", hideTip);
@@ -721,20 +727,6 @@
     if (ok && next === 0 && cur) toast("Отметка за сегодня снята", "Вернуть", () => { const l2 = Object.assign({}, hbData(h).log || {}, { [key]: cur }); const d2 = Object.assign({}, hbData(h), { log: l2 }); patchItem(h.id, { data: d2, remind_at: hbNextRemind(d2), sent_at: null, failed_at: null }); });
   }
   const HB_ICO = { bell: "M6 10a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6zM10 20a2 2 0 0 0 4 0", check: "M5 12.5l4.5 4.5L19 7.5" };
-  // кружок отметки: одна отметка — галочка, несколько — кольцо «2/3»
-  function hbMark(h) {
-    const d = hbData(h), t = hbTarget(d), c = Math.min(t, hbCount(d, dayKey(new Date()))), full = c >= t;
-    const b = document.createElement("button"); b.type = "button"; b.className = "hb-mark" + (full ? " full" : "");
-    const tip = full ? "Сделано — нажмите, чтобы снять" : t > 1 ? "Отметить: " + (c + 1) + " из " + t : "Отметить";
-    b.dataset.tip = tip; b.setAttribute("aria-label", tip + ": «" + h.title + "»");
-    if (t > 1 && !full) {
-      const r = 15, L = 2 * Math.PI * r, p = c / t;
-      b.innerHTML = '<svg viewBox="0 0 36 36" width="32" height="32" aria-hidden="true"><circle cx="18" cy="18" r="' + r + '" fill="none" stroke="currentColor" stroke-opacity=".3" stroke-width="2.5"/><circle cx="18" cy="18" r="' + r + '" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="' + (L * p) + " " + L + '" transform="rotate(-90 18 18)"/></svg>';
-      const n = document.createElement("span"); n.className = "hb-n"; n.textContent = c + "/" + t; b.append(n);
-    } else b.innerHTML = svgIco(HB_ICO.check, 16, 2.4);
-    b.addEventListener("click", (e) => { e.stopPropagation(); if (!full) b.classList.add("pop"); hbTick(h); });
-    return b;
-  }
   // неделя квадратиками (в 2 колонки): последние 7 дней, сегодня — справа
   function hbWeek(h, n = 7) {
     const d = hbData(h), t = hbTarget(d), wrap = document.createElement("div"); wrap.className = "hb-week";
@@ -756,26 +748,37 @@
     const now = new Date(), key = dayKey(now), wide = f.span >= 2;
     const today = all.filter((h) => hbOn(hbData(h), now)), rest = all.filter((h) => !hbOn(hbData(h), now));
     const wrap = document.createElement("div"); wrap.className = "habits" + (wide ? " wide" : "");
+    // строка — как у задачи: ⋮⋮, кружок, название; ниже — серия, «3/8», дни, колокольчик, начало заметки; при наведении «Удалить»
     const row = (h) => {
-      const d = hbData(h), t = hbTarget(d), c = hbCount(d, key), on = hbOn(d, now);
-      const li = document.createElement("li"); li.className = "hb" + (on && c >= t ? " is-done" : "") + (on ? "" : " not-today"); li.tabIndex = 0; li.dataset.id = h.id;
+      const d = hbData(h), t = hbTarget(d), c = Math.min(t, hbCount(d, key)), on = hbOn(d, now), full = on && c >= t;
+      const li = document.createElement("li"); li.className = "tk hb" + (full ? " is-done" : "") + (on ? "" : " not-today"); li.tabIndex = 0; li.dataset.id = h.id;
       li.setAttribute("aria-label", "Привычка «" + h.title + "»");
       if (!hbSeen.has(h.id)) { hbSeen.add(h.id); if (!boardFirst) li.classList.add("fade-in"); }
-      const main = document.createElement("div"); main.className = "hb-main";
-      const nm = document.createElement("div"); nm.className = "hb-name"; nm.textContent = h.title;
-      const sub = document.createElement("div"); sub.className = "hb-sub";
-      const st = hbStreak(h), parts = [];
-      if (!on) parts.push("не сегодня");
-      if (st) parts.push(st + " " + plural(st, "день", "дня", "дней") + " подряд");
-      else if (on) parts.push(c >= t ? "сделано" : "сегодня");
-      const dt = hbDaysText(d); if (dt) parts.push(dt);
-      sub.textContent = parts.join(" · ");
-      if (d.remind) { const bl = document.createElement("span"); bl.className = "hb-bell"; bl.innerHTML = svgIco(HB_ICO.bell, 12, 2); bl.append(d.remind); sub.append(bl); }
-      main.append(nm, sub);
-      if (on) li.append(hbMark(h)); else { const sp = document.createElement("span"); sp.className = "hb-mark off"; sp.setAttribute("aria-hidden", "true"); li.append(sp); }
-      li.append(main);
+      const g = gripBtn("Привычка «" + h.title + "»"); g.classList.add("hb-grip"); li.append(g);
+      const cb = document.createElement("button"); cb.type = "button"; cb.className = "tk-check"; cb.setAttribute("role", "checkbox"); cb.setAttribute("aria-checked", String(full));
+      const tip = !on ? "Сегодня не по плану" : full ? "Снять отметку" : t > 1 ? "Отметить: " + (c + 1) + " из " + t : "Отметить";
+      cb.dataset.tip = tip; cb.setAttribute("aria-label", tip); cb.disabled = !on;
+      if (t > 1 && on && !full && c) cb.style.setProperty("--p", Math.round((c / t) * 360) + "deg"), cb.classList.add("part");
+      cb.innerHTML = '<svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+      cb.addEventListener("click", (e) => { e.stopPropagation(); hbTick(h); });
+      const main = document.createElement("div"); main.className = "tk-main";
+      const nm = document.createElement("div"); nm.className = "tk-title"; nm.textContent = h.title; main.append(nm);
+      const meta = document.createElement("div"); meta.className = "tk-meta";
+      const st = hbStreak(h);
+      if (st) { const sEl = document.createElement("span"); sEl.className = "tk-streak"; sEl.dataset.tip = st + " " + plural(st, "день", "дня", "дней") + " подряд"; sEl.innerHTML = svgIco("M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2.2 1-3.6 2-4.6.3 1.6 1 2.6 2 3.1C11 9 11 6 12 3z", 12, 2); sEl.append(String(st)); meta.append(sEl); }
+      if (t > 1) { const sEl = document.createElement("span"); sEl.className = "tk-subs wide" + (full ? " full" : ""); sEl.dataset.tip = "Сегодня " + c + " из " + t; const bar = document.createElement("i"); bar.className = "tk-bar"; bar.style.setProperty("--p", Math.round((c / t) * 100) + "%"); sEl.append(bar, c + "/" + t); meta.append(sEl); }
+      const dt = hbDaysText(d); if (dt) { const sEl = document.createElement("span"); sEl.className = "tk-due"; sEl.textContent = dt; meta.append(sEl); }
+      if (d.remind) { const sEl = document.createElement("span"); sEl.className = "tk-due hb-bell"; sEl.dataset.tip = "Напоминание в Telegram, если не отмечено"; sEl.innerHTML = svgIco(HB_ICO.bell, 12, 2); sEl.append(d.remind); meta.append(sEl); }
+      const desc = (h.body || "").trim(); if (desc) { const sEl = document.createElement("span"); sEl.className = "tk-desc"; sEl.textContent = desc.split("\n")[0]; meta.append(sEl); }
+      if (!meta.children.length) { const sEl = document.createElement("span"); sEl.className = "tk-due none"; sEl.textContent = "каждый день"; meta.append(sEl); }
+      main.append(meta);
+      li.append(cb, main);
       if (wide) li.append(hbWeek(h));
-      li.addEventListener("click", () => openHabit(h.id));
+      const acts = document.createElement("div"); acts.className = "tk-acts";
+      const del = document.createElement("button"); del.type = "button"; del.className = "tool"; del.dataset.tip = "Удалить"; del.setAttribute("aria-label", "Удалить"); del.innerHTML = svgIco("M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3", 15);
+      del.addEventListener("click", (e) => { e.stopPropagation(); removeItem(h.id, "Привычка удалена"); });
+      acts.append(del); li.append(acts);
+      li.addEventListener("click", (e) => { if (e.target.closest(".tk-acts, .tk-check, .grip")) return; openHabit(h.id); });
       li.addEventListener("keydown", (e) => { if (e.target !== li) return; if (e.key === "Enter") { e.preventDefault(); openHabit(h.id); } else if (e.key === " " && on) { e.preventDefault(); hbTick(h); } });
       return li;
     };
@@ -790,6 +793,29 @@
     body.append(wrap);
   }
 
+  // порядок привычек — перетаскиванием за ⋮⋮ (внутри своей группы)
+  async function saveHabitOrder(ol) {
+    const ops = [];
+    [...ol.querySelectorAll(":scope > .hb")].forEach((el, i) => {
+      const it = state.items.find((x) => x.id === el.dataset.id);
+      if (!it || it.position === i) return;
+      it.position = i; ops.push(sb.from("items").update({ position: i }).eq("id", it.id));
+    });
+    renderBoard([ol.closest(".fld").dataset.id]);
+    const res = await Promise.all(ops);
+    if (res.some((r) => r.error)) { toast("Порядок не сохранился — проверьте интернет."); loadItems(); }
+  }
+  sortable($("board"), {
+    item: ".hb", handle: ".hb-grip", list: ".hb-ol",
+    onDrop: (el) => saveHabitOrder(el.closest(".hb-ol")),
+    onKey: (el, dir) => {
+      const sib = dir < 0 ? el.previousElementSibling : el.nextElementSibling;
+      if (!sib || !sib.matches(".hb")) return;
+      if (dir < 0) sib.before(el); else sib.after(el);
+      const id = el.dataset.id; saveHabitOrder(el.closest(".hb-ol"));
+      const g = $("board").querySelector('.hb[data-id="' + id + '"] .hb-grip'); if (g) g.focus();
+    },
+  });
   /* Окно привычки — как окно задачи: крупное название с линией, под ним «чипы» (дни, сколько раз, напоминание),
      ниже серия и 4 недели квадратиками; внизу значками — «Отметить сегодня» и «Удалить». */
   const hb_ = { id: null, sec: null, days: null, target: 1, remind: null, today: false };

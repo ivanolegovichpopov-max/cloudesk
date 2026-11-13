@@ -1396,29 +1396,19 @@ input.fs-ren { width: 100%; min-width: 0; height: 22px !important; padding: 0 6p
 /* ---------- Приложение «Привычки» (1 или 2 колонки): строки как у задач, кружок отметки, серия, неделя квадратиками ---------- */
 .habits { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .hb-ol { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; }
-.hb {
-  display: flex; align-items: center; gap: 10px; min-width: 0; height: var(--tk-row, 54px); padding: 0 8px 0 6px;
-  border-radius: var(--r); cursor: pointer; outline: none; color: var(--ink); transition: background-color .12s ease;
-}
-.hb:hover, .hb:focus-visible { background: var(--hover); }
-.hb.not-today { opacity: .55; }
-.hb-mark {
-  position: relative; flex: none; width: 32px; height: 32px; display: grid; place-items: center; padding: 0; border-radius: 50%;
-  border: 2px solid color-mix(in srgb, var(--ink) 35%, transparent); background: transparent; color: transparent;
-  transition: background-color .15s ease, border-color .15s ease, color .15s ease, transform .15s ease;
-}
-.hb-mark:has(svg circle) { border: 0; color: var(--ink-dim); }
-.hb-mark:hover { border-color: var(--accent); color: color-mix(in srgb, var(--accent) 60%, transparent); }
-.hb-mark.full { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); }
-.hb-mark.pop { transform: scale(.88); }
-.hb-mark.off { border-style: dashed; cursor: default; }
-.hb-mark svg { position: absolute; inset: 0; margin: auto; }
-.hb-n { position: relative; font-size: 10px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
-.hb-main { flex: 1; min-width: 0; display: grid; gap: 2px; }
-.hb-name { font-size: 14px; line-height: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.hb.is-done .hb-name { color: var(--ink-dim); }
-.hb-sub { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 12px; line-height: 16px; color: var(--ink-dim); white-space: nowrap; overflow: hidden; }
-.hb-bell { display: inline-flex; align-items: center; gap: 3px; font-variant-numeric: tabular-nums; }
+/* строка привычки — это строка задачи (.tk): та же высота, ⋮⋮, кружок, две строки, «Удалить» при наведении */
+.tk.hb { padding-right: 40px; min-height: var(--tk-row, 54px); }
+.tk .hb-grip { flex: none; display: grid; place-items: center; width: 16px; height: 20px; margin: 0; padding: 0; border: 0; background: transparent; opacity: 0; color: var(--ink-dim); cursor: grab; transition: opacity .12s ease; }
+.tk .hb-grip svg { width: 14px; height: 14px; }
+.tk:hover .hb-grip, .hb-grip:focus-visible { opacity: 1; }
+.tk .hb-grip:hover { color: var(--ink); background: transparent; }
+@media (hover: none) { .tk .hb-grip { opacity: .6; } }
+.tk.hb.is-done { padding-left: 6px; }
+.tk.hb.not-today { opacity: .55; }
+.tk.hb .tk-check:disabled { border-style: dashed; cursor: default; }
+/* привычка «N раз»: кружок заполняется по долям */
+.tk.hb .tk-check.part { border-color: var(--accent); background: conic-gradient(color-mix(in srgb, var(--accent) 55%, transparent) var(--p), transparent 0); }
+.hb-bell { display: inline-flex; align-items: center; gap: 3px; }
 .hb-week { flex: none; display: flex; gap: 4px; }
 .hb-day { position: relative; width: 24px; height: 22px; border-radius: 5px; background: rgba(127,127,127,.18); display: grid; place-items: center; }
 .hb-day i { font-style: normal; font-size: 9px; letter-spacing: -.02em; font-weight: 600; color: var(--ink-dim); }
