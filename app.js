@@ -758,10 +758,11 @@
     document.body.append(a); a.click(); a.remove();
   }
   // ссылка для других: открывается без входа, пока не истечёт срок
-  async function fsShare(it, days) {
-    const { data, error } = await sb.storage.from("files").createSignedUrl(fData(it).path, days * 86400, { download: it.title });
+  // ссылка всегда живёт сутки
+  async function fsShare(it) {
+    const { data, error } = await sb.storage.from("files").createSignedUrl(fData(it).path, 86400, { download: it.title });
     if (error || !data) { toast("Не удалось сделать ссылку — проверьте интернет."); return; }
-    try { await navigator.clipboard.writeText(data.signedUrl); toast("Ссылка скопирована — действует " + (days === 1 ? "сутки" : days === 7 ? "неделю" : days + " " + plural(days, "день", "дня", "дней"))); }
+    try { await navigator.clipboard.writeText(data.signedUrl); toast("Ссылка скопирована — действует сутки"); }
     catch (e) { toast("Не удалось скопировать ссылку"); }
   }
 
@@ -855,8 +856,7 @@
     fsPop.append(fsMenuItem("Переименовать", FS_ICO.rename, () => { s.ren = { id: it.id, v: it.title }; renderBoard([it.section_id]); }));
     if (it.type === "file") {
       fsPop.append(fsMenuItem("Скачать", FS_ICO.download, () => fsDownload(it)));
-      fsPop.append(fsMenuItem("Ссылка на сутки", FS_ICO.link, () => fsShare(it, 1)));
-      fsPop.append(fsMenuItem("Ссылка на неделю", FS_ICO.link, () => fsShare(it, 7)));
+      fsPop.append(fsMenuItem("Ссылка для других", FS_ICO.link, () => fsShare(it)));
     }
     if (fsOfField(it.section_id).some((x) => x.type === "folder" && x.id !== it.id) || parentOf(it))
       fsPop.append(fsMenuItem("Переместить…", FS_ICO.move, () => openFsMove(btn, it), { keep: true }));
