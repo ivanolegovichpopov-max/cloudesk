@@ -1457,7 +1457,9 @@ input.fs-ren { width: 100%; min-width: 0; height: 22px !important; padding: 0 6p
 .mn-kinds { flex: none; }
 .mn-kinds.tabs, .mn-tabs .tabs { height: 36px; box-sizing: border-box; align-items: stretch; }
 .mn-kinds.tabs button, .mn-tabs .tabs button { flex: 1; height: auto; }
-.mn-form-q { flex: none; display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 6px; }
+.mn-form-q { flex: none; display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) 36px; gap: 6px; }
+.mn-save { width: 36px; height: 36px; padding: 0; display: grid; place-items: center; }
+.mn-save.off { opacity: .4; }
 .mn-form-q input { width: 100%; min-width: 0; height: 36px !important; }
 .mn-amt { position: relative; display: flex; align-items: center; min-width: 0; }
 .mn-amt input { padding-right: 28px !important; font-weight: 600; font-variant-numeric: tabular-nums; }

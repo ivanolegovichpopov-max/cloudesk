@@ -1180,8 +1180,11 @@
       b.addEventListener("click", () => { s.kind = k; kinds.querySelectorAll("[role=tab]").forEach((x) => x.setAttribute("aria-selected", String(x === b))); amt.focus({ preventScroll: true }); });
       kinds.append(b);
     });
-    amt.addEventListener("input", () => { amt.value = mnFmtAmount(amt.value); amt.classList.remove("bad"); });
-    const sub = document.createElement("button"); sub.type = "submit"; sub.hidden = true; sub.tabIndex = -1;
+    // «Записать» — квадратная акцентная галочка, как «Готово» в окнах; пока суммы нет — бледная
+    const sub = document.createElement("button"); sub.type = "submit"; sub.className = "tool done mn-save"; sub.innerHTML = svgIco(MN_ICO.check, 18, 2.2);
+    const paintSave = () => { const ok = parseNum(amt.value.replace(/\s/g, "")) > 0; sub.classList.toggle("off", !ok); sub.dataset.tip = ok ? "Записать (Enter)" : "Сначала укажите сумму"; sub.setAttribute("aria-label", sub.dataset.tip); };
+    amt.addEventListener("input", () => { amt.value = mnFmtAmount(amt.value); amt.classList.remove("bad"); paintSave(); });
+    paintSave();
     form.append(amtBox, what, sub);
     form.addEventListener("submit", (e) => { e.preventDefault(); mnQuick(f, amt, what); });
 
