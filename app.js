@@ -1223,12 +1223,9 @@
     nav.append(prevB, mt, nextB);
     const monthAll = mnMonth(f.id, s.y, s.m), tot = mnTotals(monthAll.filter((it) => !s.proj || mnData(it).project === s.proj));
     const big = document.createElement("div"); big.className = "mn-big";
-    // итог без подписей: крупно — сколько осталось, под ним доходы (акцентом, «+») и расходы («−»); пояснения — в подсказках
-    const net = document.createElement("div"); net.className = "mn-net" + (tot.net < 0 ? " neg" : ""); net.textContent = rub(tot.net, true); net.dataset.tip = "Итог месяца: доходы минус расходы";
-    const pair = document.createElement("div"); pair.className = "mn-pair";
-    const inc = document.createElement("span"); inc.className = "in"; inc.textContent = "+" + rub(tot.inc); inc.dataset.tip = "Доходы";
-    const out = document.createElement("span"); out.textContent = "−" + rub(tot.out); out.dataset.tip = "Расходы";
-    pair.append(inc, out); big.append(net, pair);
+    // итог — три строки в одной рамке: подпись слева, сумма справа
+    const cell = (label, val, cls) => { const c = document.createElement("div"); c.className = "mn-cell " + (cls || ""); const l = document.createElement("div"); l.className = "mn-cell-l"; l.textContent = label; const v = document.createElement("div"); v.className = "mn-cell-v"; v.textContent = val; c.append(l, v); return c; };
+    big.append(cell("Доходы", rub(tot.inc), "in"), cell("Расходы", rub(tot.out)), cell("Итог", rub(tot.net, true), tot.net < 0 ? "neg" : "net"));
     const plist = document.createElement("div"); plist.className = "mn-list";
     const byP = new Map();
     monthAll.forEach((it) => { const d = mnData(it), k = d.project || ""; const v = byP.get(k) || { inc: 0, out: 0 }; if (d.kind === "in") v.inc += Number(d.amount) || 0; else v.out += Number(d.amount) || 0; byP.set(k, v); });

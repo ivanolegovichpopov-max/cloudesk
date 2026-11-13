@@ -1485,11 +1485,14 @@ input.fs-ren { width: 100%; min-width: 0; height: 22px !important; padding: 0 6p
 .mn-month { flex: 1; height: 36px; border: 0; background: transparent; font-size: 15px; font-weight: 600; color: var(--ink); border-radius: var(--r); }
 .mn-month:not(:disabled):hover { background: var(--hover); }
 .mn-month:disabled { cursor: default; opacity: 1; }
-.mn-big { display: grid; justify-items: center; gap: 2px; padding: 10px 8px 12px; border: 1px solid var(--line); border-radius: var(--r); }
-.mn-net { font-size: 24px; line-height: 30px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--accent); white-space: nowrap; }
-.mn-net.neg { color: var(--danger); }
-.mn-pair { display: flex; gap: 14px; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--ink-dim); white-space: nowrap; }
-.mn-pair .in { color: var(--accent); }
+.mn-big { display: grid; border: 1px solid var(--line); border-radius: var(--r); }
+/* итог — три строки в одной рамке: подпись слева, сумма справа (ничего не обрезается) */
+.mn-cell { min-width: 0; display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 7px 10px; }
+.mn-cell + .mn-cell { border-top: 1px solid var(--line); }
+.mn-cell-l { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-dim); }
+.mn-cell-v { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mn-cell.in .mn-cell-v, .mn-cell.net .mn-cell-v { color: var(--accent); }
+.mn-cell.neg .mn-cell-v { color: var(--danger); }
 .mn-h { padding: 8px 6px 0; }
 /* платежи и долги */
 .mn-tabs { display: flex; align-items: center; gap: 6px; }
