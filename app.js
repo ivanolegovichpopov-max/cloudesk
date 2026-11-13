@@ -1131,8 +1131,6 @@
       const pays = mnOf(f.id, "payment").sort((a, b) => (mnData(a).next || "9").localeCompare(mnData(b).next || "9"));
       if (!pays.length) { const e = document.createElement("div"); e.className = "tk-empty mn-tip"; e.textContent = "Аренда, связь, подписки, зарплата — с датой и напоминанием в Telegram"; side.append(e); }
       else {
-        const sumOut = pays.filter((p) => mnData(p).kind !== "in").reduce((a, p) => a + (Number(mnData(p).amount) || 0), 0);
-        const h = document.createElement("div"); h.className = "tk-gh mn-day"; const l = document.createElement("span"); l.textContent = "Ближайшие"; const r = document.createElement("span"); r.className = "mn-day-sum"; r.textContent = sumOut ? "−" + rub(sumOut) : ""; r.dataset.tip = "Все регулярные расходы за один раз"; h.append(l, r);
         const ol3 = document.createElement("ol"); ol3.className = "mn-ol";
         const EV = { month: "каждый месяц", week: "каждую неделю", year: "каждый год" };
         pays.forEach((p) => {
@@ -1142,7 +1140,7 @@
             check: false, checkTip: d.kind === "in" ? "Получено — записать доход" : "Оплачено — записать расход", onCheck: () => mnPay(p),
             onOpen: () => openMoney("payment", p.id), onDel: () => removeItem(p.id, "Платёж удалён") }));
         });
-        side.append(h, ol3);
+        side.append(ol3);
       }
     } else {
       const debts = mnOf(f.id, "debt").filter((x) => !x.done);
@@ -1225,9 +1223,12 @@
     nav.append(prevB, mt, nextB);
     const monthAll = mnMonth(f.id, s.y, s.m), tot = mnTotals(monthAll.filter((it) => !s.proj || mnData(it).project === s.proj));
     const big = document.createElement("div"); big.className = "mn-big";
-    const cell = (label, val, cls) => { const c = document.createElement("div"); c.className = "mn-cell " + (cls || ""); const l = document.createElement("div"); l.className = "mn-cell-l"; l.textContent = label; const v = document.createElement("div"); v.className = "mn-cell-v"; v.textContent = val; c.append(l, v); return c; };
-    big.append(cell("Доходы", rub(tot.inc), "in"), cell("Расходы", rub(tot.out)), cell("Итог", rub(tot.net, true), tot.net < 0 ? "neg" : "net"));
-    const ph = document.createElement("div"); ph.className = "tk-gh mn-h"; ph.textContent = "Проекты";
+    // итог без подписей: крупно — сколько осталось, под ним доходы (акцентом, «+») и расходы («−»); пояснения — в подсказках
+    const net = document.createElement("div"); net.className = "mn-net" + (tot.net < 0 ? " neg" : ""); net.textContent = rub(tot.net, true); net.dataset.tip = "Итог месяца: доходы минус расходы";
+    const pair = document.createElement("div"); pair.className = "mn-pair";
+    const inc = document.createElement("span"); inc.className = "in"; inc.textContent = "+" + rub(tot.inc); inc.dataset.tip = "Доходы";
+    const out = document.createElement("span"); out.textContent = "−" + rub(tot.out); out.dataset.tip = "Расходы";
+    pair.append(inc, out); big.append(net, pair);
     const plist = document.createElement("div"); plist.className = "mn-list";
     const byP = new Map();
     monthAll.forEach((it) => { const d = mnData(it), k = d.project || ""; const v = byP.get(k) || { inc: 0, out: 0 }; if (d.kind === "in") v.inc += Number(d.amount) || 0; else v.out += Number(d.amount) || 0; byP.set(k, v); });
@@ -1245,7 +1246,7 @@
       });
       plist.append(ol2);
     }
-    c2.append(nav, big, ph, plist);
+    c2.append(nav, big, plist);
 
     // 3. Платежи и долги — вкладками, как в «Инструментах»: подсветка переезжает плавно, содержимое проявляется
     const c3 = col("mn-side");

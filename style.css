@@ -1453,10 +1453,10 @@ input.fs-ren { width: 100%; min-width: 0; height: 22px !important; padding: 0 6p
 
 /* ---------- Приложение «Деньги» (3 колонки): операции · итог месяца и проекты · платежи и долги ---------- */
 .fld-body.mn-body { overflow: hidden; }
-.mn { height: 100%; display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr) minmax(0, 1fr); gap: 0; min-width: 0; }
+.mn { height: 100%; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px; min-width: 0; }
 /* три колонки разделены тонкими линиями — итог · операции · платежи и долги */
-.mn-col + .mn-col { border-left: 1px solid var(--line); padding-left: 16px; }
-.mn-col:not(:last-child) { padding-right: 16px; }
+.mn-col { position: relative; }
+.mn-col + .mn-col::before { content: ""; position: absolute; left: -16px; top: 0; bottom: 12px; width: 1px; background: var(--line); }
 .mn-col { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
 .mn-list { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
 .mn-input.nope { animation: tk-nope .5s ease; }
@@ -1485,14 +1485,11 @@ input.fs-ren { width: 100%; min-width: 0; height: 22px !important; padding: 0 6p
 .mn-month { flex: 1; height: 36px; border: 0; background: transparent; font-size: 15px; font-weight: 600; color: var(--ink); border-radius: var(--r); }
 .mn-month:not(:disabled):hover { background: var(--hover); }
 .mn-month:disabled { cursor: default; opacity: 1; }
-.mn-big { display: grid; border: 1px solid var(--line); border-radius: var(--r); }
-/* итог — три строки в одной рамке: подпись слева, сумма справа (ничего не обрезается) */
-.mn-cell { min-width: 0; display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 7px 10px; }
-.mn-cell + .mn-cell { border-top: 1px solid var(--line); }
-.mn-cell-l { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-dim); }
-.mn-cell-v { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.mn-cell.in .mn-cell-v, .mn-cell.net .mn-cell-v { color: var(--accent); }
-.mn-cell.neg .mn-cell-v { color: var(--danger); }
+.mn-big { display: grid; justify-items: center; gap: 2px; padding: 10px 8px 12px; border: 1px solid var(--line); border-radius: var(--r); }
+.mn-net { font-size: 24px; line-height: 30px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--accent); white-space: nowrap; }
+.mn-net.neg { color: var(--danger); }
+.mn-pair { display: flex; gap: 14px; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--ink-dim); white-space: nowrap; }
+.mn-pair .in { color: var(--accent); }
 .mn-h { padding: 8px 6px 0; }
 /* платежи и долги */
 .mn-tabs { display: flex; align-items: center; gap: 6px; }
@@ -1517,8 +1514,8 @@ input.fs-ren { width: 100%; min-width: 0; height: 22px !important; padding: 0 6p
 .mn-proj-new { margin-top: 4px; }
 .mn-proj-new input { height: 34px !important; }
 @media (max-width: 760px) {
-  .mn-col + .mn-col { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); padding-top: 10px; }
-  .mn-col:not(:last-child) { padding-right: 0; padding-bottom: 10px; }
+  .fld[data-span] .mn { gap: 20px; }
+  .mn-col + .mn-col::before { left: 0; right: 0; top: -10px; bottom: auto; width: auto; height: 1px; }
   .fld:has(.mn-body) { grid-row: span 3; }
   .fld[data-span] .mn { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1.3fr) auto minmax(0, 1fr); }
 }
