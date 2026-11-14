@@ -1431,6 +1431,8 @@ input.fs-ren { width: 100%; min-width: 0; height: 22px !important; padding: 0 6p
 .hb-bell { display: inline-flex; align-items: center; gap: 3px; }
 .hb-streak { flex: none; width: 34px; justify-content: flex-end; font-size: 13px; font-variant-numeric: tabular-nums; }
 .hb-week { flex: none; display: flex; gap: 4px; }
+/* на телефоне неделе квадратиками не хватает места — название важнее; неделя есть в окне привычки */
+@media (max-width: 760px) { .hb-week { display: none; } }
 .hb-day { position: relative; width: 24px; height: 22px; border-radius: 5px; background: rgba(127,127,127,.18); display: grid; place-items: center; }
 .hb-day i { font-style: normal; font-size: 9px; letter-spacing: -.02em; font-weight: 600; color: var(--ink-dim); }
 .hb-day.on { background: var(--accent); }
@@ -1541,5 +1543,8 @@ input.fs-ren { width: 100%; min-width: 0; height: 22px !important; padding: 0 6p
   .fld[data-span] .mn { gap: 20px; }
   .mn-col + .mn-col::before { left: 0; right: 0; top: -10px; bottom: auto; width: auto; height: 1px; }
   .fld:has(.mn-body) { grid-row: span 3; }
-  .fld[data-span] .mn { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1.3fr) auto minmax(0, 1fr); }
+  /* на телефоне колонки друг под другом: итог — по высоте содержимого, место отдано спискам */
+  .fld[data-span] .mn { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr); }
+  .mn-sum .mn-big { flex: none; grid-template-rows: none; margin-bottom: 0; }
+  .mn-sum .mn-cell { padding: 10px 14px; }
 }
