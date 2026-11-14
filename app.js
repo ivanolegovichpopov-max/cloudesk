@@ -800,14 +800,16 @@
       const nm = document.createElement("div"); nm.className = "tk-title"; nm.textContent = h.title; main.append(nm);
       const meta = document.createElement("div"); meta.className = "tk-meta";
       const st = hbStreak(h);
-      if (st) { const sEl = document.createElement("span"); sEl.className = "tk-streak"; sEl.dataset.tip = st + " " + plural(st, "день", "дня", "дней") + " подряд"; sEl.innerHTML = svgIco("M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2.2 1-3.6 2-4.6.3 1.6 1 2.6 2 3.1C11 9 11 6 12 3z", 12, 2); sEl.append(String(st)); meta.append(sEl); }
+      // серия — в своей колонке справа, у всех строк на одной вертикали; место под неё есть всегда
+      const stEl = document.createElement("span"); stEl.className = "tk-streak hb-streak";
+      if (st) { stEl.dataset.tip = st + " " + plural(st, "день", "дня", "дней") + " подряд"; stEl.innerHTML = svgIco("M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2.2 1-3.6 2-4.6.3 1.6 1 2.6 2 3.1C11 9 11 6 12 3z", 12, 2); stEl.append(String(st)); }
       if (t > 1) { const sEl = document.createElement("span"); sEl.className = "tk-subs wide" + (full ? " full" : ""); sEl.dataset.tip = "Сегодня " + c + " из " + t; const bar = document.createElement("i"); bar.className = "tk-bar"; bar.style.setProperty("--p", Math.round((c / t) * 100) + "%"); sEl.append(bar, c + "/" + t); meta.append(sEl); }
       const dt = hbDaysText(d); if (dt) { const sEl = document.createElement("span"); sEl.className = "tk-due"; sEl.textContent = dt; meta.append(sEl); }
       if (d.remind) { const sEl = document.createElement("span"); sEl.className = "tk-due hb-bell"; sEl.dataset.tip = "Напоминание в Telegram, если не отмечено"; sEl.innerHTML = svgIco(HB_ICO.bell, 12, 2); sEl.append(d.remind); meta.append(sEl); }
       const desc = (h.body || "").trim(); if (desc) { const sEl = document.createElement("span"); sEl.className = "tk-desc"; sEl.textContent = desc.split("\n")[0]; meta.append(sEl); }
-      if (!meta.children.length) { const sEl = document.createElement("span"); sEl.className = "tk-due none"; sEl.textContent = "каждый день"; meta.append(sEl); }
-      main.append(meta);
-      li.append(cb, main);
+      if (!meta.children.length && !st) { const sEl = document.createElement("span"); sEl.className = "tk-due none"; sEl.textContent = "каждый день"; meta.append(sEl); }
+      if (meta.children.length) main.append(meta);
+      li.append(cb, main, stEl);
       if (wide) li.append(hbWeek(h));
       const acts = document.createElement("div"); acts.className = "tk-acts";
       const del = document.createElement("button"); del.type = "button"; del.className = "tool"; del.dataset.tip = "Удалить"; del.setAttribute("aria-label", "Удалить"); del.innerHTML = svgIco("M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3", 15);
